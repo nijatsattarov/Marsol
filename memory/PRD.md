@@ -44,17 +44,24 @@ Marsol Group üçün Management System hazırlamaq. Dashboard-da ümumi icmal g�
 - [x] Azərbaycan dili interfeysi
 - [x] Responsive dizayn
 
+### Faza 2 - Üzvlər Modulu ✅
+- [x] Üzvlər cədvəli (Şirkət, Sektor, Paket, Kurator, Rəhbər, Əlaqədar, Email)
+- [x] Şirkət əlavə etmək formu
+- [x] Üzv redaktə etmək
+- [x] Üzv silmək
+- [x] Excel/CSV export funksiyası
+- [x] Filtrlər (Sektor, Ölçü, Paket, Kurator, Layihə)
+- [x] Axtarış funksiyası
+
 ## Backlog
 
 ### P0 - Kritik
-- [ ] Üzvlər səhifəsi (CRUD əməliyyatları)
 - [ ] Görüşlər səhifəsi (CRUD əməliyyatları)
 
 ### P1 - Yüksək Prioritet
 - [ ] Maliyyə səhifəsi
-- [ ] Real verilənlər bazası inteqrasiyası (mock datadan real dataya)
+- [ ] Dashboard-da real statistikalar (üzvlər sayından)
 - [ ] Bildirişlər sistemi
-- [ ] Excel/PDF export funksiyası
 
 ### P2 - Orta Prioritet
 - [ ] Marketing səhifəsi
