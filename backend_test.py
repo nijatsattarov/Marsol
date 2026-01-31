@@ -436,6 +436,32 @@ class MarsolAPITester:
         if self.token:
             self.test_get_current_user()
             self.test_dashboard_stats()
+            
+            # Test member endpoints
+            print("\n📋 Testing Member Management Endpoints...")
+            
+            # Get member options
+            options_success, options_data = self.test_get_member_options()
+            
+            # Get members list
+            members_success, members_data = self.test_get_members()
+            
+            # Create a test member
+            create_success, created_member = self.test_create_member()
+            
+            if create_success and created_member:
+                member_id = created_member["id"]
+                
+                # Test single member retrieval
+                self.test_get_single_member(member_id)
+                
+                # Test member update
+                self.test_update_member(member_id)
+                
+                # Test member deletion
+                self.test_delete_member(member_id)
+            else:
+                print("⚠️ Skipping member CRUD tests due to creation failure")
         else:
             print("❌ No valid token - skipping authenticated tests")
         
