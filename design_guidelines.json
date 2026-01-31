@@ -1,0 +1,98 @@
+{
+  "typography": {
+    "font_family": "Montserrat, sans-serif",
+    "google_font_url": "https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap",
+    "headings": "font-bold tracking-tight text-[#3D4F6F]",
+    "body": "font-medium text-slate-600"
+  },
+  "colors": {
+    "palette": {
+      "primary": "#3D4F6F",
+      "primary_foreground": "#FFFFFF",
+      "secondary": "#9ACD32",
+      "secondary_foreground": "#3D4F6F",
+      "background": "#F8FAFC",
+      "card": "#FFFFFF",
+      "sidebar": "#2A364C",
+      "sidebar_foreground": "#FFFFFF",
+      "sidebar_active": "#9ACD32",
+      "sidebar_hover": "rgba(154, 205, 50, 0.1)"
+    },
+    "chart_colors": [
+      "#3D4F6F",
+      "#9ACD32",
+      "#64748B",
+      "#94A3B8",
+      "#CBD5E1"
+    ],
+    "tailwind_config": {
+      "colors": {
+        "marsol": {
+          "navy": "#3D4F6F",
+          "lime": "#9ACD32",
+          "dark": "#2A364C"
+        }
+      }
+    }
+  },
+  "layout": {
+    "grid_system": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6",
+    "container_padding": "p-6 md:p-8 lg:p-10",
+    "spacing_scale": "relaxed"
+  },
+  "components": {
+    "sidebar": {
+      "type": "collapsible",
+      "background": "bg-[#3D4F6F]",
+      "text_color": "text-white",
+      "active_state": "bg-[#9ACD32] text-[#3D4F6F] font-bold rounded-md",
+      "hover_state": "hover:bg-white/10 hover:text-[#9ACD32] transition-colors",
+      "width": "w-64",
+      "collapsed_width": "w-20"
+    },
+    "cards": {
+      "style": "bg-white border border-slate-100 shadow-sm rounded-xl overflow-hidden",
+      "header_style": "px-6 py-4 border-b border-slate-50",
+      "content_style": "p-6"
+    },
+    "buttons": {
+      "primary": "bg-[#3D4F6F] text-white hover:bg-[#2A364C] shadow-md rounded-lg px-6 py-2.5 font-semibold transition-all active:scale-95",
+      "secondary": "bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] shadow-sm rounded-lg px-6 py-2.5 font-bold transition-all active:scale-95",
+      "outline": "border-2 border-[#3D4F6F] text-[#3D4F6F] hover:bg-[#3D4F6F] hover:text-white rounded-lg px-6 py-2.5 font-semibold transition-all"
+    }
+  },
+  "image_urls": {
+    "logo": "https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png",
+    "placeholders": {
+      "event_meeting": "https://images.pexels.com/photos/7647955/pexels-photo-7647955.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "backdrop-blur-md bg-white/80 border border-white/20",
+    "shadows": "shadow-[0_2px_8px_rgba(61,79,111,0.1)]",
+    "gradients": "bg-gradient-to-br from-[#3D4F6F] to-[#2A364C]"
+  },
+  "instructions_to_main_agent": [
+    "Install 'recharts' for data visualization.",
+    "Install 'lucide-react' for icons.",
+    "Use 'Montserrat' font for the entire application. Add the Google Font link to public/index.html.",
+    "Ensure the Sidebar is collapsible and persists state.",
+    "The Dashboard must feature a 'Bento' style grid layout (Mode B from guidelines).",
+    "For Charts: Use Pie Charts for 'Sectors' and 'Member Packages'. Use Bar Charts for 'Events' and 'Financials'.",
+    "Login Page: Simple centered card with Logo, Email, Password. Background can be a subtle #F8FAFC or a split screen with the Event image.",
+    "All text must be in Azerbaijani as per requirements.",
+    "Use data-testid on all interactive elements (buttons, inputs, sidebar links)."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. Avoid this.",
+    "Don't make generic centered layouts. Use Bento grids.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Every interaction needs micro-animations - hover states, transitions.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Main agent relies on these image URLs. Missing categories = main agent will use placeholder text which is FORBIDDEN.",
+    "Prioritize using pre-existing components from src/components/ui when applicable.",
+    "Components MUST use named exports (export const ComponentName = ...).",
+    "Pages MUST use default exports (export default function PageName() {...}).",
+    "Use 'sonner' for toasts located in /app/src/components/ui/sonner.tsx."
+  ]
+}
