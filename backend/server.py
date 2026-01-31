@@ -287,7 +287,7 @@ async def create_member(member_data: MemberCreate, current_user: dict = Depends(
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.members.insert_one(member_doc)
-    del member_doc["_id"] if "_id" in member_doc else None
+    member_doc.pop("_id", None)
     return member_doc
 
 @api_router.get("/members/{member_id}")
