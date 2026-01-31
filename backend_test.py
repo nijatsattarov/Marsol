@@ -200,6 +200,213 @@ class MarsolAPITester:
             self.log_test("Dashboard Stats", "FAIL", f"Exception: {str(e)}")
             return False
     
+    def test_get_member_options(self):
+        """Test get member filter options endpoint"""
+        if not self.token:
+            self.log_test("Get Member Options", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = self.session.get(f"{self.base_url}/members/options/all", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_keys = ["sectors", "packages", "curators", "business_sizes", "projects"]
+                missing_keys = [key for key in required_keys if key not in data]
+                
+                if not missing_keys:
+                    self.log_test("Get Member Options", "PASS", 
+                                f"Options retrieved: {len(data['sectors'])} sectors, "
+                                f"{len(data['packages'])} packages, {len(data['curators'])} curators")
+                    return True, data
+                else:
+                    self.log_test("Get Member Options", "FAIL", f"Missing keys: {missing_keys}")
+                    return False, {}
+            elif response.status_code == 401:
+                self.log_test("Get Member Options", "FAIL", "Authentication failed")
+                return False, {}
+            else:
+                self.log_test("Get Member Options", "FAIL", f"Status code: {response.status_code}")
+                return False, {}
+        except Exception as e:
+            self.log_test("Get Member Options", "FAIL", f"Exception: {str(e)}")
+            return False, {}
+    
+    def test_get_members(self):
+        """Test get members list endpoint"""
+        if not self.token:
+            self.log_test("Get Members", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = self.session.get(f"{self.base_url}/members", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    self.log_test("Get Members", "PASS", f"Retrieved {len(data)} members")
+                    return True, data
+                else:
+                    self.log_test("Get Members", "FAIL", "Response is not a list")
+                    return False, []
+            elif response.status_code == 401:
+                self.log_test("Get Members", "FAIL", "Authentication failed")
+                return False, []
+            else:
+                self.log_test("Get Members", "FAIL", f"Status code: {response.status_code}")
+                return False, []
+        except Exception as e:
+            self.log_test("Get Members", "FAIL", f"Exception: {str(e)}")
+            return False, []
+    
+    def test_create_member(self):
+        """Test create member endpoint"""
+        if not self.token:
+            self.log_test("Create Member", "FAIL", "No authentication token available")
+            return False, None
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            test_member = {
+                "company_name": f"Test Company {str(uuid.uuid4())[:8]}",
+                "sector": "İKT",
+                "package": "Business",
+                "curator": "Əli Məmmədov",
+                "business_size": "Orta",
+                "director_name": "Test Director",
+                "director_phone": "+994501234567",
+                "contact_person": "Test Contact",
+                "contact_phone": "+994501234568",
+                "company_email": f"test{str(uuid.uuid4())[:8]}@company.com",
+                "projects": ["İşgüzar səhər yeməyi"]
+            }
+            
+            response = self.session.post(f"{self.base_url}/members", json=test_member, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "id" in data and "company_name" in data:
+                    self.log_test("Create Member", "PASS", 
+                                f"Member created: {data['company_name']} (ID: {data['id']})")
+                    return True, data
+                else:
+                    self.log_test("Create Member", "FAIL", "Missing id or company_name in response")
+                    return False, None
+            elif response.status_code == 401:
+                self.log_test("Create Member", "FAIL", "Authentication failed")
+                return False, None
+            else:
+                self.log_test("Create Member", "FAIL", 
+                            f"Status code: {response.status_code}, Response: {response.text}")
+                return False, None
+        except Exception as e:
+            self.log_test("Create Member", "FAIL", f"Exception: {str(e)}")
+            return False, None
+    
+    def test_get_single_member(self, member_id):
+        """Test get single member endpoint"""
+        if not self.token:
+            self.log_test("Get Single Member", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = self.session.get(f"{self.base_url}/members/{member_id}", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "id" in data and "company_name" in data:
+                    self.log_test("Get Single Member", "PASS", 
+                                f"Member retrieved: {data['company_name']}")
+                    return True
+                else:
+                    self.log_test("Get Single Member", "FAIL", "Missing required fields")
+                    return False
+            elif response.status_code == 404:
+                self.log_test("Get Single Member", "FAIL", "Member not found")
+                return False
+            elif response.status_code == 401:
+                self.log_test("Get Single Member", "FAIL", "Authentication failed")
+                return False
+            else:
+                self.log_test("Get Single Member", "FAIL", f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Get Single Member", "FAIL", f"Exception: {str(e)}")
+            return False
+    
+    def test_update_member(self, member_id):
+        """Test update member endpoint"""
+        if not self.token:
+            self.log_test("Update Member", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            update_data = {
+                "company_name": f"Updated Company {str(uuid.uuid4())[:8]}",
+                "sector": "Maliyyə"
+            }
+            
+            response = self.session.put(f"{self.base_url}/members/{member_id}", 
+                                      json=update_data, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "id" in data and data["company_name"] == update_data["company_name"]:
+                    self.log_test("Update Member", "PASS", 
+                                f"Member updated: {data['company_name']}")
+                    return True
+                else:
+                    self.log_test("Update Member", "FAIL", "Update not reflected in response")
+                    return False
+            elif response.status_code == 404:
+                self.log_test("Update Member", "FAIL", "Member not found")
+                return False
+            elif response.status_code == 401:
+                self.log_test("Update Member", "FAIL", "Authentication failed")
+                return False
+            else:
+                self.log_test("Update Member", "FAIL", 
+                            f"Status code: {response.status_code}, Response: {response.text}")
+                return False
+        except Exception as e:
+            self.log_test("Update Member", "FAIL", f"Exception: {str(e)}")
+            return False
+    
+    def test_delete_member(self, member_id):
+        """Test delete member endpoint"""
+        if not self.token:
+            self.log_test("Delete Member", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = self.session.delete(f"{self.base_url}/members/{member_id}", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "message" in data:
+                    self.log_test("Delete Member", "PASS", f"Member deleted: {data['message']}")
+                    return True
+                else:
+                    self.log_test("Delete Member", "FAIL", "No confirmation message")
+                    return False
+            elif response.status_code == 404:
+                self.log_test("Delete Member", "FAIL", "Member not found")
+                return False
+            elif response.status_code == 401:
+                self.log_test("Delete Member", "FAIL", "Authentication failed")
+                return False
+            else:
+                self.log_test("Delete Member", "FAIL", f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Delete Member", "FAIL", f"Exception: {str(e)}")
+            return False
+    
     def run_all_tests(self):
         """Run all backend tests"""
         print("🚀 Starting Marsol Dashboard Backend API Tests...")
