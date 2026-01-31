@@ -253,6 +253,86 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
 async def root():
     return {"message": "Marsol Group Management System API"}
 
+# Member Routes
+@api_router.get("/members")
+async def get_members(
+    sector: Optional[str] = None,
+    package: Optional[str] = None,
+    curator: Optional[str] = None,
+    business_size: Optional[str] = None,
+    project: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    query = {}
+    if sector:
+        query["sector"] = sector
+    if package:
+        query["package"] = package
+    if curator:
+        query["curator"] = curator
+    if business_size:
+        query["business_size"] = business_size
+    if project:
+        query["projects"] = {"$in": [project]}
+    
+    members = await db.members.find(query, {"_id": 0}).to_list(1000)
+    return members
+
+@api_router.post("/members")
+async def create_member(member_data: MemberCreate, current_user: dict = Depends(get_current_user)):
+    member_id = str(uuid.uuid4())
+    member_doc = {
+        "id": member_id,
+        **member_data.model_dump(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.members.insert_one(member_doc)
+    del member_doc["_id"] if "_id" in member_doc else None
+    return member_doc
+
+@api_router.get("/members/{member_id}")
+async def get_member(member_id: str, current_user: dict = Depends(get_current_user)):
+    member = await db.members.find_one({"id": member_id}, {"_id": 0})
+    if not member:
+        raise HTTPException(status_code=404, detail="Üzv tapılmadı")
+    return member
+
+@api_router.put("/members/{member_id}")
+async def update_member(member_id: str, member_data: MemberUpdate, current_user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in member_data.model_dump().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Yenilənəcək məlumat yoxdur")
+    
+    result = await db.members.update_one({"id": member_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Üzv tapılmadı")
+    
+    member = await db.members.find_one({"id": member_id}, {"_id": 0})
+    return member
+
+@api_router.delete("/members/{member_id}")
+async def delete_member(member_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.members.delete_one({"id": member_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Üzv tapılmadı")
+    return {"message": "Üzv silindi"}
+
+@api_router.get("/members/options/all")
+async def get_member_options(current_user: dict = Depends(get_current_user)):
+    sectors = ["İnşaat", "Təhsil", "Qida", "İKT", "Logistika", "Maliyyə", "Səhiyyə", "Turizm", "Kənd təsərrüfatı", "Digər"]
+    packages = ["Premium", "Business", "Business Plus"]
+    curators = ["Əli Məmmədov", "Aynur Həsənova", "Rəşad Quliyev", "Leyla Əliyeva", "Tural Babayev"]
+    business_sizes = ["Böyük", "Orta", "Kiçik"]
+    projects = ["İşgüzar səhər yeməyi", "Ofis-istehsalat ziyarəti", "Daxili səfər", "Sosial fəaliyyət", "Xarici səfər", "Dövlət qurumu ilə görüş"]
+    
+    return {
+        "sectors": sectors,
+        "packages": packages,
+        "curators": curators,
+        "business_sizes": business_sizes,
+        "projects": projects
+    }
+
 # Include the router
 app.include_router(api_router)
 
