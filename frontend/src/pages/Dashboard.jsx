@@ -205,11 +205,7 @@ export default function Dashboard() {
                   ))}
                 </Pie>
                 <Tooltip content={<CustomTooltip />} />
-                <Legend 
-                  formatter={(value, entry) => (
-                    <span style={{ color: '#3D4F6F', fontWeight: 500 }}>{entry.payload.name}</span>
-                  )}
-                />
+                <Legend />
               </PieChart>
             </ResponsiveContainer>
           </div>

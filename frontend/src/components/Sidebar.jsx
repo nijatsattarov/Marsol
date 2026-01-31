@@ -28,14 +28,10 @@ const menuItems = [
 export const Sidebar = () => {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
-  const [user, setUser] = useState(null);
-
-  useEffect(() => {
+  const [user, setUser] = useState(() => {
     const userData = localStorage.getItem('user');
-    if (userData) {
-      setUser(JSON.parse(userData));
-    }
-  }, []);
+    return userData ? JSON.parse(userData) : null;
+  });
 
   const handleLogout = () => {
     localStorage.removeItem('token');
