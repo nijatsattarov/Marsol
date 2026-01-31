@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { Sidebar } from '../components/Sidebar';
+import { Sidebar, MobileHeader, SidebarProvider, useSidebar } from '../components/Sidebar';
 
-export default function DashboardLayout() {
+const DashboardContent = () => {
   const navigate = useNavigate();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { collapsed } = useSidebar();
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -14,18 +14,27 @@ export default function DashboardLayout() {
   }, [navigate]);
 
   return (
-    <div className="app-layout">
-      <Sidebar onCollapse={setSidebarCollapsed} />
+    <div className="min-h-screen bg-[#F8FAFC]">
+      <Sidebar />
+      <MobileHeader />
       <main 
-        className="main-content"
-        style={{ 
-          marginLeft: sidebarCollapsed ? 'var(--sidebar-collapsed-width)' : 'var(--sidebar-width)',
-          transition: 'margin-left 0.3s ease'
-        }}
+        className={`
+          transition-all duration-300
+          pt-14 lg:pt-0
+          ${collapsed ? 'lg:ml-20' : 'lg:ml-[280px]'}
+        `}
         data-testid="main-content"
       >
         <Outlet />
       </main>
     </div>
+  );
+};
+
+export default function DashboardLayout() {
+  return (
+    <SidebarProvider>
+      <DashboardContent />
+    </SidebarProvider>
   );
 }
