@@ -13,7 +13,8 @@ import {
   User,
   ChevronDown,
   Pencil,
-  Trash2
+  Trash2,
+  MoreVertical
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -31,14 +32,6 @@ import {
   DialogTitle,
 } from '../components/ui/dialog';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../components/ui/table';
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -47,6 +40,7 @@ import {
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
+import { ScrollArea } from '../components/ui/scroll-area';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -65,6 +59,61 @@ const getSizeBadgeColor = (size) => {
     default: return 'bg-slate-100 text-slate-600';
   }
 };
+
+// Mobile Card Component
+const MemberCard = ({ member, onEdit, onDelete }) => (
+  <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100" data-testid={`member-card-${member.id}`}>
+    <div className="flex items-start justify-between mb-3">
+      <div className="flex-1 min-w-0">
+        <h3 className="font-semibold text-[#3D4F6F] truncate">{member.company_name}</h3>
+        <div className="flex flex-wrap gap-1.5 mt-1.5">
+          <Badge className={`text-xs ${getPackageBadgeColor(member.package)}`}>
+            {member.package}
+          </Badge>
+          <Badge className={`text-xs ${getSizeBadgeColor(member.business_size)}`}>
+            {member.business_size}
+          </Badge>
+        </div>
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+            <MoreVertical className="w-4 h-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => onEdit(member)}>
+            <Pencil className="w-4 h-4 mr-2" />
+            Redaktə
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onDelete(member.id)} className="text-red-600">
+            <Trash2 className="w-4 h-4 mr-2" />
+            Sil
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+    
+    <div className="space-y-2 text-sm">
+      <div className="flex items-center gap-2 text-slate-600">
+        <Building2 className="w-3.5 h-3.5 flex-shrink-0" />
+        <span className="truncate">{member.sector}</span>
+      </div>
+      <div className="flex items-center gap-2 text-slate-600">
+        <User className="w-3.5 h-3.5 flex-shrink-0" />
+        <span className="truncate">{member.curator}</span>
+      </div>
+      <div className="flex items-center gap-2 text-slate-600">
+        <Phone className="w-3.5 h-3.5 flex-shrink-0" />
+        <span className="truncate">{member.director_name} • {member.director_phone}</span>
+      </div>
+      <div className="flex items-center gap-2 text-slate-600">
+        <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+        <span className="truncate">{member.company_email}</span>
+      </div>
+    </div>
+  </div>
+);
 
 export default function Members() {
   const [members, setMembers] = useState([]);
@@ -104,7 +153,7 @@ export default function Members() {
     try {
       const params = new URLSearchParams();
       Object.entries(filters).forEach(([key, value]) => {
-        if (value) params.append(key, value);
+        if (value && value !== 'all') params.append(key, value);
       });
       
       const response = await axios.get(`${API}/members?${params.toString()}`, { headers });
@@ -237,61 +286,64 @@ export default function Members() {
     m.contact_person.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const activeFilterCount = Object.values(filters).filter(Boolean).length;
+  const activeFilterCount = Object.values(filters).filter(v => v && v !== 'all').length;
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen" data-testid="members-loading">
+      <div className="flex items-center justify-center h-[60vh]" data-testid="members-loading">
         <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#3D4F6F' }} />
       </div>
     );
   }
 
   return (
-    <div className="p-6 lg:p-8" data-testid="members-page">
+    <div className="p-4 sm:p-6 lg:p-8" data-testid="members-page">
       <Toaster position="top-right" richColors />
       
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold" style={{ color: '#3D4F6F' }} data-testid="members-title">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }} data-testid="members-title">
             Üzvlər
           </h1>
-          <p className="text-slate-500 mt-1">Cəmi {members.length} üzv</p>
+          <p className="text-slate-500 text-sm sm:text-base mt-1">Cəmi {members.length} üzv</p>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Button
             onClick={exportToExcel}
             variant="outline"
-            className="border-[#3D4F6F] text-[#3D4F6F] hover:bg-[#3D4F6F] hover:text-white"
+            size="sm"
+            className="border-[#3D4F6F] text-[#3D4F6F] hover:bg-[#3D4F6F] hover:text-white text-xs sm:text-sm"
             data-testid="export-btn"
           >
-            <Download className="w-4 h-4 mr-2" />
-            Excel Export
+            <Download className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Excel Export</span>
           </Button>
           <Button
             onClick={() => { resetForm(); setEditingMember(null); setShowAddModal(true); }}
-            className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold"
+            size="sm"
+            className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold text-xs sm:text-sm"
             data-testid="add-member-btn"
           >
-            <Plus className="w-4 h-4 mr-2" />
-            Şirkət əlavə et
+            <Plus className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Şirkət əlavə et</span>
+            <span className="sm:hidden">Əlavə et</span>
           </Button>
         </div>
       </div>
 
       {/* Search and Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-6">
-        <div className="flex flex-col md:flex-row gap-4">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4 mb-4 sm:mb-6">
+        <div className="flex flex-col sm:flex-row gap-3">
           {/* Search */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
-              placeholder="Şirkət, rəhbər və ya əlaqədar adı ilə axtar..."
+              placeholder="Axtar..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-10 text-sm"
               data-testid="search-input"
             />
           </div>
@@ -299,14 +351,15 @@ export default function Members() {
           {/* Filter Toggle */}
           <Button
             variant="outline"
+            size="sm"
             onClick={() => setShowFilters(!showFilters)}
             className={`${activeFilterCount > 0 ? 'border-[#9ACD32] bg-[#9ACD32]/10' : ''}`}
             data-testid="filter-toggle-btn"
           >
-            <Filter className="w-4 h-4 mr-2" />
-            Filtrlər
+            <Filter className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Filtrlər</span>
             {activeFilterCount > 0 && (
-              <Badge className="ml-2 bg-[#9ACD32] text-[#3D4F6F]">{activeFilterCount}</Badge>
+              <Badge className="ml-1 sm:ml-2 bg-[#9ACD32] text-[#3D4F6F] text-xs">{activeFilterCount}</Badge>
             )}
           </Button>
         </div>
@@ -314,11 +367,11 @@ export default function Members() {
         {/* Filter Panel */}
         {showFilters && options && (
           <div className="mt-4 pt-4 border-t border-slate-100 animate-fade-in" data-testid="filter-panel">
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               <div>
                 <Label className="text-xs text-slate-500 mb-1.5 block">Sektor</Label>
                 <Select value={filters.sector} onValueChange={(v) => setFilters({...filters, sector: v})}>
-                  <SelectTrigger data-testid="filter-sector">
+                  <SelectTrigger className="text-sm" data-testid="filter-sector">
                     <SelectValue placeholder="Hamısı" />
                   </SelectTrigger>
                   <SelectContent>
@@ -333,7 +386,7 @@ export default function Members() {
               <div>
                 <Label className="text-xs text-slate-500 mb-1.5 block">Paket</Label>
                 <Select value={filters.package} onValueChange={(v) => setFilters({...filters, package: v})}>
-                  <SelectTrigger data-testid="filter-package">
+                  <SelectTrigger className="text-sm" data-testid="filter-package">
                     <SelectValue placeholder="Hamısı" />
                   </SelectTrigger>
                   <SelectContent>
@@ -348,7 +401,7 @@ export default function Members() {
               <div>
                 <Label className="text-xs text-slate-500 mb-1.5 block">Ölçü</Label>
                 <Select value={filters.business_size} onValueChange={(v) => setFilters({...filters, business_size: v})}>
-                  <SelectTrigger data-testid="filter-size">
+                  <SelectTrigger className="text-sm" data-testid="filter-size">
                     <SelectValue placeholder="Hamısı" />
                   </SelectTrigger>
                   <SelectContent>
@@ -363,7 +416,7 @@ export default function Members() {
               <div>
                 <Label className="text-xs text-slate-500 mb-1.5 block">Kurator</Label>
                 <Select value={filters.curator} onValueChange={(v) => setFilters({...filters, curator: v})}>
-                  <SelectTrigger data-testid="filter-curator">
+                  <SelectTrigger className="text-sm" data-testid="filter-curator">
                     <SelectValue placeholder="Hamısı" />
                   </SelectTrigger>
                   <SelectContent>
@@ -378,7 +431,7 @@ export default function Members() {
               <div>
                 <Label className="text-xs text-slate-500 mb-1.5 block">Layihə</Label>
                 <Select value={filters.project} onValueChange={(v) => setFilters({...filters, project: v})}>
-                  <SelectTrigger data-testid="filter-project">
+                  <SelectTrigger className="text-sm" data-testid="filter-project">
                     <SelectValue placeholder="Hamısı" />
                   </SelectTrigger>
                   <SelectContent>
@@ -396,10 +449,10 @@ export default function Members() {
                 variant="ghost" 
                 size="sm" 
                 onClick={clearFilters}
-                className="mt-4 text-slate-500"
+                className="mt-3 text-slate-500 text-xs"
                 data-testid="clear-filters-btn"
               >
-                <X className="w-4 h-4 mr-1" />
+                <X className="w-3 h-3 mr-1" />
                 Filtrləri təmizlə
               </Button>
             )}
@@ -407,73 +460,92 @@ export default function Members() {
         )}
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+      {/* Mobile: Card View */}
+      <div className="lg:hidden space-y-3">
+        {filteredMembers.length === 0 ? (
+          <div className="bg-white rounded-xl p-8 text-center">
+            <Building2 className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+            <p className="text-slate-500">Üzv tapılmadı</p>
+          </div>
+        ) : (
+          filteredMembers.map((member) => (
+            <MemberCard 
+              key={member.id} 
+              member={member} 
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Desktop: Table View */}
+      <div className="hidden lg:block bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
-          <Table data-testid="members-table">
-            <TableHeader>
-              <TableRow className="bg-slate-50">
-                <TableHead className="font-semibold text-[#3D4F6F]">Şirkət</TableHead>
-                <TableHead className="font-semibold text-[#3D4F6F]">Sektor</TableHead>
-                <TableHead className="font-semibold text-[#3D4F6F]">Paket</TableHead>
-                <TableHead className="font-semibold text-[#3D4F6F]">Kurator</TableHead>
-                <TableHead className="font-semibold text-[#3D4F6F]">Rəhbər</TableHead>
-                <TableHead className="font-semibold text-[#3D4F6F]">Əlaqədar</TableHead>
-                <TableHead className="font-semibold text-[#3D4F6F]">Email</TableHead>
-                <TableHead className="font-semibold text-[#3D4F6F] text-right">Əməliyyat</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <table className="w-full" data-testid="members-table">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Şirkət</th>
+                <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Sektor</th>
+                <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Paket</th>
+                <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Kurator</th>
+                <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Rəhbər</th>
+                <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Əlaqədar</th>
+                <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Email</th>
+                <th className="text-right font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Əməliyyat</th>
+              </tr>
+            </thead>
+            <tbody>
               {filteredMembers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-12 text-slate-500">
+                <tr>
+                  <td colSpan={8} className="text-center py-12 text-slate-500">
                     <Building2 className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                     <p>Üzv tapılmadı</p>
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : (
                 filteredMembers.map((member) => (
-                  <TableRow key={member.id} className="hover:bg-slate-50 transition-colors" data-testid={`member-row-${member.id}`}>
-                    <TableCell>
+                  <tr key={member.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors" data-testid={`member-row-${member.id}`}>
+                    <td className="px-4 py-3">
                       <div>
-                        <p className="font-semibold text-[#3D4F6F]">{member.company_name}</p>
+                        <p className="font-semibold text-[#3D4F6F] text-sm">{member.company_name}</p>
                         <Badge className={`mt-1 text-xs ${getSizeBadgeColor(member.business_size)}`}>
                           {member.business_size}
                         </Badge>
                       </div>
-                    </TableCell>
-                    <TableCell className="text-slate-600">{member.sector}</TableCell>
-                    <TableCell>
-                      <Badge className={getPackageBadgeColor(member.package)}>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 text-sm">{member.sector}</td>
+                    <td className="px-4 py-3">
+                      <Badge className={`text-xs ${getPackageBadgeColor(member.package)}`}>
                         {member.package}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-slate-600">{member.curator}</TableCell>
-                    <TableCell>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 text-sm">{member.curator}</td>
+                    <td className="px-4 py-3">
                       <div className="text-sm">
                         <p className="font-medium text-slate-700">{member.director_name}</p>
-                        <p className="text-slate-500 flex items-center gap-1">
+                        <p className="text-slate-500 text-xs flex items-center gap-1">
                           <Phone className="w-3 h-3" />
                           {member.director_phone}
                         </p>
                       </div>
-                    </TableCell>
-                    <TableCell>
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="text-sm">
                         <p className="font-medium text-slate-700">{member.contact_person}</p>
-                        <p className="text-slate-500 flex items-center gap-1">
+                        <p className="text-slate-500 text-xs flex items-center gap-1">
                           <Phone className="w-3 h-3" />
                           {member.contact_phone}
                         </p>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-slate-600 flex items-center gap-1">
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-slate-600 text-sm flex items-center gap-1">
                         <Mail className="w-3 h-3" />
                         {member.company_email}
                       </span>
-                    </TableCell>
-                    <TableCell className="text-right">
+                    </td>
+                    <td className="px-4 py-3 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm" data-testid={`member-actions-${member.id}`}>
@@ -495,188 +567,197 @@ export default function Members() {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))
               )}
-            </TableBody>
-          </Table>
+            </tbody>
+          </table>
         </div>
       </div>
 
       {/* Add/Edit Modal */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="member-modal">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold" style={{ color: '#3D4F6F' }}>
+        <DialogContent className="max-w-[95vw] sm:max-w-lg lg:max-w-2xl max-h-[85vh] p-0" data-testid="member-modal">
+          <DialogHeader className="p-4 sm:p-6 pb-0">
+            <DialogTitle className="text-lg sm:text-xl font-bold" style={{ color: '#3D4F6F' }}>
               {editingMember ? 'Üzvü redaktə et' : 'Yeni şirkət əlavə et'}
             </DialogTitle>
           </DialogHeader>
           
-          <form onSubmit={handleSubmit} className="space-y-6 mt-4">
-            {/* Company Info */}
-            <div className="space-y-4">
-              <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-                <Building2 className="w-4 h-4" />
-                Şirkət məlumatları
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Şirkət adı *</Label>
-                  <Input
-                    value={formData.company_name}
-                    onChange={(e) => setFormData({...formData, company_name: e.target.value})}
-                    required
-                    data-testid="input-company-name"
-                  />
+          <ScrollArea className="max-h-[calc(85vh-80px)]">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 pt-4 space-y-5">
+              {/* Company Info */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-slate-700 flex items-center gap-2 text-sm">
+                  <Building2 className="w-4 h-4" />
+                  Şirkət məlumatları
+                </h3>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs sm:text-sm">Şirkət adı *</Label>
+                    <Input
+                      value={formData.company_name}
+                      onChange={(e) => setFormData({...formData, company_name: e.target.value})}
+                      required
+                      className="text-sm"
+                      data-testid="input-company-name"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs sm:text-sm">Email *</Label>
+                    <Input
+                      type="email"
+                      value={formData.company_email}
+                      onChange={(e) => setFormData({...formData, company_email: e.target.value})}
+                      required
+                      className="text-sm"
+                      data-testid="input-email"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label>Email *</Label>
-                  <Input
-                    type="email"
-                    value={formData.company_email}
-                    onChange={(e) => setFormData({...formData, company_email: e.target.value})}
-                    required
-                    data-testid="input-email"
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <Label className="text-xs sm:text-sm">Sektor *</Label>
+                    <Select value={formData.sector} onValueChange={(v) => setFormData({...formData, sector: v})}>
+                      <SelectTrigger className="text-sm" data-testid="input-sector">
+                        <SelectValue placeholder="Seçin" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {options?.sectors.map(s => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs sm:text-sm">Paket *</Label>
+                    <Select value={formData.package} onValueChange={(v) => setFormData({...formData, package: v})}>
+                      <SelectTrigger className="text-sm" data-testid="input-package">
+                        <SelectValue placeholder="Seçin" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {options?.packages.map(p => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs sm:text-sm">Ölçü *</Label>
+                    <Select value={formData.business_size} onValueChange={(v) => setFormData({...formData, business_size: v})}>
+                      <SelectTrigger className="text-sm" data-testid="input-size">
+                        <SelectValue placeholder="Seçin" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {options?.business_sizes.map(s => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 <div>
-                  <Label>Sektor *</Label>
-                  <Select value={formData.sector} onValueChange={(v) => setFormData({...formData, sector: v})}>
-                    <SelectTrigger data-testid="input-sector">
+                  <Label className="text-xs sm:text-sm">Kurator *</Label>
+                  <Select value={formData.curator} onValueChange={(v) => setFormData({...formData, curator: v})}>
+                    <SelectTrigger className="text-sm" data-testid="input-curator">
                       <SelectValue placeholder="Seçin" />
                     </SelectTrigger>
                     <SelectContent>
-                      {options?.sectors.map(s => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      {options?.curators.map(c => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label>Paket *</Label>
-                  <Select value={formData.package} onValueChange={(v) => setFormData({...formData, package: v})}>
-                    <SelectTrigger data-testid="input-package">
-                      <SelectValue placeholder="Seçin" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {options?.packages.map(p => (
-                        <SelectItem key={p} value={p}>{p}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Ölçü *</Label>
-                  <Select value={formData.business_size} onValueChange={(v) => setFormData({...formData, business_size: v})}>
-                    <SelectTrigger data-testid="input-size">
-                      <SelectValue placeholder="Seçin" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {options?.business_sizes.map(s => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              </div>
+
+              {/* Director Info */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-slate-700 flex items-center gap-2 text-sm">
+                  <User className="w-4 h-4" />
+                  Rəhbər məlumatları
+                </h3>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs sm:text-sm">Rəhbərin adı *</Label>
+                    <Input
+                      value={formData.director_name}
+                      onChange={(e) => setFormData({...formData, director_name: e.target.value})}
+                      required
+                      className="text-sm"
+                      data-testid="input-director-name"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs sm:text-sm">Əlaqə nömrəsi *</Label>
+                    <Input
+                      value={formData.director_phone}
+                      onChange={(e) => setFormData({...formData, director_phone: e.target.value})}
+                      required
+                      className="text-sm"
+                      data-testid="input-director-phone"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <Label>Kurator *</Label>
-                <Select value={formData.curator} onValueChange={(v) => setFormData({...formData, curator: v})}>
-                  <SelectTrigger data-testid="input-curator">
-                    <SelectValue placeholder="Seçin" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options?.curators.map(c => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Director Info */}
-            <div className="space-y-4">
-              <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-                <User className="w-4 h-4" />
-                Rəhbər məlumatları
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Rəhbərin adı *</Label>
-                  <Input
-                    value={formData.director_name}
-                    onChange={(e) => setFormData({...formData, director_name: e.target.value})}
-                    required
-                    data-testid="input-director-name"
-                  />
-                </div>
-                <div>
-                  <Label>Rəhbər əlaqə nömrəsi *</Label>
-                  <Input
-                    value={formData.director_phone}
-                    onChange={(e) => setFormData({...formData, director_phone: e.target.value})}
-                    required
-                    data-testid="input-director-phone"
-                  />
+              {/* Contact Person */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-slate-700 flex items-center gap-2 text-sm">
+                  <Phone className="w-4 h-4" />
+                  Əlaqədar şəxs
+                </h3>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs sm:text-sm">Əlaqədar şəxs *</Label>
+                    <Input
+                      value={formData.contact_person}
+                      onChange={(e) => setFormData({...formData, contact_person: e.target.value})}
+                      required
+                      className="text-sm"
+                      data-testid="input-contact-person"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs sm:text-sm">Əlaqə nömrəsi *</Label>
+                    <Input
+                      value={formData.contact_phone}
+                      onChange={(e) => setFormData({...formData, contact_phone: e.target.value})}
+                      required
+                      className="text-sm"
+                      data-testid="input-contact-phone"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Contact Person */}
-            <div className="space-y-4">
-              <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-                <Phone className="w-4 h-4" />
-                Əlaqədar şəxs
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Əlaqədar şəxs *</Label>
-                  <Input
-                    value={formData.contact_person}
-                    onChange={(e) => setFormData({...formData, contact_person: e.target.value})}
-                    required
-                    data-testid="input-contact-person"
-                  />
-                </div>
-                <div>
-                  <Label>Əlaqə nömrəsi *</Label>
-                  <Input
-                    value={formData.contact_phone}
-                    onChange={(e) => setFormData({...formData, contact_phone: e.target.value})}
-                    required
-                    data-testid="input-contact-phone"
-                  />
-                </div>
+              {/* Actions */}
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 pt-4 border-t">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setShowAddModal(false)}
+                  className="text-sm"
+                  data-testid="cancel-btn"
+                >
+                  Ləğv et
+                </Button>
+                <Button 
+                  type="submit" 
+                  className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold text-sm"
+                  data-testid="save-member-btn"
+                >
+                  {editingMember ? 'Yadda saxla' : 'Əlavə et'}
+                </Button>
               </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => setShowAddModal(false)}
-                data-testid="cancel-btn"
-              >
-                Ləğv et
-              </Button>
-              <Button 
-                type="submit" 
-                className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold"
-                data-testid="save-member-btn"
-              >
-                {editingMember ? 'Yadda saxla' : 'Əlavə et'}
-              </Button>
-            </div>
-          </form>
+            </form>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
     </div>
