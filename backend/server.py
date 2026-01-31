@@ -56,6 +56,48 @@ class DashboardStats(BaseModel):
     payments: dict
     financials: dict
 
+# Member Models
+class MemberCreate(BaseModel):
+    company_name: str
+    sector: str
+    package: str
+    curator: str
+    business_size: str  # Böyük, Orta, Kiçik
+    director_name: str
+    director_phone: str
+    contact_person: str
+    contact_phone: str
+    company_email: str
+    projects: List[str] = []
+
+class MemberUpdate(BaseModel):
+    company_name: Optional[str] = None
+    sector: Optional[str] = None
+    package: Optional[str] = None
+    curator: Optional[str] = None
+    business_size: Optional[str] = None
+    director_name: Optional[str] = None
+    director_phone: Optional[str] = None
+    contact_person: Optional[str] = None
+    contact_phone: Optional[str] = None
+    company_email: Optional[str] = None
+    projects: Optional[List[str]] = None
+
+class Member(BaseModel):
+    id: str
+    company_name: str
+    sector: str
+    package: str
+    curator: str
+    business_size: str
+    director_name: str
+    director_phone: str
+    contact_person: str
+    contact_phone: str
+    company_email: str
+    projects: List[str]
+    created_at: str
+
 # Auth functions
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
