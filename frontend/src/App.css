@@ -1,34 +1,170 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+/* Marsol Group Management System Styles */
+
+/* Layout */
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: #F8FAFC;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+.main-content {
+  flex: 1;
+  transition: margin-left 0.3s ease;
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+/* Sidebar */
+.sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100vh;
+  background: linear-gradient(180deg, #3D4F6F 0%, #2A364C 100%);
+  color: white;
+  transition: width 0.3s ease;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 4px 0 20px rgba(61, 79, 111, 0.15);
 }
 
-.App-link {
-    color: #61dafb;
+.sidebar-expanded {
+  width: var(--sidebar-width);
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+.sidebar-collapsed {
+  width: var(--sidebar-collapsed-width);
+}
+
+/* Cards */
+.stat-card {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 2px 12px rgba(61, 79, 111, 0.08);
+  border: 1px solid rgba(61, 79, 111, 0.06);
+  transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+  box-shadow: 0 8px 24px rgba(61, 79, 111, 0.12);
+  transform: translateY(-2px);
+}
+
+/* Charts */
+.chart-container {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 2px 12px rgba(61, 79, 111, 0.08);
+  border: 1px solid rgba(61, 79, 111, 0.06);
+}
+
+/* Login Page */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 100%);
+}
+
+.login-card {
+  background: white;
+  border-radius: 24px;
+  padding: 48px;
+  box-shadow: 0 20px 60px rgba(61, 79, 111, 0.15);
+  width: 100%;
+  max-width: 440px;
+}
+
+/* Button styles */
+.btn-primary {
+  background-color: #3D4F6F;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background-color: #2A364C;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(61, 79, 111, 0.3);
+}
+
+.btn-secondary {
+  background-color: #9ACD32;
+  color: #3D4F6F;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background-color: #8BC125;
+  transform: translateY(-1px);
+}
+
+/* Input styles */
+.input-field {
+  width: 100%;
+  padding: 14px 18px;
+  border: 2px solid #E2E8F0;
+  border-radius: 12px;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 15px;
+  transition: all 0.2s ease;
+  background: #F8FAFC;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: #9ACD32;
+  background: white;
+  box-shadow: 0 0 0 4px rgba(154, 205, 50, 0.15);
+}
+
+/* Menu item styles */
+.menu-item {
+  display: flex;
+  align-items: center;
+  padding: 14px 20px;
+  margin: 4px 12px;
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.menu-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #9ACD32;
+}
+
+.menu-item.active {
+  background: #9ACD32;
+  color: #3D4F6F;
+  font-weight: 700;
+}
+
+/* Progress bar */
+.progress-bar {
+  height: 8px;
+  background: #E2E8F0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #9ACD32, #7CB82F);
+  border-radius: 4px;
+  transition: width 0.5s ease;
 }
