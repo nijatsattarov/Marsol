@@ -10,6 +10,7 @@ import Meetings from "./pages/Meetings";
 import Tasks from "./pages/Tasks";
 import Messages from "./pages/Messages";
 import SettingsPage from "./pages/Settings";
+import Notifications from "./pages/Notifications";
 import DashboardLayout from "./layouts/DashboardLayout";
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
             <Route path="tasks" element={<Tasks />} />
             <Route path="messages" element={<Messages />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="notifications" element={<Notifications />} />
           </Route>
           
           {/* Redirect unknown routes */}

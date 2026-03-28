@@ -279,6 +279,7 @@ export default function Companies() {
   };
 
   const [formData, setFormData] = useState(initialFormData);
+  const [customFields, setCustomFields] = useState([]);
 
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -313,8 +314,12 @@ export default function Companies() {
 
   const fetchOptions = async () => {
     try {
-      const response = await axios.get(`${API}/options/all`, { headers });
-      setOptions(response.data);
+      const [optRes, cfRes] = await Promise.all([
+        axios.get(`${API}/options/all`, { headers }),
+        axios.get(`${API}/settings/custom-fields?module=companies`, { headers }),
+      ]);
+      setOptions(optRes.data);
+      setCustomFields(cfRes.data);
     } catch (error) {
       console.error('Options fetch error:', error);
     }
@@ -595,6 +600,7 @@ export default function Companies() {
                   <TabsTrigger value="rep" className="text-xs">Təmsilçi</TabsTrigger>
                   <TabsTrigger value="contract" className="text-xs">Müqavilə</TabsTrigger>
                   <TabsTrigger value="payment" className="text-xs">Ödəniş</TabsTrigger>
+                  {customFields.length > 0 && <TabsTrigger value="custom" className="text-xs">Əlavə sahələr</TabsTrigger>}
                 </TabsList>
 
                 <TabsContent value="basic" className="space-y-4">
@@ -722,6 +728,29 @@ export default function Companies() {
                     </Select>
                   </div>
                 </TabsContent>
+
+                {customFields.length > 0 && (
+                  <TabsContent value="custom" className="space-y-4">
+                    <p className="text-xs text-slate-500 mb-2">Tənzimləmələrdən əlavə edilən xüsusi sahələr</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {customFields.map(cf => (
+                        <div key={cf.id}>
+                          <Label className="text-xs">{cf.field_label || cf.field_name}{cf.required ? ' *' : ''}</Label>
+                          {cf.field_type === 'select' ? (
+                            <Select value={formData[cf.field_name] || ''} onValueChange={(v) => setFormData({ ...formData, [cf.field_name]: v })}>
+                              <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                              <SelectContent>{cf.options?.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                            </Select>
+                          ) : cf.field_type === 'textarea' ? (
+                            <textarea value={formData[cf.field_name] || ''} onChange={(e) => setFormData({ ...formData, [cf.field_name]: e.target.value })} className="w-full p-2 text-sm border rounded-lg resize-none min-h-[60px]" required={cf.required} />
+                          ) : (
+                            <Input type={cf.field_type === 'number' ? 'number' : cf.field_type === 'date' ? 'date' : cf.field_type === 'email' ? 'email' : 'text'} value={formData[cf.field_name] || ''} onChange={(e) => setFormData({ ...formData, [cf.field_name]: e.target.value })} className="text-sm" required={cf.required} />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </TabsContent>
+                )}
               </Tabs>
 
               <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 pt-4 border-t mt-6">

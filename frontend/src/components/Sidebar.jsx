@@ -14,7 +14,8 @@ import {
   Menu,
   X,
   TrendingUp,
-  Settings
+  Settings,
+  Bell
 } from 'lucide-react';
 
 const menuItems = [
@@ -26,6 +27,7 @@ const menuItems = [
   { path: '/meetings', label: 'Görüşlər', icon: Calendar },
   { path: '/tasks', label: 'Tapşırıqlar', icon: ClipboardList },
   { path: '/messages', label: 'Mesajlar', icon: MessageSquare },
+  { path: '/notifications', label: 'Bildirişlər', icon: Bell },
   { path: '/settings', label: 'Tənzimləmələr', icon: Settings },
 ];
 
@@ -215,20 +217,22 @@ export const MobileHeader = () => {
   const { openMobileMenu } = useSidebar();
   
   return (
-    <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-white border-b border-slate-100 z-30 flex items-center px-4 shadow-sm">
-      <button
-        onClick={openMobileMenu}
-        className="p-2 -ml-2 rounded-lg hover:bg-slate-100 transition-colors active:bg-slate-200"
-        data-testid="mobile-menu-btn"
-        type="button"
-      >
-        <Menu className="w-6 h-6" style={{ color: '#3D4F6F' }} />
-      </button>
-      <img 
-        src="https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png" 
-        alt="Marsol Group" 
-        className="h-7 ml-3"
-      />
+    <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-white border-b border-slate-100 z-30 flex items-center justify-between px-4 shadow-sm">
+      <div className="flex items-center">
+        <button
+          onClick={openMobileMenu}
+          className="p-2 -ml-2 rounded-lg hover:bg-slate-100 transition-colors active:bg-slate-200"
+          data-testid="mobile-menu-btn"
+          type="button"
+        >
+          <Menu className="w-6 h-6" style={{ color: '#3D4F6F' }} />
+        </button>
+        <img 
+          src="https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png" 
+          alt="Marsol Group" 
+          className="h-7 ml-3"
+        />
+      </div>
     </div>
   );
 };

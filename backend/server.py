@@ -255,6 +255,22 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+# ==================== RBAC HELPER ====================
+ROLE_PERMISSIONS = {
+    "admin": ["*"],
+    "manager": ["read", "write", "delete_own"],
+    "user": ["read", "write_own"],
+    "viewer": ["read"]
+}
+
+def require_role(*allowed_roles):
+    async def role_checker(current_user: dict = Depends(get_current_user)):
+        user_role = current_user.get("role", "viewer")
+        if user_role not in allowed_roles and "admin" not in [user_role]:
+            raise HTTPException(status_code=403, detail="Bu əməliyyat üçün icazəniz yoxdur")
+        return current_user
+    return role_checker
+
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/register", response_model=Token)
@@ -987,6 +1003,211 @@ async def delete_user(user_id: str, current_user: dict = Depends(get_current_use
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="İstifadəçi tapılmadı")
     return {"message": "İstifadəçi silindi"}
+
+# ==================== SALES (SATIŞ) ====================
+
+@api_router.get("/sales/leads")
+async def get_leads(stage: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    query = {}
+    if stage and stage != "all":
+        query["stage"] = stage
+    leads = await db.sales_leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return leads
+
+@api_router.post("/sales/leads")
+async def create_lead(lead_data: dict, current_user: dict = Depends(get_current_user)):
+    lead_id = str(uuid.uuid4())
+    lead_doc = {
+        "id": lead_id,
+        "company_name": lead_data.get("company_name", ""),
+        "contact_person": lead_data.get("contact_person", ""),
+        "phone": lead_data.get("phone", ""),
+        "email": lead_data.get("email", ""),
+        "source": lead_data.get("source", ""),
+        "stage": lead_data.get("stage", "Yeni Lead"),
+        "assigned_to": lead_data.get("assigned_to", ""),
+        "expected_amount": lead_data.get("expected_amount", 0),
+        "package": lead_data.get("package", ""),
+        "project": lead_data.get("project", ""),
+        "notes": lead_data.get("notes", ""),
+        "priority": lead_data.get("priority", "Orta"),
+        "next_action_date": lead_data.get("next_action_date", ""),
+        "created_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.sales_leads.insert_one(lead_doc)
+    lead_doc.pop("_id", None)
+    return lead_doc
+
+@api_router.put("/sales/leads/{lead_id}")
+async def update_lead(lead_id: str, lead_data: dict, current_user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in lead_data.items() if v is not None}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.sales_leads.update_one({"id": lead_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Lead tapılmadı")
+    lead = await db.sales_leads.find_one({"id": lead_id}, {"_id": 0})
+    return lead
+
+@api_router.delete("/sales/leads/{lead_id}")
+async def delete_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.sales_leads.delete_one({"id": lead_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Lead tapılmadı")
+    return {"message": "Lead silindi"}
+
+@api_router.get("/sales/stats")
+async def get_sales_stats(current_user: dict = Depends(get_current_user)):
+    stages = ["Yeni Lead", "Əlaqə", "Təklif", "Danışıq", "Uğurlu", "Uğursuz"]
+    stats = {}
+    for stage in stages:
+        count = await db.sales_leads.count_documents({"stage": stage})
+        pipeline = [{"$match": {"stage": stage}}, {"$group": {"_id": None, "total": {"$sum": "$expected_amount"}}}]
+        amount_data = await db.sales_leads.aggregate(pipeline).to_list(1)
+        stats[stage] = {"count": count, "amount": amount_data[0]["total"] if amount_data else 0}
+    return stats
+
+# ==================== MESSAGES (MESAJLAR) ====================
+
+@api_router.get("/messages/conversations")
+async def get_conversations(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    conversations = await db.conversations.find(
+        {"participants": user_id}, {"_id": 0}
+    ).sort("last_message_at", -1).to_list(100)
+    return conversations
+
+@api_router.post("/messages/conversations")
+async def create_conversation(data: dict, current_user: dict = Depends(get_current_user)):
+    conv_id = str(uuid.uuid4())
+    participant_id = data.get("participant_id")
+    # Check if conversation already exists
+    existing = await db.conversations.find_one({
+        "participants": {"$all": [current_user["id"], participant_id]}
+    })
+    if existing:
+        existing.pop("_id", None)
+        return existing
+    
+    participant = await db.users.find_one({"id": participant_id}, {"_id": 0, "password": 0})
+    if not participant:
+        raise HTTPException(status_code=404, detail="İstifadəçi tapılmadı")
+    
+    conv_doc = {
+        "id": conv_id,
+        "participants": [current_user["id"], participant_id],
+        "participant_names": {current_user["id"]: current_user["name"], participant_id: participant["name"]},
+        "last_message": "",
+        "last_message_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.conversations.insert_one(conv_doc)
+    conv_doc.pop("_id", None)
+    return conv_doc
+
+@api_router.get("/messages/{conversation_id}")
+async def get_messages(conversation_id: str, current_user: dict = Depends(get_current_user)):
+    messages = await db.messages.find(
+        {"conversation_id": conversation_id}, {"_id": 0}
+    ).sort("created_at", 1).to_list(500)
+    return messages
+
+@api_router.post("/messages/{conversation_id}")
+async def send_message(conversation_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    msg_id = str(uuid.uuid4())
+    msg_doc = {
+        "id": msg_id,
+        "conversation_id": conversation_id,
+        "sender_id": current_user["id"],
+        "sender_name": current_user["name"],
+        "text": data.get("text", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.messages.insert_one(msg_doc)
+    msg_doc.pop("_id", None)
+    
+    # Update conversation last message
+    await db.conversations.update_one(
+        {"id": conversation_id},
+        {"$set": {"last_message": data.get("text", ""), "last_message_at": msg_doc["created_at"]}}
+    )
+    return msg_doc
+
+# ==================== NOTIFICATIONS (BİLDİRİŞLƏR) ====================
+
+@api_router.get("/notifications")
+async def get_notifications(current_user: dict = Depends(get_current_user)):
+    notifications = []
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    
+    # 1. Overdue debts (borclu şirkətlər)
+    debtors = await db.companies.find({"debt_amount": {"$gt": 0}}, {"_id": 0}).to_list(500)
+    for c in debtors:
+        days_overdue = 0
+        if c.get("payment_due_date"):
+            try:
+                due = datetime.strptime(c["payment_due_date"], "%Y-%m-%d")
+                diff = (now.replace(tzinfo=None) - due).days
+                if diff > 0:
+                    days_overdue = diff
+            except (ValueError, TypeError):
+                pass
+        if days_overdue > 0:
+            notifications.append({
+                "id": f"debt-{c['id']}",
+                "type": "debt_overdue",
+                "severity": "high" if days_overdue > 30 else "medium",
+                "title": f"Gecikmiş ödəniş: {c['brand_name']}",
+                "message": f"{c['debt_amount']:,.0f} AZN borc — {days_overdue} gün gecikib",
+                "company_id": c["id"],
+                "date": today
+            })
+        elif (c.get("debt_amount") or 0) > 0:
+            notifications.append({
+                "id": f"debt-pending-{c['id']}",
+                "type": "debt_pending",
+                "severity": "low",
+                "title": f"Ödənilməmiş borc: {c['brand_name']}",
+                "message": f"{c['debt_amount']:,.0f} AZN borc qalıb",
+                "company_id": c["id"],
+                "date": today
+            })
+
+    # 2. Contract expiring soon (müqavilə xitamı yaxınlaşan)
+    all_companies = await db.companies.find({"contract_end_date": {"$ne": ""}}, {"_id": 0}).to_list(500)
+    for c in all_companies:
+        try:
+            end_date = datetime.strptime(c["contract_end_date"], "%Y-%m-%d")
+            diff = (end_date - now.replace(tzinfo=None)).days
+            if diff < 0:
+                notifications.append({
+                    "id": f"contract-expired-{c['id']}",
+                    "type": "contract_expired",
+                    "severity": "high",
+                    "title": f"Müqavilə bitib: {c['brand_name']}",
+                    "message": f"Müqavilə {abs(diff)} gün əvvəl bitib ({c['contract_end_date']})",
+                    "company_id": c["id"],
+                    "date": today
+                })
+            elif diff <= 30:
+                notifications.append({
+                    "id": f"contract-expiring-{c['id']}",
+                    "type": "contract_expiring",
+                    "severity": "medium",
+                    "title": f"Müqavilə bitir: {c['brand_name']}",
+                    "message": f"{diff} gün sonra bitəcək ({c['contract_end_date']})",
+                    "company_id": c["id"],
+                    "date": today
+                })
+        except (ValueError, TypeError):
+            pass
+
+    # Sort by severity
+    severity_order = {"high": 0, "medium": 1, "low": 2}
+    notifications.sort(key=lambda x: severity_order.get(x["severity"], 3))
+    
+    return {"notifications": notifications, "count": len(notifications), "high_count": sum(1 for n in notifications if n["severity"] == "high")}
 
 # Root
 @api_router.get("/")
