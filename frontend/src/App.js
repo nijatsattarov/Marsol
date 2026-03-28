@@ -2,7 +2,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import Members from "./pages/Members";
+import Companies from "./pages/Companies";
 import DashboardLayout from "./layouts/DashboardLayout";
 import ComingSoon from "./pages/ComingSoon";
 
@@ -18,11 +18,11 @@ function App() {
           <Route path="/" element={<DashboardLayout />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="members" element={<Members />} />
-            <Route path="meetings" element={<ComingSoon title="Görüşlər" />} />
-            <Route path="finance" element={<ComingSoon title="Maliyyə" />} />
-            <Route path="marketing" element={<ComingSoon title="Marketing" />} />
+            <Route path="companies" element={<Companies />} />
             <Route path="hr" element={<ComingSoon title="İnsan Resurları" />} />
+            <Route path="finance" element={<ComingSoon title="Maliyyə" />} />
+            <Route path="sales" element={<ComingSoon title="Satış" />} />
+            <Route path="meetings" element={<ComingSoon title="Görüşlər" />} />
             <Route path="tasks" element={<ComingSoon title="Tapşırıqlar" />} />
             <Route path="messages" element={<ComingSoon title="Mesajlar" />} />
           </Route>

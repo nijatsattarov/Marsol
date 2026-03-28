@@ -2,10 +2,9 @@ import { useState, useEffect, createContext, useContext } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
-  Users, 
+  Building2, 
   Calendar, 
   Wallet, 
-  Megaphone, 
   UserCog, 
   ClipboardList, 
   MessageSquare,
@@ -13,16 +12,17 @@ import {
   ChevronRight,
   LogOut,
   Menu,
-  X
+  X,
+  TrendingUp
 } from 'lucide-react';
 
 const menuItems = [
   { path: '/dashboard', label: 'İdarə Paneli', icon: LayoutDashboard },
-  { path: '/members', label: 'Üzvlər', icon: Users },
-  { path: '/meetings', label: 'Görüşlər', icon: Calendar },
-  { path: '/finance', label: 'Maliyyə', icon: Wallet },
-  { path: '/marketing', label: 'Marketing', icon: Megaphone },
+  { path: '/companies', label: 'Şirkət Məlumatları', icon: Building2 },
   { path: '/hr', label: 'İnsan Resurları', icon: UserCog },
+  { path: '/finance', label: 'Maliyyə', icon: Wallet },
+  { path: '/sales', label: 'Satış', icon: TrendingUp },
+  { path: '/meetings', label: 'Görüşlər', icon: Calendar },
   { path: '/tasks', label: 'Tapşırıqlar', icon: ClipboardList },
   { path: '/messages', label: 'Mesajlar', icon: MessageSquare },
 ];

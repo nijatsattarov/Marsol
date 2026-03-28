@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Marsol Dashboard Backend API Tests
-Tests the authentication and dashboard endpoints
+Tests the authentication, dashboard, companies, and other endpoints
 """
 
 import requests
@@ -166,21 +166,24 @@ class MarsolAPITester:
             
             if response.status_code == 200:
                 data = response.json()
-                required_keys = ["events", "members", "sectors", "payments", "financials"]
+                required_keys = ["companies", "employees", "tasks", "meetings", "sectors", "financials", "payments"]
                 missing_keys = [key for key in required_keys if key not in data]
                 
                 if not missing_keys:
                     # Validate structure
-                    events_valid = "total" in data["events"] and "breakdown" in data["events"]
-                    members_valid = "total" in data["members"] and "breakdown" in data["members"]
+                    companies_valid = "total" in data["companies"] and "breakdown" in data["companies"]
+                    employees_valid = "total" in data["employees"]
+                    tasks_valid = "total" in data["tasks"] and "pending" in data["tasks"]
+                    meetings_valid = "total" in data["meetings"]
                     sectors_valid = "total" in data["sectors"] and "breakdown" in data["sectors"]
                     payments_valid = "total" in data["payments"] and "paid" in data["payments"]
                     financials_valid = "income" in data["financials"] and "expenses" in data["financials"]
                     
-                    if all([events_valid, members_valid, sectors_valid, payments_valid, financials_valid]):
+                    if all([companies_valid, employees_valid, tasks_valid, meetings_valid, sectors_valid, payments_valid, financials_valid]):
                         self.log_test("Dashboard Stats", "PASS", 
-                                    f"Stats retrieved: {data['events']['total']} events, "
-                                    f"{data['members']['total']} members, "
+                                    f"Stats retrieved: {data['companies']['total']} companies, "
+                                    f"{data['employees']['total']} employees, "
+                                    f"{data['tasks']['total']} tasks, "
                                     f"{data['sectors']['total']} sectors")
                         return True
                     else:
@@ -200,211 +203,212 @@ class MarsolAPITester:
             self.log_test("Dashboard Stats", "FAIL", f"Exception: {str(e)}")
             return False
     
-    def test_get_member_options(self):
-        """Test get member filter options endpoint"""
+    def test_get_options(self):
+        """Test get all options endpoint"""
         if not self.token:
-            self.log_test("Get Member Options", "FAIL", "No authentication token available")
+            self.log_test("Get Options", "FAIL", "No authentication token available")
             return False
             
         try:
             headers = {"Authorization": f"Bearer {self.token}"}
-            response = self.session.get(f"{self.base_url}/members/options/all", headers=headers)
+            response = self.session.get(f"{self.base_url}/options/all", headers=headers)
             
             if response.status_code == 200:
                 data = response.json()
-                required_keys = ["sectors", "packages", "curators", "business_sizes", "projects"]
+                required_keys = ["sectors", "packages", "company_sizes", "marsol_representatives", "projects", "departments"]
                 missing_keys = [key for key in required_keys if key not in data]
                 
                 if not missing_keys:
-                    self.log_test("Get Member Options", "PASS", 
+                    self.log_test("Get Options", "PASS", 
                                 f"Options retrieved: {len(data['sectors'])} sectors, "
-                                f"{len(data['packages'])} packages, {len(data['curators'])} curators")
+                                f"{len(data['packages'])} packages, {len(data['marsol_representatives'])} representatives")
                     return True, data
                 else:
-                    self.log_test("Get Member Options", "FAIL", f"Missing keys: {missing_keys}")
+                    self.log_test("Get Options", "FAIL", f"Missing keys: {missing_keys}")
                     return False, {}
             elif response.status_code == 401:
-                self.log_test("Get Member Options", "FAIL", "Authentication failed")
+                self.log_test("Get Options", "FAIL", "Authentication failed")
                 return False, {}
             else:
-                self.log_test("Get Member Options", "FAIL", f"Status code: {response.status_code}")
+                self.log_test("Get Options", "FAIL", f"Status code: {response.status_code}")
                 return False, {}
         except Exception as e:
-            self.log_test("Get Member Options", "FAIL", f"Exception: {str(e)}")
+            self.log_test("Get Options", "FAIL", f"Exception: {str(e)}")
             return False, {}
     
-    def test_get_members(self):
-        """Test get members list endpoint"""
+    def test_get_companies(self):
+        """Test get companies list endpoint"""
         if not self.token:
-            self.log_test("Get Members", "FAIL", "No authentication token available")
+            self.log_test("Get Companies", "FAIL", "No authentication token available")
             return False
             
         try:
             headers = {"Authorization": f"Bearer {self.token}"}
-            response = self.session.get(f"{self.base_url}/members", headers=headers)
+            response = self.session.get(f"{self.base_url}/companies", headers=headers)
             
             if response.status_code == 200:
                 data = response.json()
                 if isinstance(data, list):
-                    self.log_test("Get Members", "PASS", f"Retrieved {len(data)} members")
+                    self.log_test("Get Companies", "PASS", f"Retrieved {len(data)} companies")
                     return True, data
                 else:
-                    self.log_test("Get Members", "FAIL", "Response is not a list")
+                    self.log_test("Get Companies", "FAIL", "Response is not a list")
                     return False, []
             elif response.status_code == 401:
-                self.log_test("Get Members", "FAIL", "Authentication failed")
+                self.log_test("Get Companies", "FAIL", "Authentication failed")
                 return False, []
             else:
-                self.log_test("Get Members", "FAIL", f"Status code: {response.status_code}")
+                self.log_test("Get Companies", "FAIL", f"Status code: {response.status_code}")
                 return False, []
         except Exception as e:
-            self.log_test("Get Members", "FAIL", f"Exception: {str(e)}")
+            self.log_test("Get Companies", "FAIL", f"Exception: {str(e)}")
             return False, []
     
-    def test_create_member(self):
-        """Test create member endpoint"""
+    def test_create_company(self):
+        """Test create company endpoint"""
         if not self.token:
-            self.log_test("Create Member", "FAIL", "No authentication token available")
+            self.log_test("Create Company", "FAIL", "No authentication token available")
             return False, None
             
         try:
             headers = {"Authorization": f"Bearer {self.token}"}
-            test_member = {
-                "company_name": f"Test Company {str(uuid.uuid4())[:8]}",
+            test_company = {
+                "brand_name": f"Test Company {str(uuid.uuid4())[:8]}",
+                "legal_name": f"Test Legal Company {str(uuid.uuid4())[:8]}",
                 "sector": "İKT",
+                "company_size": "Orta",
+                "owner_name": "Test Owner",
+                "owner_phone": "+994501234567",
+                "marsol_representative": "Əli Məmmədov",
+                "joined_project": "Üzvlük",
                 "package": "Business",
-                "curator": "Əli Məmmədov",
-                "business_size": "Orta",
-                "director_name": "Test Director",
-                "director_phone": "+994501234567",
-                "contact_person": "Test Contact",
-                "contact_phone": "+994501234568",
-                "company_email": f"test{str(uuid.uuid4())[:8]}@company.com",
-                "projects": ["İşgüzar səhər yeməyi"]
+                "total_amount": 1000,
+                "paid_amount": 500,
+                "status": "Aktiv"
             }
             
-            response = self.session.post(f"{self.base_url}/members", json=test_member, headers=headers)
+            response = self.session.post(f"{self.base_url}/companies", json=test_company, headers=headers)
             
             if response.status_code == 200:
                 data = response.json()
-                if "id" in data and "company_name" in data:
-                    self.log_test("Create Member", "PASS", 
-                                f"Member created: {data['company_name']} (ID: {data['id']})")
+                if "id" in data and "brand_name" in data:
+                    self.log_test("Create Company", "PASS", 
+                                f"Company created: {data['brand_name']} (ID: {data['id']})")
                     return True, data
                 else:
-                    self.log_test("Create Member", "FAIL", "Missing id or company_name in response")
+                    self.log_test("Create Company", "FAIL", "Missing id or brand_name in response")
                     return False, None
             elif response.status_code == 401:
-                self.log_test("Create Member", "FAIL", "Authentication failed")
+                self.log_test("Create Company", "FAIL", "Authentication failed")
                 return False, None
             else:
-                self.log_test("Create Member", "FAIL", 
+                self.log_test("Create Company", "FAIL", 
                             f"Status code: {response.status_code}, Response: {response.text}")
                 return False, None
         except Exception as e:
-            self.log_test("Create Member", "FAIL", f"Exception: {str(e)}")
+            self.log_test("Create Company", "FAIL", f"Exception: {str(e)}")
             return False, None
     
-    def test_get_single_member(self, member_id):
-        """Test get single member endpoint"""
+    def test_get_single_company(self, company_id):
+        """Test get single company endpoint"""
         if not self.token:
-            self.log_test("Get Single Member", "FAIL", "No authentication token available")
+            self.log_test("Get Single Company", "FAIL", "No authentication token available")
             return False
             
         try:
             headers = {"Authorization": f"Bearer {self.token}"}
-            response = self.session.get(f"{self.base_url}/members/{member_id}", headers=headers)
+            response = self.session.get(f"{self.base_url}/companies/{company_id}", headers=headers)
             
             if response.status_code == 200:
                 data = response.json()
-                if "id" in data and "company_name" in data:
-                    self.log_test("Get Single Member", "PASS", 
-                                f"Member retrieved: {data['company_name']}")
+                if "id" in data and "brand_name" in data:
+                    self.log_test("Get Single Company", "PASS", 
+                                f"Company retrieved: {data['brand_name']}")
                     return True
                 else:
-                    self.log_test("Get Single Member", "FAIL", "Missing required fields")
+                    self.log_test("Get Single Company", "FAIL", "Missing required fields")
                     return False
             elif response.status_code == 404:
-                self.log_test("Get Single Member", "FAIL", "Member not found")
+                self.log_test("Get Single Company", "FAIL", "Company not found")
                 return False
             elif response.status_code == 401:
-                self.log_test("Get Single Member", "FAIL", "Authentication failed")
+                self.log_test("Get Single Company", "FAIL", "Authentication failed")
                 return False
             else:
-                self.log_test("Get Single Member", "FAIL", f"Status code: {response.status_code}")
+                self.log_test("Get Single Company", "FAIL", f"Status code: {response.status_code}")
                 return False
         except Exception as e:
-            self.log_test("Get Single Member", "FAIL", f"Exception: {str(e)}")
+            self.log_test("Get Single Company", "FAIL", f"Exception: {str(e)}")
             return False
     
-    def test_update_member(self, member_id):
-        """Test update member endpoint"""
+    def test_update_company(self, company_id):
+        """Test update company endpoint"""
         if not self.token:
-            self.log_test("Update Member", "FAIL", "No authentication token available")
+            self.log_test("Update Company", "FAIL", "No authentication token available")
             return False
             
         try:
             headers = {"Authorization": f"Bearer {self.token}"}
             update_data = {
-                "company_name": f"Updated Company {str(uuid.uuid4())[:8]}",
+                "brand_name": f"Updated Company {str(uuid.uuid4())[:8]}",
                 "sector": "Maliyyə"
             }
             
-            response = self.session.put(f"{self.base_url}/members/{member_id}", 
+            response = self.session.put(f"{self.base_url}/companies/{company_id}", 
                                       json=update_data, headers=headers)
             
             if response.status_code == 200:
                 data = response.json()
-                if "id" in data and data["company_name"] == update_data["company_name"]:
-                    self.log_test("Update Member", "PASS", 
-                                f"Member updated: {data['company_name']}")
+                if "id" in data and data["brand_name"] == update_data["brand_name"]:
+                    self.log_test("Update Company", "PASS", 
+                                f"Company updated: {data['brand_name']}")
                     return True
                 else:
-                    self.log_test("Update Member", "FAIL", "Update not reflected in response")
+                    self.log_test("Update Company", "FAIL", "Update not reflected in response")
                     return False
             elif response.status_code == 404:
-                self.log_test("Update Member", "FAIL", "Member not found")
+                self.log_test("Update Company", "FAIL", "Company not found")
                 return False
             elif response.status_code == 401:
-                self.log_test("Update Member", "FAIL", "Authentication failed")
+                self.log_test("Update Company", "FAIL", "Authentication failed")
                 return False
             else:
-                self.log_test("Update Member", "FAIL", 
+                self.log_test("Update Company", "FAIL", 
                             f"Status code: {response.status_code}, Response: {response.text}")
                 return False
         except Exception as e:
-            self.log_test("Update Member", "FAIL", f"Exception: {str(e)}")
+            self.log_test("Update Company", "FAIL", f"Exception: {str(e)}")
             return False
     
-    def test_delete_member(self, member_id):
-        """Test delete member endpoint"""
+    def test_delete_company(self, company_id):
+        """Test delete company endpoint"""
         if not self.token:
-            self.log_test("Delete Member", "FAIL", "No authentication token available")
+            self.log_test("Delete Company", "FAIL", "No authentication token available")
             return False
             
         try:
             headers = {"Authorization": f"Bearer {self.token}"}
-            response = self.session.delete(f"{self.base_url}/members/{member_id}", headers=headers)
+            response = self.session.delete(f"{self.base_url}/companies/{company_id}", headers=headers)
             
             if response.status_code == 200:
                 data = response.json()
                 if "message" in data:
-                    self.log_test("Delete Member", "PASS", f"Member deleted: {data['message']}")
+                    self.log_test("Delete Company", "PASS", f"Company deleted: {data['message']}")
                     return True
                 else:
-                    self.log_test("Delete Member", "FAIL", "No confirmation message")
+                    self.log_test("Delete Company", "FAIL", "No confirmation message")
                     return False
             elif response.status_code == 404:
-                self.log_test("Delete Member", "FAIL", "Member not found")
+                self.log_test("Delete Company", "FAIL", "Company not found")
                 return False
             elif response.status_code == 401:
-                self.log_test("Delete Member", "FAIL", "Authentication failed")
+                self.log_test("Delete Company", "FAIL", "Authentication failed")
                 return False
             else:
-                self.log_test("Delete Member", "FAIL", f"Status code: {response.status_code}")
+                self.log_test("Delete Company", "FAIL", f"Status code: {response.status_code}")
                 return False
         except Exception as e:
-            self.log_test("Delete Member", "FAIL", f"Exception: {str(e)}")
+            self.log_test("Delete Company", "FAIL", f"Exception: {str(e)}")
             return False
     
     def run_all_tests(self):
@@ -437,31 +441,32 @@ class MarsolAPITester:
             self.test_get_current_user()
             self.test_dashboard_stats()
             
-            # Test member endpoints
-            print("\n📋 Testing Member Management Endpoints...")
+            # Test options endpoint
+            print("\n📋 Testing Options Endpoint...")
+            options_success, options_data = self.test_get_options()
             
-            # Get member options
-            options_success, options_data = self.test_get_member_options()
+            # Test company endpoints
+            print("\n🏢 Testing Company Management Endpoints...")
             
-            # Get members list
-            members_success, members_data = self.test_get_members()
+            # Get companies list
+            companies_success, companies_data = self.test_get_companies()
             
-            # Create a test member
-            create_success, created_member = self.test_create_member()
+            # Create a test company
+            create_success, created_company = self.test_create_company()
             
-            if create_success and created_member:
-                member_id = created_member["id"]
+            if create_success and created_company:
+                company_id = created_company["id"]
                 
-                # Test single member retrieval
-                self.test_get_single_member(member_id)
+                # Test single company retrieval
+                self.test_get_single_company(company_id)
                 
-                # Test member update
-                self.test_update_member(member_id)
+                # Test company update
+                self.test_update_company(company_id)
                 
-                # Test member deletion
-                self.test_delete_member(member_id)
+                # Test company deletion
+                self.test_delete_company(company_id)
             else:
-                print("⚠️ Skipping member CRUD tests due to creation failure")
+                print("⚠️ Skipping company CRUD tests due to creation failure")
         else:
             print("❌ No valid token - skipping authenticated tests")
         
