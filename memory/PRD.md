@@ -24,26 +24,38 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 - Müqavilə: Layihə, paket, başlama/bitmə tarixi, müqavilə faylı
 - Ödəniş: Ümumi məbləğ, ödənilib, borc, gecikmiş gün, son ödəniş tarixi
 
-### 2. İnsan Resurları (Gözləmədə)
-- Əməkdaş məlumatları
-- Müqavilə məlumatları
-- Əmək haqqı
-- Davamiyyət
+### 2. İnsan Resurları ✅ (HR)
+- Əməkdaş cədvəli (filtrlər, axtarış, export)
+- Əməkdaş detallı görünüşü (4 tab: Şəxsi, Əlaqə, Müqavilə, Əmək haqqı)
+- CRUD əməliyyatları
+- Şəxsi məlumatlar: doğum tarixi, cins, ş.v., FİN, təhsil, ailə vəziyyəti
+- Müqavilə: şöbə, vəzifə, tarixlər, məzuniyyət günləri
+- Əmək haqqı: gross/net
 
-### 3. Maliyyə (Gözləmədə)
-- Gəlirlər
-- Xərclər (kateqoriyalar ilə)
-- Barter
-- Mənfəət-Zərər
+### 3. Maliyyə ✅ (Finance)
+- İcmal kartları (gəlir, ödənilib, borc, mənfəət)
+- Gəlirlər siyahısı və əlavə et
+- Xərclər siyahısı (kateqoriyalı) və əlavə et
+- Tab-lar: İcmal, Gəlirlər, Xərclər
 
 ### 4. Satış (Gözləmədə)
-- Satış mənbələri
-- Pipeline
-- Üzv qoşulma
+- Coming Soon səhifəsi
 
-### 5. Görüşlər (Gözləmədə)
-### 6. Tapşırıqlar (Gözləmədə)
+### 5. Görüşlər ✅ (Meetings)
+- Timeline görünüşü (tarixə görə qruplanmış)
+- Görüş əlavə et (əməkdaş, tarix, saat, növ, şirkət, məkan, nəticə)
+- Görüş növləri: Satış görüşü, Daxili iclas, Müştəri görüşü, Partnyor görüşü, Təqdimat
+- Silmə funksiyası
+
+### 6. Tapşırıqlar ✅ (Tasks)
+- Kanban board görünüşü (Gözləyir, İcrada, Tamamlandı, Ləğv edildi)
+- Tapşırıq əlavə et (ad, şöbə, icraçı, prioritet, tarixlər)
+- Status dəyişdirmə (dropdown ilə)
+- Prioritet göstəricisi (rənglərlə)
+- Filtrlər (status, prioritet)
+
 ### 7. Mesajlar (Gözləmədə)
+- Coming Soon səhifəsi
 
 ## Həyata Keçirilənlər
 
@@ -59,21 +71,28 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 - [x] CRUD əməliyyatları
 - [x] Mobil responsiv (kartlar)
 
+### Faza 3 - Əlavə Modullar ✅
+- [x] İnsan Resurları (əməkdaş CRUD, detallı görünüş, əmək haqqı)
+- [x] Maliyyə (gəlir/xərc, icmal kartları)
+- [x] Görüşlər (timeline görünüşü)
+- [x] Tapşırıqlar (Kanban board)
+- [x] Mobil menyu düzəlişi
+
 ## Backlog
 
 ### P0 - Kritik
-- [ ] İnsan Resurları modulu
-- [ ] Maliyyə modulu (Gəlir/Xərc)
+- [ ] Satış modulu (pipeline, mənbələr)
+- [ ] Mesajlar modulu (daxili kommunikasiya)
 
 ### P1 - Yüksək
-- [ ] Satış modulu
-- [ ] Görüşlər modulu
-- [ ] Tapşırıqlar modulu
-
-### P2 - Orta
-- [ ] Mesajlar
 - [ ] Excel import funksiyası
 - [ ] PDF hesabatlar
+- [ ] Bildirişlər sistemi
+
+### P2 - Orta
+- [ ] Davamiyyət modulu
+- [ ] Barter əməliyyatları
+- [ ] Ətraflı hesabatlar
 
 ## Texniki Struktur
 
