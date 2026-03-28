@@ -13,7 +13,8 @@ import {
   LogOut,
   Menu,
   X,
-  TrendingUp
+  TrendingUp,
+  Settings
 } from 'lucide-react';
 
 const menuItems = [
@@ -25,6 +26,7 @@ const menuItems = [
   { path: '/meetings', label: 'Görüşlər', icon: Calendar },
   { path: '/tasks', label: 'Tapşırıqlar', icon: ClipboardList },
   { path: '/messages', label: 'Mesajlar', icon: MessageSquare },
+  { path: '/settings', label: 'Tənzimləmələr', icon: Settings },
 ];
 
 // Create context for sidebar state

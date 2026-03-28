@@ -823,6 +823,103 @@ async def delete_project(project_id: str, current_user: dict = Depends(get_curre
         raise HTTPException(status_code=404, detail="Layihə tapılmadı")
     return {"message": "Layihə silindi"}
 
+# ==================== CUSTOM FIELDS ====================
+
+@api_router.get("/settings/custom-fields")
+async def get_custom_fields(module: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    query = {}
+    if module and module != "all":
+        query["module"] = module
+    fields = await db.custom_fields.find(query, {"_id": 0}).to_list(500)
+    return fields
+
+@api_router.post("/settings/custom-fields")
+async def create_custom_field(field_data: dict, current_user: dict = Depends(get_current_user)):
+    field_id = str(uuid.uuid4())
+    field_doc = {
+        "id": field_id,
+        "module": field_data.get("module"),
+        "field_name": field_data.get("field_name"),
+        "field_label": field_data.get("field_label", ""),
+        "field_type": field_data.get("field_type", "text"),
+        "options": field_data.get("options", []),
+        "required": field_data.get("required", False),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.custom_fields.insert_one(field_doc)
+    field_doc.pop("_id", None)
+    return field_doc
+
+@api_router.put("/settings/custom-fields/{field_id}")
+async def update_custom_field(field_id: str, field_data: dict, current_user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in field_data.items() if v is not None}
+    result = await db.custom_fields.update_one({"id": field_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Sahə tapılmadı")
+    field = await db.custom_fields.find_one({"id": field_id}, {"_id": 0})
+    return field
+
+@api_router.delete("/settings/custom-fields/{field_id}")
+async def delete_custom_field(field_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.custom_fields.delete_one({"id": field_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Sahə tapılmadı")
+    return {"message": "Sahə silindi"}
+
+# ==================== USER MANAGEMENT ====================
+
+@api_router.get("/settings/users")
+async def get_users(current_user: dict = Depends(get_current_user)):
+    users = await db.users.find({}, {"_id": 0, "password": 0}).to_list(500)
+    return users
+
+@api_router.post("/settings/users")
+async def create_user(user_data: dict, current_user: dict = Depends(get_current_user)):
+    existing = await db.users.find_one({"email": user_data.get("email")})
+    if existing:
+        raise HTTPException(status_code=400, detail="Bu email artıq mövcuddur")
+    user_id = str(uuid.uuid4())
+    user_doc = {
+        "id": user_id,
+        "email": user_data.get("email"),
+        "name": user_data.get("name"),
+        "password": hash_password(user_data.get("password", "123456")),
+        "role": user_data.get("role", "user"),
+        "department": user_data.get("department", ""),
+        "phone": user_data.get("phone", ""),
+        "status": user_data.get("status", "Aktiv"),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.users.insert_one(user_doc)
+    user_doc.pop("_id", None)
+    user_doc.pop("password", None)
+    return user_doc
+
+@api_router.put("/settings/users/{user_id}")
+async def update_user(user_id: str, user_data: dict, current_user: dict = Depends(get_current_user)):
+    update_data = {}
+    for k, v in user_data.items():
+        if v is not None and k != "password":
+            update_data[k] = v
+    if "password" in user_data and user_data["password"]:
+        update_data["password"] = hash_password(user_data["password"])
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Yenilənəcək məlumat yoxdur")
+    result = await db.users.update_one({"id": user_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="İstifadəçi tapılmadı")
+    user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+    return user
+
+@api_router.delete("/settings/users/{user_id}")
+async def delete_user(user_id: str, current_user: dict = Depends(get_current_user)):
+    if user_id == current_user.get("id"):
+        raise HTTPException(status_code=400, detail="Özünüzü silə bilməzsiniz")
+    result = await db.users.delete_one({"id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="İstifadəçi tapılmadı")
+    return {"message": "İstifadəçi silindi"}
+
 # Root
 @api_router.get("/")
 async def root():
