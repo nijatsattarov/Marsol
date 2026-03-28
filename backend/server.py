@@ -531,6 +531,28 @@ async def create_income(income_data: IncomeCreate, current_user: dict = Depends(
     income_doc.pop("_id", None)
     return income_doc
 
+@api_router.put("/finance/incomes/{income_id}")
+async def update_income(income_id: str, income_data: dict, current_user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in income_data.items() if v is not None}
+    if "amount" in update_data or "paid_amount" in update_data:
+        current = await db.incomes.find_one({"id": income_id}, {"_id": 0})
+        if current:
+            amount = update_data.get("amount", current.get("amount", 0))
+            paid = update_data.get("paid_amount", current.get("paid_amount", 0))
+            update_data["debt_amount"] = amount - paid
+    result = await db.incomes.update_one({"id": income_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Gəlir tapılmadı")
+    income = await db.incomes.find_one({"id": income_id}, {"_id": 0})
+    return income
+
+@api_router.delete("/finance/incomes/{income_id}")
+async def delete_income(income_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.incomes.delete_one({"id": income_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Gəlir tapılmadı")
+    return {"message": "Gəlir silindi"}
+
 @api_router.get("/finance/expenses")
 async def get_expenses(current_user: dict = Depends(get_current_user)):
     expenses = await db.expenses.find({}, {"_id": 0}).to_list(1000)
@@ -547,6 +569,22 @@ async def create_expense(expense_data: ExpenseCreate, current_user: dict = Depen
     await db.expenses.insert_one(expense_doc)
     expense_doc.pop("_id", None)
     return expense_doc
+
+@api_router.put("/finance/expenses/{expense_id}")
+async def update_expense(expense_id: str, expense_data: dict, current_user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in expense_data.items() if v is not None}
+    result = await db.expenses.update_one({"id": expense_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Xərc tapılmadı")
+    expense = await db.expenses.find_one({"id": expense_id}, {"_id": 0})
+    return expense
+
+@api_router.delete("/finance/expenses/{expense_id}")
+async def delete_expense(expense_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.expenses.delete_one({"id": expense_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Xərc tapılmadı")
+    return {"message": "Xərc silindi"}
 
 @api_router.get("/finance/summary")
 async def get_finance_summary(current_user: dict = Depends(get_current_user)):
@@ -660,12 +698,20 @@ async def delete_meeting(meeting_id: str, current_user: dict = Depends(get_curre
 
 @api_router.get("/options/all")
 async def get_all_options(current_user: dict = Depends(get_current_user)):
+    # Get dynamic packages and projects from database
+    packages_db = await db.packages.find({}, {"_id": 0}).to_list(100)
+    projects_db = await db.projects.find({}, {"_id": 0}).to_list(100)
+    
+    # Use database values if exist, otherwise use defaults
+    packages = [p["name"] for p in packages_db] if packages_db else ["Premium", "Business", "Business Plus"]
+    projects = [p["name"] for p in projects_db] if projects_db else ["Üzvlük", "Sərgi", "Təlim/Proqram", "ICMA", "Sosial layihə"]
+    
     return {
         "sectors": ["İnşaat", "Təhsil", "Qida", "İKT", "Logistika", "Maliyyə", "Səhiyyə", "Turizm", "Kənd təsərrüfatı", "İstehsalat", "Pərakəndə satış", "Xidmət", "Digər"],
-        "packages": ["Premium", "Business", "Business Plus"],
+        "packages": packages,
         "company_sizes": ["Böyük", "Orta", "Kiçik", "Mikro"],
         "marsol_representatives": ["Əli Məmmədov", "Aynur Həsənova", "Rəşad Quliyev", "Leyla Əliyeva", "Tural Babayev"],
-        "projects": ["Üzvlük", "Sərgi", "Təlim/Proqram", "ICMA", "Sosial layihə"],
+        "projects": projects,
         "departments": ["Satış", "Marketing", "HR", "Maliyyə", "Layihə", "İT", "İdarəetmə"],
         "task_statuses": ["Gözləyir", "İcrada", "Tamamlandı", "Ləğv edildi"],
         "priorities": ["Yüksək", "Orta", "Aşağı"],
@@ -681,6 +727,101 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
         "reference_sources": ["Media", "Partnyor", "Referans", "Digər"],
         "statuses": ["Aktiv", "Qeyri-aktiv", "Gözləmədə"]
     }
+
+# Get companies for select dropdown (simplified)
+@api_router.get("/options/companies")
+async def get_companies_for_select(current_user: dict = Depends(get_current_user)):
+    companies = await db.companies.find({}, {"_id": 0, "id": 1, "brand_name": 1, "owner_name": 1, "package": 1, "joined_project": 1}).to_list(1000)
+    return companies
+
+# ==================== PACKAGES MANAGEMENT ====================
+
+@api_router.get("/settings/packages")
+async def get_packages(current_user: dict = Depends(get_current_user)):
+    packages = await db.packages.find({}, {"_id": 0}).to_list(100)
+    if not packages:
+        # Return default packages
+        return [
+            {"id": "1", "name": "Premium", "description": "Premium üzvlük paketi", "price": 5000},
+            {"id": "2", "name": "Business", "description": "Business üzvlük paketi", "price": 3000},
+            {"id": "3", "name": "Business Plus", "description": "Business Plus üzvlük paketi", "price": 4000}
+        ]
+    return packages
+
+@api_router.post("/settings/packages")
+async def create_package(package_data: dict, current_user: dict = Depends(get_current_user)):
+    package_id = str(uuid.uuid4())
+    package_doc = {
+        "id": package_id,
+        "name": package_data.get("name"),
+        "description": package_data.get("description", ""),
+        "price": package_data.get("price", 0),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.packages.insert_one(package_doc)
+    package_doc.pop("_id", None)
+    return package_doc
+
+@api_router.put("/settings/packages/{package_id}")
+async def update_package(package_id: str, package_data: dict, current_user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in package_data.items() if v is not None}
+    result = await db.packages.update_one({"id": package_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Paket tapılmadı")
+    package = await db.packages.find_one({"id": package_id}, {"_id": 0})
+    return package
+
+@api_router.delete("/settings/packages/{package_id}")
+async def delete_package(package_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.packages.delete_one({"id": package_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Paket tapılmadı")
+    return {"message": "Paket silindi"}
+
+# ==================== PROJECTS MANAGEMENT ====================
+
+@api_router.get("/settings/projects")
+async def get_projects(current_user: dict = Depends(get_current_user)):
+    projects = await db.projects.find({}, {"_id": 0}).to_list(100)
+    if not projects:
+        # Return default projects
+        return [
+            {"id": "1", "name": "Üzvlük", "description": "Üzvlük layihəsi"},
+            {"id": "2", "name": "Sərgi", "description": "Sərgi layihəsi"},
+            {"id": "3", "name": "Təlim/Proqram", "description": "Təlim və proqramlar"},
+            {"id": "4", "name": "ICMA", "description": "ICMA layihəsi"},
+            {"id": "5", "name": "Sosial layihə", "description": "Sosial layihələr"}
+        ]
+    return projects
+
+@api_router.post("/settings/projects")
+async def create_project(project_data: dict, current_user: dict = Depends(get_current_user)):
+    project_id = str(uuid.uuid4())
+    project_doc = {
+        "id": project_id,
+        "name": project_data.get("name"),
+        "description": project_data.get("description", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.projects.insert_one(project_doc)
+    project_doc.pop("_id", None)
+    return project_doc
+
+@api_router.put("/settings/projects/{project_id}")
+async def update_project(project_id: str, project_data: dict, current_user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in project_data.items() if v is not None}
+    result = await db.projects.update_one({"id": project_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Layihə tapılmadı")
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    return project
+
+@api_router.delete("/settings/projects/{project_id}")
+async def delete_project(project_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.projects.delete_one({"id": project_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Layihə tapılmadı")
+    return {"message": "Layihə silindi"}
 
 # Root
 @api_router.get("/")
