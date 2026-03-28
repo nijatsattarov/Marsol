@@ -411,6 +411,562 @@ class MarsolAPITester:
             self.log_test("Delete Company", "FAIL", f"Exception: {str(e)}")
             return False
     
+    # ==================== HR/EMPLOYEES TESTS ====================
+    
+    def test_get_employees(self):
+        """Test get employees list endpoint"""
+        if not self.token:
+            self.log_test("Get Employees", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = self.session.get(f"{self.base_url}/employees", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    self.log_test("Get Employees", "PASS", f"Retrieved {len(data)} employees")
+                    return True, data
+                else:
+                    self.log_test("Get Employees", "FAIL", "Response is not a list")
+                    return False, []
+            elif response.status_code == 401:
+                self.log_test("Get Employees", "FAIL", "Authentication failed")
+                return False, []
+            else:
+                self.log_test("Get Employees", "FAIL", f"Status code: {response.status_code}")
+                return False, []
+        except Exception as e:
+            self.log_test("Get Employees", "FAIL", f"Exception: {str(e)}")
+            return False, []
+    
+    def test_create_employee(self):
+        """Test create employee endpoint"""
+        if not self.token:
+            self.log_test("Create Employee", "FAIL", "No authentication token available")
+            return False, None
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            test_employee = {
+                "full_name": f"Test Employee {str(uuid.uuid4())[:8]}",
+                "gender": "Kişi",
+                "personal_phone": "+994501234567",
+                "email": f"test.employee.{str(uuid.uuid4())[:8]}@marsol.test",
+                "department": "İT",
+                "position": "Test Developer",
+                "status": "Aktiv"
+            }
+            
+            response = self.session.post(f"{self.base_url}/employees", json=test_employee, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "id" in data and "full_name" in data:
+                    self.log_test("Create Employee", "PASS", 
+                                f"Employee created: {data['full_name']} (ID: {data['id']})")
+                    return True, data
+                else:
+                    self.log_test("Create Employee", "FAIL", "Missing id or full_name in response")
+                    return False, None
+            elif response.status_code == 401:
+                self.log_test("Create Employee", "FAIL", "Authentication failed")
+                return False, None
+            else:
+                self.log_test("Create Employee", "FAIL", 
+                            f"Status code: {response.status_code}, Response: {response.text}")
+                return False, None
+        except Exception as e:
+            self.log_test("Create Employee", "FAIL", f"Exception: {str(e)}")
+            return False, None
+    
+    def test_get_single_employee(self, employee_id):
+        """Test get single employee endpoint"""
+        if not self.token:
+            self.log_test("Get Single Employee", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = self.session.get(f"{self.base_url}/employees/{employee_id}", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "id" in data and "full_name" in data:
+                    self.log_test("Get Single Employee", "PASS", 
+                                f"Employee retrieved: {data['full_name']}")
+                    return True
+                else:
+                    self.log_test("Get Single Employee", "FAIL", "Missing required fields")
+                    return False
+            elif response.status_code == 404:
+                self.log_test("Get Single Employee", "FAIL", "Employee not found")
+                return False
+            elif response.status_code == 401:
+                self.log_test("Get Single Employee", "FAIL", "Authentication failed")
+                return False
+            else:
+                self.log_test("Get Single Employee", "FAIL", f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Get Single Employee", "FAIL", f"Exception: {str(e)}")
+            return False
+    
+    def test_delete_employee(self, employee_id):
+        """Test delete employee endpoint"""
+        if not self.token:
+            self.log_test("Delete Employee", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = self.session.delete(f"{self.base_url}/employees/{employee_id}", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "message" in data:
+                    self.log_test("Delete Employee", "PASS", f"Employee deleted: {data['message']}")
+                    return True
+                else:
+                    self.log_test("Delete Employee", "FAIL", "No confirmation message")
+                    return False
+            elif response.status_code == 404:
+                self.log_test("Delete Employee", "FAIL", "Employee not found")
+                return False
+            elif response.status_code == 401:
+                self.log_test("Delete Employee", "FAIL", "Authentication failed")
+                return False
+            else:
+                self.log_test("Delete Employee", "FAIL", f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Delete Employee", "FAIL", f"Exception: {str(e)}")
+            return False
+    
+    # ==================== FINANCE TESTS ====================
+    
+    def test_get_finance_summary(self):
+        """Test get finance summary endpoint"""
+        if not self.token:
+            self.log_test("Get Finance Summary", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = self.session.get(f"{self.base_url}/finance/summary", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_keys = ["total_income", "paid_income", "debt", "total_expenses", "net_profit", "current_profit"]
+                missing_keys = [key for key in required_keys if key not in data]
+                
+                if not missing_keys:
+                    self.log_test("Get Finance Summary", "PASS", 
+                                f"Summary retrieved: Income {data['total_income']}, Expenses {data['total_expenses']}")
+                    return True
+                else:
+                    self.log_test("Get Finance Summary", "FAIL", f"Missing keys: {missing_keys}")
+                    return False
+            elif response.status_code == 401:
+                self.log_test("Get Finance Summary", "FAIL", "Authentication failed")
+                return False
+            else:
+                self.log_test("Get Finance Summary", "FAIL", f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Get Finance Summary", "FAIL", f"Exception: {str(e)}")
+            return False
+    
+    def test_get_incomes(self):
+        """Test get incomes list endpoint"""
+        if not self.token:
+            self.log_test("Get Incomes", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = self.session.get(f"{self.base_url}/finance/incomes", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    self.log_test("Get Incomes", "PASS", f"Retrieved {len(data)} incomes")
+                    return True, data
+                else:
+                    self.log_test("Get Incomes", "FAIL", "Response is not a list")
+                    return False, []
+            elif response.status_code == 401:
+                self.log_test("Get Incomes", "FAIL", "Authentication failed")
+                return False, []
+            else:
+                self.log_test("Get Incomes", "FAIL", f"Status code: {response.status_code}")
+                return False, []
+        except Exception as e:
+            self.log_test("Get Incomes", "FAIL", f"Exception: {str(e)}")
+            return False, []
+    
+    def test_create_income(self):
+        """Test create income endpoint"""
+        if not self.token:
+            self.log_test("Create Income", "FAIL", "No authentication token available")
+            return False, None
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            test_income = {
+                "company_id": str(uuid.uuid4()),
+                "company_name": f"Test Income Company {str(uuid.uuid4())[:8]}",
+                "owner_name": "Test Owner",
+                "marsol_representative": "Əli Məmmədov",
+                "project": "Üzvlük",
+                "package": "Business",
+                "amount": 1500,
+                "paid_amount": 1000,
+                "currency": "AZN"
+            }
+            
+            response = self.session.post(f"{self.base_url}/finance/incomes", json=test_income, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "id" in data and "company_name" in data:
+                    self.log_test("Create Income", "PASS", 
+                                f"Income created: {data['company_name']} - {data['amount']} AZN")
+                    return True, data
+                else:
+                    self.log_test("Create Income", "FAIL", "Missing id or company_name in response")
+                    return False, None
+            elif response.status_code == 401:
+                self.log_test("Create Income", "FAIL", "Authentication failed")
+                return False, None
+            else:
+                self.log_test("Create Income", "FAIL", 
+                            f"Status code: {response.status_code}, Response: {response.text}")
+                return False, None
+        except Exception as e:
+            self.log_test("Create Income", "FAIL", f"Exception: {str(e)}")
+            return False, None
+    
+    def test_get_expenses(self):
+        """Test get expenses list endpoint"""
+        if not self.token:
+            self.log_test("Get Expenses", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = self.session.get(f"{self.base_url}/finance/expenses", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    self.log_test("Get Expenses", "PASS", f"Retrieved {len(data)} expenses")
+                    return True, data
+                else:
+                    self.log_test("Get Expenses", "FAIL", "Response is not a list")
+                    return False, []
+            elif response.status_code == 401:
+                self.log_test("Get Expenses", "FAIL", "Authentication failed")
+                return False, []
+            else:
+                self.log_test("Get Expenses", "FAIL", f"Status code: {response.status_code}")
+                return False, []
+        except Exception as e:
+            self.log_test("Get Expenses", "FAIL", f"Exception: {str(e)}")
+            return False, []
+    
+    def test_create_expense(self):
+        """Test create expense endpoint"""
+        if not self.token:
+            self.log_test("Create Expense", "FAIL", "No authentication token available")
+            return False, None
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            test_expense = {
+                "expense_name": f"Test Expense {str(uuid.uuid4())[:8]}",
+                "category": "Əməliyyat xərcləri",
+                "sub_category": "Ofis xərcləri",
+                "amount": 500,
+                "currency": "AZN",
+                "date": "2024-01-15",
+                "department": "İT",
+                "responsible_person": "Test Manager",
+                "status": "Ödənilib"
+            }
+            
+            response = self.session.post(f"{self.base_url}/finance/expenses", json=test_expense, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "id" in data and "expense_name" in data:
+                    self.log_test("Create Expense", "PASS", 
+                                f"Expense created: {data['expense_name']} - {data['amount']} AZN")
+                    return True, data
+                else:
+                    self.log_test("Create Expense", "FAIL", "Missing id or expense_name in response")
+                    return False, None
+            elif response.status_code == 401:
+                self.log_test("Create Expense", "FAIL", "Authentication failed")
+                return False, None
+            else:
+                self.log_test("Create Expense", "FAIL", 
+                            f"Status code: {response.status_code}, Response: {response.text}")
+                return False, None
+        except Exception as e:
+            self.log_test("Create Expense", "FAIL", f"Exception: {str(e)}")
+            return False, None
+    
+    # ==================== MEETINGS TESTS ====================
+    
+    def test_get_meetings(self):
+        """Test get meetings list endpoint"""
+        if not self.token:
+            self.log_test("Get Meetings", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = self.session.get(f"{self.base_url}/meetings", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    self.log_test("Get Meetings", "PASS", f"Retrieved {len(data)} meetings")
+                    return True, data
+                else:
+                    self.log_test("Get Meetings", "FAIL", "Response is not a list")
+                    return False, []
+            elif response.status_code == 401:
+                self.log_test("Get Meetings", "FAIL", "Authentication failed")
+                return False, []
+            else:
+                self.log_test("Get Meetings", "FAIL", f"Status code: {response.status_code}")
+                return False, []
+        except Exception as e:
+            self.log_test("Get Meetings", "FAIL", f"Exception: {str(e)}")
+            return False, []
+    
+    def test_create_meeting(self):
+        """Test create meeting endpoint"""
+        if not self.token:
+            self.log_test("Create Meeting", "FAIL", "No authentication token available")
+            return False, None
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            test_meeting = {
+                "employee": f"Test Employee {str(uuid.uuid4())[:8]}",
+                "meeting_setter": "Test Manager",
+                "date": "2024-01-20",
+                "time": "14:00",
+                "company": "Test Company",
+                "contact_person": "Test Contact",
+                "project": "Test Project",
+                "meeting_type": "Satış görüşü",
+                "location": "Ofis",
+                "result": "Müsbət nəticə",
+                "notes": "Test meeting notes"
+            }
+            
+            response = self.session.post(f"{self.base_url}/meetings", json=test_meeting, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "id" in data and "employee" in data:
+                    self.log_test("Create Meeting", "PASS", 
+                                f"Meeting created: {data['employee']} - {data['meeting_type']}")
+                    return True, data
+                else:
+                    self.log_test("Create Meeting", "FAIL", "Missing id or employee in response")
+                    return False, None
+            elif response.status_code == 401:
+                self.log_test("Create Meeting", "FAIL", "Authentication failed")
+                return False, None
+            else:
+                self.log_test("Create Meeting", "FAIL", 
+                            f"Status code: {response.status_code}, Response: {response.text}")
+                return False, None
+        except Exception as e:
+            self.log_test("Create Meeting", "FAIL", f"Exception: {str(e)}")
+            return False, None
+    
+    def test_delete_meeting(self, meeting_id):
+        """Test delete meeting endpoint"""
+        if not self.token:
+            self.log_test("Delete Meeting", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = self.session.delete(f"{self.base_url}/meetings/{meeting_id}", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "message" in data:
+                    self.log_test("Delete Meeting", "PASS", f"Meeting deleted: {data['message']}")
+                    return True
+                else:
+                    self.log_test("Delete Meeting", "FAIL", "No confirmation message")
+                    return False
+            elif response.status_code == 404:
+                self.log_test("Delete Meeting", "FAIL", "Meeting not found")
+                return False
+            elif response.status_code == 401:
+                self.log_test("Delete Meeting", "FAIL", "Authentication failed")
+                return False
+            else:
+                self.log_test("Delete Meeting", "FAIL", f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Delete Meeting", "FAIL", f"Exception: {str(e)}")
+            return False
+    
+    # ==================== TASKS TESTS ====================
+    
+    def test_get_tasks(self):
+        """Test get tasks list endpoint"""
+        if not self.token:
+            self.log_test("Get Tasks", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = self.session.get(f"{self.base_url}/tasks", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    self.log_test("Get Tasks", "PASS", f"Retrieved {len(data)} tasks")
+                    return True, data
+                else:
+                    self.log_test("Get Tasks", "FAIL", "Response is not a list")
+                    return False, []
+            elif response.status_code == 401:
+                self.log_test("Get Tasks", "FAIL", "Authentication failed")
+                return False, []
+            else:
+                self.log_test("Get Tasks", "FAIL", f"Status code: {response.status_code}")
+                return False, []
+        except Exception as e:
+            self.log_test("Get Tasks", "FAIL", f"Exception: {str(e)}")
+            return False, []
+    
+    def test_create_task(self):
+        """Test create task endpoint"""
+        if not self.token:
+            self.log_test("Create Task", "FAIL", "No authentication token available")
+            return False, None
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            test_task = {
+                "task_name": f"Test Task {str(uuid.uuid4())[:8]}",
+                "department": "İT",
+                "assignee": "Test Developer",
+                "responsible_person": "Test Manager",
+                "priority": "Orta",
+                "start_date": "2024-01-15",
+                "end_date": "2024-01-25",
+                "related_object": "Test Project",
+                "phase": "Development",
+                "status": "Gözləyir",
+                "notes": "Test task notes"
+            }
+            
+            response = self.session.post(f"{self.base_url}/tasks", json=test_task, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "id" in data and "task_name" in data:
+                    self.log_test("Create Task", "PASS", 
+                                f"Task created: {data['task_name']} - {data['priority']} priority")
+                    return True, data
+                else:
+                    self.log_test("Create Task", "FAIL", "Missing id or task_name in response")
+                    return False, None
+            elif response.status_code == 401:
+                self.log_test("Create Task", "FAIL", "Authentication failed")
+                return False, None
+            else:
+                self.log_test("Create Task", "FAIL", 
+                            f"Status code: {response.status_code}, Response: {response.text}")
+                return False, None
+        except Exception as e:
+            self.log_test("Create Task", "FAIL", f"Exception: {str(e)}")
+            return False, None
+    
+    def test_update_task(self, task_id):
+        """Test update task endpoint"""
+        if not self.token:
+            self.log_test("Update Task", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            update_data = {
+                "status": "İcrada",
+                "priority": "Yüksək"
+            }
+            
+            response = self.session.put(f"{self.base_url}/tasks/{task_id}", 
+                                      json=update_data, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "id" in data and data["status"] == update_data["status"]:
+                    self.log_test("Update Task", "PASS", 
+                                f"Task updated: Status changed to {data['status']}")
+                    return True
+                else:
+                    self.log_test("Update Task", "FAIL", "Update not reflected in response")
+                    return False
+            elif response.status_code == 404:
+                self.log_test("Update Task", "FAIL", "Task not found")
+                return False
+            elif response.status_code == 401:
+                self.log_test("Update Task", "FAIL", "Authentication failed")
+                return False
+            else:
+                self.log_test("Update Task", "FAIL", 
+                            f"Status code: {response.status_code}, Response: {response.text}")
+                return False
+        except Exception as e:
+            self.log_test("Update Task", "FAIL", f"Exception: {str(e)}")
+            return False
+    
+    def test_delete_task(self, task_id):
+        """Test delete task endpoint"""
+        if not self.token:
+            self.log_test("Delete Task", "FAIL", "No authentication token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.token}"}
+            response = self.session.delete(f"{self.base_url}/tasks/{task_id}", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "message" in data:
+                    self.log_test("Delete Task", "PASS", f"Task deleted: {data['message']}")
+                    return True
+                else:
+                    self.log_test("Delete Task", "FAIL", "No confirmation message")
+                    return False
+            elif response.status_code == 404:
+                self.log_test("Delete Task", "FAIL", "Task not found")
+                return False
+            elif response.status_code == 401:
+                self.log_test("Delete Task", "FAIL", "Authentication failed")
+                return False
+            else:
+                self.log_test("Delete Task", "FAIL", f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Delete Task", "FAIL", f"Exception: {str(e)}")
+            return False
+    
     def run_all_tests(self):
         """Run all backend tests"""
         print("🚀 Starting Marsol Dashboard Backend API Tests...")
@@ -467,6 +1023,69 @@ class MarsolAPITester:
                 self.test_delete_company(company_id)
             else:
                 print("⚠️ Skipping company CRUD tests due to creation failure")
+            
+            # Test HR/Employee endpoints
+            print("\n👥 Testing HR/Employee Management Endpoints...")
+            employees_success, employees_data = self.test_get_employees()
+            
+            # Create a test employee
+            emp_create_success, created_employee = self.test_create_employee()
+            
+            if emp_create_success and created_employee:
+                employee_id = created_employee["id"]
+                
+                # Test single employee retrieval
+                self.test_get_single_employee(employee_id)
+                
+                # Test employee deletion
+                self.test_delete_employee(employee_id)
+            else:
+                print("⚠️ Skipping employee CRUD tests due to creation failure")
+            
+            # Test Finance endpoints
+            print("\n💰 Testing Finance Management Endpoints...")
+            self.test_get_finance_summary()
+            
+            # Test incomes
+            incomes_success, incomes_data = self.test_get_incomes()
+            income_create_success, created_income = self.test_create_income()
+            
+            # Test expenses
+            expenses_success, expenses_data = self.test_get_expenses()
+            expense_create_success, created_expense = self.test_create_expense()
+            
+            # Test Meetings endpoints
+            print("\n📅 Testing Meetings Management Endpoints...")
+            meetings_success, meetings_data = self.test_get_meetings()
+            
+            # Create a test meeting
+            meeting_create_success, created_meeting = self.test_create_meeting()
+            
+            if meeting_create_success and created_meeting:
+                meeting_id = created_meeting["id"]
+                
+                # Test meeting deletion
+                self.test_delete_meeting(meeting_id)
+            else:
+                print("⚠️ Skipping meeting deletion test due to creation failure")
+            
+            # Test Tasks endpoints
+            print("\n📋 Testing Tasks Management Endpoints...")
+            tasks_success, tasks_data = self.test_get_tasks()
+            
+            # Create a test task
+            task_create_success, created_task = self.test_create_task()
+            
+            if task_create_success and created_task:
+                task_id = created_task["id"]
+                
+                # Test task update
+                self.test_update_task(task_id)
+                
+                # Test task deletion
+                self.test_delete_task(task_id)
+            else:
+                print("⚠️ Skipping task CRUD tests due to creation failure")
         else:
             print("❌ No valid token - skipping authenticated tests")
         
