@@ -8,7 +8,8 @@ import {
   TrendingUp, 
   TrendingDown,
   Loader2,
-  Menu
+  ClipboardList,
+  Briefcase
 } from 'lucide-react';
 import { 
   PieChart, 
@@ -42,7 +43,7 @@ const StatCard = ({ title, value, subtitle, icon: Icon, color, trend }) => (
         <Icon className="w-5 h-5 sm:w-6 sm:h-6" style={{ color }} />
       </div>
     </div>
-    {trend && (
+    {trend !== undefined && (
       <div className="flex items-center gap-1 mt-3 text-xs sm:text-sm flex-wrap">
         {trend > 0 ? (
           <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />
@@ -69,7 +70,7 @@ const CustomTooltip = ({ active, payload }) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white px-3 py-2 shadow-lg rounded-lg border border-slate-100 text-sm">
-        <p className="font-semibold text-slate-700">{payload[0].name}</p>
+        <p className="font-semibold text-slate-700">{payload[0].name || payload[0].payload?.name}</p>
         <p className="text-slate-500">{payload[0].value}</p>
       </div>
     );
@@ -114,13 +115,13 @@ export default function Dashboard() {
     );
   }
 
-  const paymentProgress = (stats.payments.paid / stats.payments.total) * 100;
+  const paymentProgress = stats.payments?.total > 0 
+    ? (stats.payments.paid / stats.payments.total) * 100 
+    : 0;
 
-  // Shortened labels for mobile
-  const mobileEventsData = stats.events.breakdown.map(item => ({
-    ...item,
-    shortName: item.name.length > 15 ? item.name.substring(0, 12) + '...' : item.name
-  }));
+  // Prepare chart data
+  const companiesBreakdown = stats.companies?.breakdown || [];
+  const sectorsBreakdown = stats.sectors?.breakdown || [];
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 lg:space-y-8 overflow-x-hidden" data-testid="dashboard-container">
@@ -135,126 +136,124 @@ export default function Dashboard() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
         <StatCard
-          title="Tədbirlər"
-          value={stats.events.total}
-          subtitle="Ümumi təşkil olunan"
-          icon={Calendar}
+          title="Şirkətlər"
+          value={stats.companies?.total || 0}
+          subtitle="Aktiv şirkət"
+          icon={Building2}
           color="#3D4F6F"
-          trend={12}
         />
         <StatCard
-          title="Üzvlər"
-          value={stats.members.total}
-          subtitle="Aktiv üzvlər"
+          title="Əməkdaşlar"
+          value={stats.employees?.total || 0}
+          subtitle="Ümumi əməkdaş"
           icon={Users}
           color="#9ACD32"
-          trend={8}
         />
         <StatCard
-          title="Sektorlar"
-          value={stats.sectors.total}
-          subtitle="Fərqli sektor"
-          icon={Building2}
+          title="Tapşırıqlar"
+          value={stats.tasks?.total || 0}
+          subtitle={`${stats.tasks?.pending || 0} gözləyir`}
+          icon={ClipboardList}
           color="#64748B"
         />
         <StatCard
-          title="Gəlir"
-          value={`${(stats.financials.income / 1000).toFixed(0)}K`}
-          subtitle={stats.financials.currency}
+          title="Mənfəət"
+          value={`${((stats.financials?.profit || 0) / 1000).toFixed(0)}K`}
+          subtitle={stats.financials?.currency || "AZN"}
           icon={CreditCard}
           color="#3D4F6F"
-          trend={15}
         />
       </div>
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        {/* Events Bar Chart */}
-        <ChartCard title="Tədbirlərin növləri">
-          <div className="w-full overflow-x-auto">
-            <ResponsiveContainer width="100%" height={240} minWidth={300}>
-              <BarChart data={mobileEventsData} layout="vertical" margin={{ left: 0, right: 10 }}>
-                <XAxis type="number" tick={{ fontSize: 11 }} />
-                <YAxis 
-                  type="category" 
-                  dataKey="shortName" 
-                  width={100}
-                  tick={{ fontSize: 10 }}
-                  tickLine={false}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Bar 
-                  dataKey="count" 
-                  radius={[0, 4, 4, 0]}
+        {/* Companies by Package - Pie Chart */}
+        <ChartCard title="Şirkətlər üzrə paketlər">
+          {companiesBreakdown.length > 0 ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie
+                  data={companiesBreakdown}
+                  cx="50%"
+                  cy="45%"
+                  innerRadius={40}
+                  outerRadius={70}
+                  paddingAngle={4}
+                  dataKey="count"
+                  nameKey="name"
                 >
-                  {mobileEventsData.map((entry, index) => (
+                  {companiesBreakdown.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
-                </Bar>
-              </BarChart>
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ fontSize: '12px' }} iconSize={10} />
+              </PieChart>
             </ResponsiveContainer>
-          </div>
+          ) : (
+            <div className="h-[240px] flex items-center justify-center text-slate-400">
+              Məlumat yoxdur
+            </div>
+          )}
         </ChartCard>
 
-        {/* Members Pie Chart */}
-        <ChartCard title="Üzvlük paketləri">
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart>
-              <Pie
-                data={stats.members.breakdown}
-                cx="50%"
-                cy="45%"
-                innerRadius={40}
-                outerRadius={70}
-                paddingAngle={4}
-                dataKey="count"
-              >
-                {stats.members.breakdown.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip content={<CustomTooltip />} />
-              <Legend 
-                wrapperStyle={{ fontSize: '12px' }}
-                iconSize={10}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+        {/* Sectors - Bar Chart */}
+        <ChartCard title="Sektorlar üzrə bölgü">
+          {sectorsBreakdown.length > 0 ? (
+            <div className="w-full overflow-x-auto">
+              <ResponsiveContainer width="100%" height={240} minWidth={300}>
+                <BarChart data={sectorsBreakdown} layout="vertical" margin={{ left: 0, right: 10 }}>
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis 
+                    type="category" 
+                    dataKey="name" 
+                    width={80}
+                    tick={{ fontSize: 10 }}
+                    tickLine={false}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                    {sectorsBreakdown.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-[240px] flex items-center justify-center text-slate-400">
+              Məlumat yoxdur
+            </div>
+          )}
         </ChartCard>
       </div>
 
-      {/* Charts Row 2 - Stack on mobile */}
+      {/* Charts Row 2 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-        {/* Sectors Pie Chart */}
-        <ChartCard title="Sektorlar üzrə bölgü">
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie
-                data={stats.sectors.breakdown}
-                cx="50%"
-                cy="50%"
-                outerRadius={60}
-                dataKey="count"
-                label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                labelLine={false}
-              >
-                {stats.sectors.breakdown.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip content={<CustomTooltip />} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="grid grid-cols-2 gap-1.5 sm:gap-2 mt-3">
-            {stats.sectors.breakdown.slice(0, 6).map((sector, index) => (
-              <div key={index} className="flex items-center gap-1.5 text-xs sm:text-sm">
-                <div 
-                  className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: sector.color }}
-                />
-                <span className="text-slate-600 truncate">{sector.name}</span>
+        {/* Tasks Summary */}
+        <ChartCard title="Tapşırıqlar icmalı">
+          <div className="space-y-4">
+            <div className="flex justify-between items-center p-3 rounded-xl bg-amber-50">
+              <div>
+                <p className="text-xs text-amber-600">Gözləyir</p>
+                <p className="text-xl font-bold text-amber-600">{stats.tasks?.pending || 0}</p>
               </div>
-            ))}
+              <ClipboardList className="w-6 h-6 text-amber-500" />
+            </div>
+            <div className="flex justify-between items-center p-3 rounded-xl bg-blue-50">
+              <div>
+                <p className="text-xs text-blue-600">İcrada</p>
+                <p className="text-xl font-bold text-blue-600">{stats.tasks?.in_progress || 0}</p>
+              </div>
+              <Briefcase className="w-6 h-6 text-blue-500" />
+            </div>
+            <div className="flex justify-between items-center p-3 rounded-xl bg-green-50">
+              <div>
+                <p className="text-xs text-green-600">Tamamlandı</p>
+                <p className="text-xl font-bold text-green-600">{stats.tasks?.completed || 0}</p>
+              </div>
+              <TrendingUp className="w-6 h-6 text-green-500" />
+            </div>
           </div>
         </ChartCard>
 
@@ -263,9 +262,9 @@ export default function Dashboard() {
           <div className="space-y-4 sm:space-y-6">
             <div className="text-center">
               <p className="text-2xl sm:text-3xl lg:text-4xl font-bold" style={{ color: '#3D4F6F' }}>
-                {stats.payments.total.toLocaleString()}
+                {(stats.payments?.total || 0).toLocaleString()}
               </p>
-              <p className="text-slate-500 text-sm">{stats.payments.currency}</p>
+              <p className="text-slate-500 text-sm">{stats.payments?.currency || "AZN"}</p>
             </div>
 
             <div className="progress-bar">
@@ -278,13 +277,13 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 gap-2 sm:gap-4">
               <div className="text-center p-2 sm:p-4 rounded-xl bg-green-50">
                 <p className="text-lg sm:text-xl lg:text-2xl font-bold text-green-600">
-                  {stats.payments.paid.toLocaleString()}
+                  {(stats.payments?.paid || 0).toLocaleString()}
                 </p>
                 <p className="text-xs sm:text-sm text-green-600/70">Ödənilib</p>
               </div>
               <div className="text-center p-2 sm:p-4 rounded-xl bg-amber-50">
                 <p className="text-lg sm:text-xl lg:text-2xl font-bold text-amber-600">
-                  {stats.payments.remaining.toLocaleString()}
+                  {(stats.payments?.remaining || 0).toLocaleString()}
                 </p>
                 <p className="text-xs sm:text-sm text-amber-600/70">Qalıq</p>
               </div>
@@ -299,7 +298,7 @@ export default function Dashboard() {
               <div className="min-w-0 flex-1">
                 <p className="text-xs sm:text-sm text-slate-500">Gəlir</p>
                 <p className="text-lg sm:text-xl lg:text-2xl font-bold" style={{ color: '#9ACD32' }}>
-                  {stats.financials.income.toLocaleString()}
+                  {(stats.financials?.income || 0).toLocaleString()}
                 </p>
               </div>
               <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 flex-shrink-0 ml-2" style={{ color: '#9ACD32' }} />
@@ -309,7 +308,7 @@ export default function Dashboard() {
               <div className="min-w-0 flex-1">
                 <p className="text-xs sm:text-sm text-slate-500">Xərclər</p>
                 <p className="text-lg sm:text-xl lg:text-2xl font-bold text-slate-600">
-                  {stats.financials.expenses.toLocaleString()}
+                  {(stats.financials?.expenses || 0).toLocaleString()}
                 </p>
               </div>
               <TrendingDown className="w-6 h-6 sm:w-8 sm:h-8 text-slate-400 flex-shrink-0 ml-2" />
@@ -318,45 +317,30 @@ export default function Dashboard() {
             <div className="p-3 sm:p-4 rounded-xl" style={{ backgroundColor: '#3D4F6F' }}>
               <p className="text-xs sm:text-sm text-white/70">Xalis mənfəət</p>
               <p className="text-lg sm:text-xl lg:text-2xl font-bold text-white">
-                {stats.financials.profit.toLocaleString()} {stats.financials.currency}
+                {(stats.financials?.profit || 0).toLocaleString()} {stats.financials?.currency || "AZN"}
               </p>
             </div>
           </div>
         </ChartCard>
       </div>
 
-      {/* Monthly Chart */}
-      <ChartCard title="Aylıq maliyyə icmalı">
-        <div className="w-full overflow-x-auto -mx-2 px-2">
-          <ResponsiveContainer width="100%" height={250} minWidth={500}>
-            <BarChart data={stats.financials.monthly} margin={{ left: -10, right: 10 }}>
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} width={45} />
-              <Tooltip 
-                contentStyle={{ 
-                  borderRadius: '8px',
-                  border: 'none',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-                  fontSize: '12px'
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: '12px' }} iconSize={10} />
-              <Bar 
-                dataKey="income" 
-                name="Gəlir" 
-                fill="#9ACD32" 
-                radius={[3, 3, 0, 0]}
-              />
-              <Bar 
-                dataKey="expenses" 
-                name="Xərc" 
-                fill="#64748B" 
-                radius={[3, 3, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+      {/* Debt Warning */}
+      {(stats.payments?.remaining || 0) > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-amber-100">
+              <CreditCard className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h4 className="font-semibold text-amber-800">Debitor borclar</h4>
+              <p className="text-sm text-amber-700 mt-1">
+                Ümumi {(stats.payments?.remaining || 0).toLocaleString()} AZN debitor borc mövcuddur. 
+                Gecikmiş ödənişləri yoxlamaq üçün Şirkət Məlumatları bölməsinə keçin.
+              </p>
+            </div>
+          </div>
         </div>
-      </ChartCard>
+      )}
     </div>
   );
 }

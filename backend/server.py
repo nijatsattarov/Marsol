@@ -320,20 +320,20 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     ]
     sectors_data = await db.companies.aggregate(sectors_pipeline).to_list(20)
     
-    # Calculate financials
-    income_pipeline = [
-        {"$group": {"_id": None, "total": {"$sum": "$amount"}, "paid": {"$sum": "$paid_amount"}, "debt": {"$sum": "$debt_amount"}}}
+    # Calculate financials from companies
+    company_finance_pipeline = [
+        {"$group": {"_id": None, "total": {"$sum": "$total_amount"}, "paid": {"$sum": "$paid_amount"}, "debt": {"$sum": "$debt_amount"}}}
     ]
-    income_data = await db.incomes.aggregate(income_pipeline).to_list(1)
+    company_finance = await db.companies.aggregate(company_finance_pipeline).to_list(1)
     
     expense_pipeline = [
         {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
     ]
     expense_data = await db.expenses.aggregate(expense_pipeline).to_list(1)
     
-    total_income = income_data[0]["total"] if income_data else 0
-    total_paid = income_data[0]["paid"] if income_data else 0
-    total_debt = income_data[0]["debt"] if income_data else 0
+    total_income = company_finance[0]["total"] if company_finance else 0
+    total_paid = company_finance[0]["paid"] if company_finance else 0
+    total_debt = company_finance[0]["debt"] if company_finance else 0
     total_expenses = expense_data[0]["total"] if expense_data else 0
     
     # Build sector breakdown with colors
