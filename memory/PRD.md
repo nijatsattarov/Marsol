@@ -4,152 +4,95 @@
 Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırığına əsasən tam ERP sistemi.
 
 ## Tarix
-- **2024-01-XX**: MVP Dashboard hazırlandı
-- **2024-01-XX**: Üzvlər modulu hazırlandı
-- **2024-01-XX**: Sistem yenidən strukturlaşdırıldı (PDF texniki tapşırığına görə)
-- **2025-02-XX**: Tənzimləmələr səhifəsi əlavə edildi (Paketlər, Layihələr, Xüsusi Sahələr, İstifadəçi İdarəetmə)
-- **2025-02-XX**: Sektorlar tənzimləmələrə əlavə edildi, Paket qiyməti avtomatik borc, Təmsilçilər sistem istifadəçiləri
+- **2024-01**: MVP Dashboard, Şirkətlər, HR, Görüşlər, Tapşırıqlar hazırlandı
+- **2025-02-A**: Tənzimləmələr səhifəsi (Paketlər, Layihələr, Xüsusi Sahələr, İstifadəçi İdarəetmə)
+- **2025-02-B**: Sektorlar tənzimləmələrə əlavə, Paket qiyməti avtomatik borc, Təmsilçilər sistem istifadəçiləri
+- **2025-02-C**: Maliyyə modulu yenidən yazıldı (şirkətlər bazalı, filtrlər, qeydlər, ödəniş redaktə)
+- **2025-02-D**: Faza 5 tamamlandı: Satış (Kanban), Mesajlar, Bildirişlər, RBAC, Xüsusi sahə inteqrasiyası
 
-## İstifadəçi Personaları
-- **Admin**: Sistem administratoru - bütün funksionallıqlara tam giriş
-- **Menecer**: Bölmə meneceri - əsas funksionallıqlara giriş
-- **İstifadəçi**: Standart istifadəçi - məhdud giriş
-- **Baxıcı**: Yalnız baxış icazəsi
+## Əsas Modullar
 
-## Əsas Modullar (PDF-ə görə)
+### 1. Şirkət Məlumatları ✅
+- Cədvəl, filtrlər, axtarış, Excel export
+- Detallı görünüş (5 tab + Əlavə sahələr tab)
+- CRUD əməliyyatları, paket seçimdə avtomatik borc hesablama
 
-### 1. Şirkət Məlumatları ✅ (Companies)
-**Cədvəldə görünən sahələr:**
-- Şirkət adı, Sektor, Paket, Sahibkar, Telefon, Kurator, Borc, Status
+### 2. İnsan Resurları ✅
+- Əməkdaş cədvəli, detallı görünüş (4 tab)
 
-**Detallı görünüşdə (tablar):**
-- Ümumi: Brend/hüquqi ad, sektor, ölçü, qeydiyyat tarixi, ünvan, telefon, veb sayt, bank rekvizitləri
-- Sahibkar: Ad, telefon, email, sosial media, digər təsisçilər, uşaq sayı
-- Təmsilçi: Ad, telefon, email
-- Müqavilə: Layihə, paket, başlama/bitmə tarixi, müqavilə faylı
-- Ödəniş: Ümumi məbləğ, ödənilib, borc, gecikmiş gün, son ödəniş tarixi
+### 3. Maliyyə ✅
+- Gəlirlər = Bütün şirkətlər avtomatik (Təmsilçi, Müqavilə tarixləri, Qeyd sütunları)
+- Qeyd sistemi (mühasib üçün ödəniş qeydləri)
+- Ödəniş redaktə modalı, Filtrlər (paket, təmsilçi, layihə, status)
+- Xərclər CRUD, İcmal kartları, Cəmi hesablamaları
 
-### 2. İnsan Resurları ✅ (HR)
-- Əməkdaş cədvəli (filtrlər, axtarış, export)
-- Əməkdaş detallı görünüşü (4 tab: Şəxsi, Əlaqə, Müqavilə, Əmək haqqı)
-- CRUD əməliyyatları
+### 4. Satış ✅ (YENİ)
+- Kanban board (6 mərhələ: Yeni Lead → Əlaqə → Təklif → Danışıq → Uğurlu/Uğursuz)
+- Lead CRUD (şirkət, əlaqədar, telefon, email, mənbə, prioritet, məbləğ)
+- Mərhələ keçidi (bir kliklə növbəti mərhələyə)
+- İcmal kartları, Axtarış
 
-### 3. Maliyyə ✅ (Finance)
-- İcmal kartları (ümumi gəlir, ödənilib, debitor borc, ümumi xərclər, xalis mənfəət)
-- Gəlirlər cədvəli = Bütün şirkətlər avtomatik göstərilir (ayrı gəlir yazmaq lazım deyil)
-- Cədvəl sütunları: Şirkət, Paket, Təmsilçi, Müqavilə tarixi, Xitam tarixi, Məbləğ, Ödənilib, Borc, Qeyd
-- Qeyd bölməsi: Mühasib şirkət üçün ödəniş qeydləri əlavə edə bilər
-- Ödəniş redaktə: Ödənilən məbləğ dəyişdirmək, borc avtomatik hesablanır
-- Filtrlər: Paket, Təmsilçi, Layihə, Status, Axtarış
-- Xərclər cədvəli (kateqoriyalı) və CRUD
-- Cədvəl altında cəmi hesablamaları
+### 5. Görüşlər ✅
+- Timeline görünüşü, CRUD
 
-### 4. Satış (Gözləmədə)
-- Coming Soon səhifəsi
+### 6. Tapşırıqlar ✅
+- Kanban board, CRUD
 
-### 5. Görüşlər ✅ (Meetings)
-- Timeline görünüşü (tarixə görə qruplanmış)
-- Görüş əlavə et
+### 7. Mesajlar ✅ (YENİ)
+- Daxili kommunikasiya sistemi
+- Söhbət siyahısı, Mesaj göndər/al
+- Yeni söhbət başlat (istifadəçi seç)
 
-### 6. Tapşırıqlar ✅ (Tasks)
-- Kanban board görünüşü
-- Tapşırıq CRUD
+### 8. Bildirişlər ✅ (YENİ)
+- Gecikmiş ödənişlər xəbərdarlığı
+- Müqavilə xitamı yaxınlaşan/bitmiş şirkətlər
+- Header-da zəng ikonu (sayı ilə dropdown)
+- Filtrlər: hamısı, təcili, borc, müqavilə
+- Hər dəqiqə avtomatik yenilənmə
 
-### 7. Mesajlar (Gözləmədə)
-- Coming Soon səhifəsi
-
-### 8. Tənzimləmələr ✅ (Settings) - YENİ
-- **Paketlər**: Üzvlük paketləri CRUD (ad, təsvir, qiymət)
-- **Layihələr**: Layihə CRUD (ad, təsvir)
-- **Sektorlar**: Sektor CRUD (ad, redaktə, silmə)
-- **Xüsusi Sahələr**: Modullara xüsusi sahə əlavəsi (modul, sahə adı, tip, seçimlər, məcburilik)
-- **İstifadəçi İdarəetmə**: İstifadəçi CRUD + rol təyini (Admin, Menecer, İstifadəçi, Baxıcı)
+### 9. Tənzimləmələr ✅
+- Paketlər, Layihələr, Sektorlar, Xüsusi sahələr, İstifadəçi İdarəetmə
+- Xüsusi sahələr modullara inteqrasiya olunub (Companies formunda görünür)
 
 ## Avtomatik Davranışlar
-- Şirkət formunda paket seçiləndə → paketin qiyməti avtomatik olaraq ümumi məbləğ (borc) kimi yazılır
-- Ödəniş dəyişdirildikdə → borc avtomatik hesablanır (ümumi məbləğ - ödənilib)
-- Marsol təmsilçiləri → sistemdəki istifadəçilər siyahısından seçilir
-- Sektorlar → tənzimləmələrdən idarə olunur (hardcoded deyil)
+- Paket seçiləndə → qiymət avtomatik borc
+- Ödəniş dəyişdirildikdə → borc avtomatik hesablanır
+- Marsol təmsilçiləri → sistem istifadəçilərindən
+- Sektorlar → tənzimləmələrdən
+- Bildirişlər → hər dəqiqə yenilənir
 
-## Həyata Keçirilənlər
+## Texniki Struktur
+- Backend: FastAPI + PyMongo (async) + JWT
+- Frontend: React 18 + Tailwind + Shadcn UI
+- Database: MongoDB
+- RBAC helper mövcud (require_role), endpoint-lərə tətbiq edilməyib hələ
 
-### Faza 1 - MVP ✅
-- [x] JWT autentifikasiya
-- [x] Dashboard (real statistikalarla)
-- [x] Responsiv dizayn
-- [x] Montserrat font, Navy + Lime rəng sxemi
-
-### Faza 2 - Şirkət Məlumatları ✅
-- [x] Şirkət cədvəli (filtrlər, axtarış, export)
-- [x] Şirkət detallı görünüşü (5 tab)
-- [x] CRUD əməliyyatları
-- [x] Mobil responsiv (kartlar)
-
-### Faza 3 - Əlavə Modullar ✅
-- [x] İnsan Resurları (əməkdaş CRUD, detallı görünüş, əmək haqqı)
-- [x] Maliyyə (gəlir/xərc, icmal kartları, dinamik dropdown-lar, edit/delete)
-- [x] Görüşlər (timeline görünüşü)
-- [x] Tapşırıqlar (Kanban board)
-- [x] Mobil menyu düzəlişi
-
-### Faza 4 - Tənzimləmələr ✅
-- [x] Paketlər idarəetmə (CRUD)
-- [x] Layihələr idarəetmə (CRUD)
-- [x] Sektorlar idarəetmə (CRUD)
-- [x] Xüsusi sahələr (modul bazında sahə əlavəsi)
-- [x] İstifadəçi idarəetmə (rol sistemi: Admin, Menecer, İstifadəçi, Baxıcı)
-- [x] Paket seçiləndə qiymət → şirkətin borcu kimi avtomatik yazılma
-- [x] Marsol təmsilçiləri = sistem istifadəçiləri
+## API Endpoints
+- /api/auth/* — Autentifikasiya
+- /api/dashboard/stats — İdarə paneli statistikalar
+- /api/companies, /api/companies/{id}/finance — Şirkətlər + maliyyə qeydi
+- /api/employees — Əməkdaşlar
+- /api/finance/expenses — Xərclər
+- /api/sales/leads, /api/sales/stats — Satış lead-ləri
+- /api/messages/conversations, /api/messages/{id} — Mesajlar
+- /api/notifications — Bildirişlər
+- /api/tasks, /api/meetings — Tapşırıqlar, Görüşlər
+- /api/options/all, /api/options/companies — Dropdown seçimlər
+- /api/settings/* — Paketlər, Layihələr, Sektorlar, Xüsusi sahələr, İstifadəçilər
 
 ## Backlog
 
-### P0 - Kritik
-- [ ] Rol bazlı giriş nəzarəti (RBAC) - frontend/backend səviyyəsində
-- [ ] Satış modulu (pipeline, mənbələr)
-- [ ] Mesajlar modulu (daxili kommunikasiya)
+### P0 — Kritik
+- [ ] RBAC enforcement (admin-only write endpoints for settings/users)
 
-### P1 - Yüksək
-- [ ] Excel import funksiyası
-- [ ] PDF hesabatlar
-- [ ] Bildirişlər sistemi
-- [ ] Xüsusi sahələrin modulların formlarında göstərilməsi
-
-### P2 - Orta
-- [ ] Davamiyyət modulu
+### P1 — Yüksək
+- [ ] Davamiyyət modulu (gəliş/gediş, icazə, xəstəlik)
 - [ ] Barter əməliyyatları
-- [ ] Ətraflı hesabatlar
-- [ ] Öhdəliklər, Təşkilatçılıq, Fayllar, Qeydlər modulları
+- [ ] Öhdəliklər modulu
+- [ ] Excel import funksiyası
 
-## Texniki Struktur
-
-### Backend API Endpoints:
-- /api/auth/* - Autentifikasiya
-- /api/dashboard/stats - Dashboard statistikalar
-- /api/companies - Şirkət CRUD
-- /api/employees - Əməkdaş CRUD
-- /api/finance/* - Maliyyə (incomes, expenses, summary)
-- /api/tasks - Tapşırıqlar
-- /api/meetings - Görüşlər
-- /api/options/all - Dropdown seçimləri
-- /api/options/companies - Şirkət dropdown
-- /api/settings/packages - Paketlər CRUD
-- /api/settings/projects - Layihələr CRUD
-- /api/settings/sectors - Sektorlar CRUD
-- /api/settings/custom-fields - Xüsusi sahələr CRUD
-- /api/settings/users - İstifadəçi CRUD
-
-### Frontend Struktur:
-- /dashboard - İdarə Paneli
-- /companies - Şirkət Məlumatları
-- /hr - İnsan Resurları
-- /finance - Maliyyə
-- /sales - Satış
-- /meetings - Görüşlər
-- /tasks - Tapşırıqlar
-- /messages - Mesajlar
-- /settings - Tənzimləmələr (YENİ)
-
-## Növbəti Addımlar
-1. Rol bazlı giriş nəzarəti (RBAC) tətbiqi
-2. Xüsusi sahələrin formlarla inteqrasiyası
-3. Satış modulu hazırlanması
+### P2 — Orta
+- [ ] PDF hesabatlar
+- [ ] Ətraflı hesabatlar/dashboard
+- [ ] Təşkilatçılıq modulu
+- [ ] Fayllar, Qeydlər modulları
