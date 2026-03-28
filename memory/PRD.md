@@ -7,9 +7,13 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 - **2024-01-XX**: MVP Dashboard hazırlandı
 - **2024-01-XX**: Üzvlər modulu hazırlandı
 - **2024-01-XX**: Sistem yenidən strukturlaşdırıldı (PDF texniki tapşırığına görə)
+- **2025-02-XX**: Tənzimləmələr səhifəsi əlavə edildi (Paketlər, Layihələr, Xüsusi Sahələr, İstifadəçi İdarəetmə)
 
 ## İstifadəçi Personaları
 - **Admin**: Sistem administratoru - bütün funksionallıqlara tam giriş
+- **Menecer**: Bölmə meneceri - əsas funksionallıqlara giriş
+- **İstifadəçi**: Standart istifadəçi - məhdud giriş
+- **Baxıcı**: Yalnız baxış icazəsi
 
 ## Əsas Modullar (PDF-ə görə)
 
@@ -28,34 +32,33 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 - Əməkdaş cədvəli (filtrlər, axtarış, export)
 - Əməkdaş detallı görünüşü (4 tab: Şəxsi, Əlaqə, Müqavilə, Əmək haqqı)
 - CRUD əməliyyatları
-- Şəxsi məlumatlar: doğum tarixi, cins, ş.v., FİN, təhsil, ailə vəziyyəti
-- Müqavilə: şöbə, vəzifə, tarixlər, məzuniyyət günləri
-- Əmək haqqı: gross/net
 
 ### 3. Maliyyə ✅ (Finance)
 - İcmal kartları (gəlir, ödənilib, borc, mənfəət)
-- Gəlirlər siyahısı və əlavə et
+- Gəlirlər siyahısı və əlavə et (dinamik şirkət/paket/layihə dropdown-ları)
 - Xərclər siyahısı (kateqoriyalı) və əlavə et
-- Tab-lar: İcmal, Gəlirlər, Xərclər
+- Edit/Delete funksionallığı
+- Şirkət seçiləndə paket avto-seçim
 
 ### 4. Satış (Gözləmədə)
 - Coming Soon səhifəsi
 
 ### 5. Görüşlər ✅ (Meetings)
 - Timeline görünüşü (tarixə görə qruplanmış)
-- Görüş əlavə et (əməkdaş, tarix, saat, növ, şirkət, məkan, nəticə)
-- Görüş növləri: Satış görüşü, Daxili iclas, Müştəri görüşü, Partnyor görüşü, Təqdimat
-- Silmə funksiyası
+- Görüş əlavə et
 
 ### 6. Tapşırıqlar ✅ (Tasks)
-- Kanban board görünüşü (Gözləyir, İcrada, Tamamlandı, Ləğv edildi)
-- Tapşırıq əlavə et (ad, şöbə, icraçı, prioritet, tarixlər)
-- Status dəyişdirmə (dropdown ilə)
-- Prioritet göstəricisi (rənglərlə)
-- Filtrlər (status, prioritet)
+- Kanban board görünüşü
+- Tapşırıq CRUD
 
 ### 7. Mesajlar (Gözləmədə)
 - Coming Soon səhifəsi
+
+### 8. Tənzimləmələr ✅ (Settings) - YENİ
+- **Paketlər**: Üzvlük paketləri CRUD (ad, təsvir, qiymət)
+- **Layihələr**: Layihə CRUD (ad, təsvir)
+- **Xüsusi Sahələr**: Modullara xüsusi sahə əlavəsi (modul, sahə adı, tip, seçimlər, məcburilik)
+- **İstifadəçi İdarəetmə**: İstifadəçi CRUD + rol təyini (Admin, Menecer, İstifadəçi, Baxıcı)
 
 ## Həyata Keçirilənlər
 
@@ -73,14 +76,21 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 
 ### Faza 3 - Əlavə Modullar ✅
 - [x] İnsan Resurları (əməkdaş CRUD, detallı görünüş, əmək haqqı)
-- [x] Maliyyə (gəlir/xərc, icmal kartları)
+- [x] Maliyyə (gəlir/xərc, icmal kartları, dinamik dropdown-lar, edit/delete)
 - [x] Görüşlər (timeline görünüşü)
 - [x] Tapşırıqlar (Kanban board)
 - [x] Mobil menyu düzəlişi
 
+### Faza 4 - Tənzimləmələr ✅
+- [x] Paketlər idarəetmə (CRUD)
+- [x] Layihələr idarəetmə (CRUD)
+- [x] Xüsusi sahələr (modul bazında sahə əlavəsi)
+- [x] İstifadəçi idarəetmə (rol sistemi: Admin, Menecer, İstifadəçi, Baxıcı)
+
 ## Backlog
 
 ### P0 - Kritik
+- [ ] Rol bazlı giriş nəzarəti (RBAC) - frontend/backend səviyyəsində
 - [ ] Satış modulu (pipeline, mənbələr)
 - [ ] Mesajlar modulu (daxili kommunikasiya)
 
@@ -88,11 +98,13 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 - [ ] Excel import funksiyası
 - [ ] PDF hesabatlar
 - [ ] Bildirişlər sistemi
+- [ ] Xüsusi sahələrin modulların formlarında göstərilməsi
 
 ### P2 - Orta
 - [ ] Davamiyyət modulu
 - [ ] Barter əməliyyatları
 - [ ] Ətraflı hesabatlar
+- [ ] Öhdəliklər, Təşkilatçılıq, Fayllar, Qeydlər modulları
 
 ## Texniki Struktur
 
@@ -101,22 +113,28 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 - /api/dashboard/stats - Dashboard statistikalar
 - /api/companies - Şirkət CRUD
 - /api/employees - Əməkdaş CRUD
-- /api/finance/* - Maliyyə
+- /api/finance/* - Maliyyə (incomes, expenses, summary)
 - /api/tasks - Tapşırıqlar
 - /api/meetings - Görüşlər
 - /api/options/all - Dropdown seçimləri
+- /api/options/companies - Şirkət dropdown
+- /api/settings/packages - Paketlər CRUD
+- /api/settings/projects - Layihələr CRUD
+- /api/settings/custom-fields - Xüsusi sahələr CRUD
+- /api/settings/users - İstifadəçi CRUD
 
 ### Frontend Struktur:
 - /dashboard - İdarə Paneli
-- /companies - Şirkət Məlumatları (cədvəl + detallı görünüş)
+- /companies - Şirkət Məlumatları
 - /hr - İnsan Resurları
 - /finance - Maliyyə
 - /sales - Satış
 - /meetings - Görüşlər
 - /tasks - Tapşırıqlar
 - /messages - Mesajlar
+- /settings - Tənzimləmələr (YENİ)
 
 ## Növbəti Addımlar
-1. Üzvlər modulu hazırlanması
-2. Görüşlər modulu hazırlanması
-3. Real database-ə keçid (mock datadan)
+1. Rol bazlı giriş nəzarəti (RBAC) tətbiqi
+2. Xüsusi sahələrin formlarla inteqrasiyası
+3. Satış modulu hazırlanması
