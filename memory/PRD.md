@@ -8,6 +8,7 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 - **2024-01-XX**: Üzvlər modulu hazırlandı
 - **2024-01-XX**: Sistem yenidən strukturlaşdırıldı (PDF texniki tapşırığına görə)
 - **2025-02-XX**: Tənzimləmələr səhifəsi əlavə edildi (Paketlər, Layihələr, Xüsusi Sahələr, İstifadəçi İdarəetmə)
+- **2025-02-XX**: Sektorlar tənzimləmələrə əlavə edildi, Paket qiyməti avtomatik borc, Təmsilçilər sistem istifadəçiləri
 
 ## İstifadəçi Personaları
 - **Admin**: Sistem administratoru - bütün funksionallıqlara tam giriş
@@ -57,8 +58,15 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 ### 8. Tənzimləmələr ✅ (Settings) - YENİ
 - **Paketlər**: Üzvlük paketləri CRUD (ad, təsvir, qiymət)
 - **Layihələr**: Layihə CRUD (ad, təsvir)
+- **Sektorlar**: Sektor CRUD (ad, redaktə, silmə)
 - **Xüsusi Sahələr**: Modullara xüsusi sahə əlavəsi (modul, sahə adı, tip, seçimlər, məcburilik)
 - **İstifadəçi İdarəetmə**: İstifadəçi CRUD + rol təyini (Admin, Menecer, İstifadəçi, Baxıcı)
+
+## Avtomatik Davranışlar
+- Şirkət formunda paket seçiləndə → paketin qiyməti avtomatik olaraq ümumi məbləğ (borc) kimi yazılır
+- Ödəniş dəyişdirildikdə → borc avtomatik hesablanır (ümumi məbləğ - ödənilib)
+- Marsol təmsilçiləri → sistemdəki istifadəçilər siyahısından seçilir
+- Sektorlar → tənzimləmələrdən idarə olunur (hardcoded deyil)
 
 ## Həyata Keçirilənlər
 
@@ -84,8 +92,11 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 ### Faza 4 - Tənzimləmələr ✅
 - [x] Paketlər idarəetmə (CRUD)
 - [x] Layihələr idarəetmə (CRUD)
+- [x] Sektorlar idarəetmə (CRUD)
 - [x] Xüsusi sahələr (modul bazında sahə əlavəsi)
 - [x] İstifadəçi idarəetmə (rol sistemi: Admin, Menecer, İstifadəçi, Baxıcı)
+- [x] Paket seçiləndə qiymət → şirkətin borcu kimi avtomatik yazılma
+- [x] Marsol təmsilçiləri = sistem istifadəçiləri
 
 ## Backlog
 
@@ -120,6 +131,7 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 - /api/options/companies - Şirkət dropdown
 - /api/settings/packages - Paketlər CRUD
 - /api/settings/projects - Layihələr CRUD
+- /api/settings/sectors - Sektorlar CRUD
 - /api/settings/custom-fields - Xüsusi sahələr CRUD
 - /api/settings/users - İstifadəçi CRUD
 
