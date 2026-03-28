@@ -51,6 +51,15 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 - Hər dəqiqə avtomatik yenilənmə
 
 ### 9. Tənzimləmələr ✅
+
+### 10. Öhdəliklər ✅ (YENİ)
+- Cədvəl görünüşü (Öhdəlik, Şirkət, Tip, Məsul, Son tarix, Prioritet, Status)
+- CRUD əməliyyatları (modal ilə əlavə/redaktə)
+- Sürətli status dəyişdirmə (dropdown: Gözləyir, İcrada, Tamamlandı, Ləğv edildi)
+- Vaxtı keçmiş öhdəliklər qırmızı vurğulanır + gün hesabı
+- Tiplər: Maliyyə, Xidmət, Çatdırılma, Hüquqi, Tədbir, Təlim, Layihə, Digər
+- Filtrlər: Status, Tip, Məsul, Prioritet + Axtarış
+- İcmal kartları: Cəmi, Gözləyir, İcrada, Tamamlandı, Vaxtı keçmiş
 - Paketlər, Layihələr, Sektorlar, Xüsusi sahələr, İstifadəçi İdarəetmə
 - Xüsusi sahələr modullara inteqrasiya olunub (Companies formunda görünür)
 
@@ -88,7 +97,6 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 ### P1 — Yüksək
 - [ ] Davamiyyət modulu (gəliş/gediş, icazə, xəstəlik)
 - [ ] Barter əməliyyatları
-- [ ] Öhdəliklər modulu
 - [ ] Excel import funksiyası
 
 ### P2 — Orta
