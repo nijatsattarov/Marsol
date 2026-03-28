@@ -452,6 +452,31 @@ async def update_company(company_id: str, company_data: CompanyUpdate, current_u
     company = await db.companies.find_one({"id": company_id}, {"_id": 0})
     return company
 
+# Update finance note and payment info for a company
+@api_router.put("/companies/{company_id}/finance")
+async def update_company_finance(company_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    update_data = {}
+    for key in ["finance_note", "paid_amount", "total_amount", "last_payment_date"]:
+        if key in data:
+            update_data[key] = data[key]
+    
+    if "total_amount" in update_data or "paid_amount" in update_data:
+        company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+        if not company:
+            raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
+        total = update_data.get("total_amount", company.get("total_amount", 0))
+        paid = update_data.get("paid_amount", company.get("paid_amount", 0))
+        update_data["debt_amount"] = total - paid
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Yenilənəcək məlumat yoxdur")
+    
+    result = await db.companies.update_one({"id": company_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    return company
+
 @api_router.delete("/companies/{company_id}")
 async def delete_company(company_id: str, current_user: dict = Depends(get_current_user)):
     result = await db.companies.delete_one({"id": company_id})
