@@ -1133,6 +1133,70 @@ async def send_message(conversation_id: str, data: dict, current_user: dict = De
     )
     return msg_doc
 
+# ==================== OBLIGATIONS (ÖHDƏLİKLƏR) ====================
+
+@api_router.get("/obligations")
+async def get_obligations(status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    query = {}
+    if status and status != "all":
+        query["status"] = status
+    obligations = await db.obligations.find(query, {"_id": 0}).sort("deadline", 1).to_list(1000)
+    return obligations
+
+@api_router.post("/obligations")
+async def create_obligation(data: dict, current_user: dict = Depends(get_current_user)):
+    obl_id = str(uuid.uuid4())
+    obl_doc = {
+        "id": obl_id,
+        "title": data.get("title", ""),
+        "description": data.get("description", ""),
+        "company_id": data.get("company_id", ""),
+        "company_name": data.get("company_name", ""),
+        "type": data.get("type", "Xidmət"),
+        "responsible_person": data.get("responsible_person", ""),
+        "deadline": data.get("deadline", ""),
+        "status": data.get("status", "Gözləyir"),
+        "priority": data.get("priority", "Orta"),
+        "notes": data.get("notes", ""),
+        "completion_date": data.get("completion_date", ""),
+        "created_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.obligations.insert_one(obl_doc)
+    obl_doc.pop("_id", None)
+    return obl_doc
+
+@api_router.put("/obligations/{obl_id}")
+async def update_obligation(obl_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in data.items() if v is not None}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.obligations.update_one({"id": obl_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Öhdəlik tapılmadı")
+    obl = await db.obligations.find_one({"id": obl_id}, {"_id": 0})
+    return obl
+
+@api_router.delete("/obligations/{obl_id}")
+async def delete_obligation(obl_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.obligations.delete_one({"id": obl_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Öhdəlik tapılmadı")
+    return {"message": "Öhdəlik silindi"}
+
+@api_router.get("/obligations/stats")
+async def get_obligation_stats(current_user: dict = Depends(get_current_user)):
+    total = await db.obligations.count_documents({})
+    pending = await db.obligations.count_documents({"status": "Gözləyir"})
+    in_progress = await db.obligations.count_documents({"status": "İcrada"})
+    completed = await db.obligations.count_documents({"status": "Tamamlandı"})
+    overdue_count = 0
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    active_obls = await db.obligations.find({"status": {"$in": ["Gözləyir", "İcrada"]}, "deadline": {"$ne": ""}}, {"_id": 0, "deadline": 1}).to_list(1000)
+    for o in active_obls:
+        if o.get("deadline") and o["deadline"] < now_str:
+            overdue_count += 1
+    return {"total": total, "pending": pending, "in_progress": in_progress, "completed": completed, "overdue": overdue_count}
+
 # ==================== NOTIFICATIONS (BİLDİRİŞLƏR) ====================
 
 @api_router.get("/notifications")

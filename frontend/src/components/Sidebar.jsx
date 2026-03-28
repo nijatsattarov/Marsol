@@ -15,7 +15,8 @@ import {
   X,
   TrendingUp,
   Settings,
-  Bell
+  Bell,
+  FileCheck
 } from 'lucide-react';
 
 const menuItems = [
@@ -24,6 +25,7 @@ const menuItems = [
   { path: '/hr', label: 'İnsan Resurları', icon: UserCog },
   { path: '/finance', label: 'Maliyyə', icon: Wallet },
   { path: '/sales', label: 'Satış', icon: TrendingUp },
+  { path: '/obligations', label: 'Öhdəliklər', icon: FileCheck },
   { path: '/meetings', label: 'Görüşlər', icon: Calendar },
   { path: '/tasks', label: 'Tapşırıqlar', icon: ClipboardList },
   { path: '/messages', label: 'Mesajlar', icon: MessageSquare },

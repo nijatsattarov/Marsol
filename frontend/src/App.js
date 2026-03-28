@@ -11,6 +11,7 @@ import Tasks from "./pages/Tasks";
 import Messages from "./pages/Messages";
 import SettingsPage from "./pages/Settings";
 import Notifications from "./pages/Notifications";
+import Obligations from "./pages/Obligations";
 import DashboardLayout from "./layouts/DashboardLayout";
 
 function App() {
@@ -34,6 +35,7 @@ function App() {
             <Route path="messages" element={<Messages />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="notifications" element={<Notifications />} />
+            <Route path="obligations" element={<Obligations />} />
           </Route>
           
           {/* Redirect unknown routes */}
