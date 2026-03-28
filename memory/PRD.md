@@ -35,11 +35,14 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 - CRUD əməliyyatları
 
 ### 3. Maliyyə ✅ (Finance)
-- İcmal kartları (gəlir, ödənilib, borc, mənfəət)
-- Gəlirlər siyahısı və əlavə et (dinamik şirkət/paket/layihə dropdown-ları)
-- Xərclər siyahısı (kateqoriyalı) və əlavə et
-- Edit/Delete funksionallığı
-- Şirkət seçiləndə paket avto-seçim
+- İcmal kartları (ümumi gəlir, ödənilib, debitor borc, ümumi xərclər, xalis mənfəət)
+- Gəlirlər cədvəli = Bütün şirkətlər avtomatik göstərilir (ayrı gəlir yazmaq lazım deyil)
+- Cədvəl sütunları: Şirkət, Paket, Təmsilçi, Müqavilə tarixi, Xitam tarixi, Məbləğ, Ödənilib, Borc, Qeyd
+- Qeyd bölməsi: Mühasib şirkət üçün ödəniş qeydləri əlavə edə bilər
+- Ödəniş redaktə: Ödənilən məbləğ dəyişdirmək, borc avtomatik hesablanır
+- Filtrlər: Paket, Təmsilçi, Layihə, Status, Axtarış
+- Xərclər cədvəli (kateqoriyalı) və CRUD
+- Cədvəl altında cəmi hesablamaları
 
 ### 4. Satış (Gözləmədə)
 - Coming Soon səhifəsi
