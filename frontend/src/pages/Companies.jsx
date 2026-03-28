@@ -283,6 +283,19 @@ export default function Companies() {
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
 
+  // When package is selected, auto-fill total_amount with package price
+  const handlePackageSelect = (packageName) => {
+    const pkg = options?.packages_with_prices?.find(p => p.name === packageName);
+    const price = pkg?.price || 0;
+    const paidAmount = formData.paid_amount || 0;
+    setFormData({
+      ...formData,
+      package: packageName,
+      total_amount: price,
+      debt_amount: price - paidAmount
+    });
+  };
+
   const fetchCompanies = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -662,8 +675,8 @@ export default function Companies() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <Label className="text-xs">Paket *</Label>
-                      <Select value={formData.package} onValueChange={(v) => setFormData({...formData, package: v})}>
-                        <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                      <Select value={formData.package} onValueChange={handlePackageSelect}>
+                        <SelectTrigger className="text-sm" data-testid="company-package-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
                         <SelectContent>{options?.packages.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
@@ -674,10 +687,33 @@ export default function Companies() {
 
                 <TabsContent value="payment" className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div><Label className="text-xs">Ümumi məbləğ (AZN)</Label><Input type="number" value={formData.total_amount} onChange={(e) => setFormData({...formData, total_amount: parseFloat(e.target.value) || 0})} className="text-sm" /></div>
-                    <div><Label className="text-xs">Ödənilən məbləğ (AZN)</Label><Input type="number" value={formData.paid_amount} onChange={(e) => setFormData({...formData, paid_amount: parseFloat(e.target.value) || 0})} className="text-sm" /></div>
+                    <div>
+                      <Label className="text-xs">Ümumi məbləğ (AZN)</Label>
+                      <Input type="number" value={formData.total_amount} onChange={(e) => {
+                        const total = parseFloat(e.target.value) || 0;
+                        setFormData({...formData, total_amount: total, debt_amount: total - (formData.paid_amount || 0)});
+                      }} className="text-sm" data-testid="company-total-amount" />
+                      {formData.package && <p className="text-xs text-slate-400 mt-1">Paket qiyməti əsasında avtomatik doldurulub</p>}
+                    </div>
+                    <div>
+                      <Label className="text-xs">Ödənilən məbləğ (AZN)</Label>
+                      <Input type="number" value={formData.paid_amount} onChange={(e) => {
+                        const paid = parseFloat(e.target.value) || 0;
+                        setFormData({...formData, paid_amount: paid, debt_amount: (formData.total_amount || 0) - paid});
+                      }} className="text-sm" data-testid="company-paid-amount" />
+                    </div>
                     <div><Label className="text-xs">Ödəniş son tarixi</Label><Input type="date" value={formData.payment_due_date} onChange={(e) => setFormData({...formData, payment_due_date: e.target.value})} className="text-sm" /></div>
                   </div>
+                  {formData.total_amount > 0 && (
+                    <div className="p-3 bg-slate-50 rounded-lg">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-slate-600">Borc məbləği:</span>
+                        <span className={`font-bold ${(formData.debt_amount || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {(formData.debt_amount || 0).toLocaleString()} AZN
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <Label className="text-xs">Status</Label>
                     <Select value={formData.status} onValueChange={(v) => setFormData({...formData, status: v})}>

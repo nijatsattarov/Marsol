@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Settings as SettingsIcon, Package, FolderKanban, Users, Columns3,
   Plus, Pencil, Trash2, Loader2, Shield, Eye, UserCog, User,
-  ChevronDown, Search, X
+  ChevronDown, Search, X, Building2
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -49,18 +49,21 @@ export default function Settings() {
   const [projects, setProjects] = useState([]);
   const [customFields, setCustomFields] = useState([]);
   const [users, setUsers] = useState([]);
+  const [sectors, setSectors] = useState([]);
 
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0 });
   const [projectForm, setProjectForm] = useState({ name: '', description: '' });
   const [fieldForm, setFieldForm] = useState({ module: '', field_name: '', field_label: '', field_type: 'text', options: '', required: false });
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'user', department: '', phone: '', status: 'Aktiv' });
+  const [sectorForm, setSectorForm] = useState({ name: '' });
 
   // Edit states
   const [editingPackage, setEditingPackage] = useState(null);
   const [editingProject, setEditingProject] = useState(null);
   const [editingField, setEditingField] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
+  const [editingSector, setEditingSector] = useState(null);
 
   // Modal states
   const [showFieldModal, setShowFieldModal] = useState(false);
@@ -74,16 +77,18 @@ export default function Settings() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [pkgRes, prjRes, cfRes, usrRes] = await Promise.all([
+      const [pkgRes, prjRes, cfRes, usrRes, secRes] = await Promise.all([
         axios.get(`${API}/settings/packages`, { headers }),
         axios.get(`${API}/settings/projects`, { headers }),
         axios.get(`${API}/settings/custom-fields`, { headers }),
         axios.get(`${API}/settings/users`, { headers }),
+        axios.get(`${API}/settings/sectors`, { headers }),
       ]);
       setPackages(pkgRes.data);
       setProjects(prjRes.data);
       setCustomFields(cfRes.data);
       setUsers(usrRes.data);
+      setSectors(secRes.data);
     } catch (err) {
       console.error('Error fetching settings:', err);
     } finally {
@@ -141,6 +146,32 @@ export default function Settings() {
     try {
       await axios.delete(`${API}/settings/projects/${id}`, { headers });
       toast.success('Layihə silindi');
+      fetchData();
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  // ========= SECTOR CRUD =========
+  const handleSectorSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingSector) {
+        await axios.put(`${API}/settings/sectors/${editingSector.id}`, sectorForm, { headers });
+        toast.success('Sektor yeniləndi');
+      } else {
+        await axios.post(`${API}/settings/sectors`, sectorForm, { headers });
+        toast.success('Sektor əlavə edildi');
+      }
+      setEditingSector(null);
+      setSectorForm({ name: '' });
+      fetchData();
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  const handleDeleteSector = async (id) => {
+    if (!window.confirm('Bu sektoru silmək istədiyinizə əminsiniz?')) return;
+    try {
+      await axios.delete(`${API}/settings/sectors/${id}`, { headers });
+      toast.success('Sektor silindi');
       fetchData();
     } catch { toast.error('Xəta baş verdi'); }
   };
@@ -265,6 +296,7 @@ export default function Settings() {
         <TabsList className="mb-6 flex flex-wrap gap-1">
           <TabsTrigger value="packages" className="text-xs sm:text-sm" data-testid="tab-packages"><Package className="w-4 h-4 mr-1 hidden sm:inline" />Paketlər</TabsTrigger>
           <TabsTrigger value="projects" className="text-xs sm:text-sm" data-testid="tab-projects"><FolderKanban className="w-4 h-4 mr-1 hidden sm:inline" />Layihələr</TabsTrigger>
+          <TabsTrigger value="sectors" className="text-xs sm:text-sm" data-testid="tab-sectors"><Building2 className="w-4 h-4 mr-1 hidden sm:inline" />Sektorlar</TabsTrigger>
           <TabsTrigger value="custom-fields" className="text-xs sm:text-sm" data-testid="tab-custom-fields"><Columns3 className="w-4 h-4 mr-1 hidden sm:inline" />Xüsusi sahələr</TabsTrigger>
           <TabsTrigger value="users" className="text-xs sm:text-sm" data-testid="tab-users"><Users className="w-4 h-4 mr-1 hidden sm:inline" />İstifadəçilər</TabsTrigger>
         </TabsList>
@@ -362,6 +394,45 @@ export default function Settings() {
                 </div>
               ))}
               {projects.length === 0 && <p className="text-center text-slate-400 py-8 text-sm">Layihə yoxdur</p>}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ========= SECTORS TAB ========= */}
+        <TabsContent value="sectors">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold" style={{ color: '#3D4F6F' }}>Sektorlar</h2>
+            </div>
+            <form onSubmit={handleSectorSubmit} className="flex flex-col sm:flex-row gap-3 mb-6 p-4 bg-slate-50 rounded-lg" data-testid="sector-form">
+              <div className="flex-1">
+                <Label className="text-xs mb-1">Sektor adı *</Label>
+                <Input value={sectorForm.name} onChange={(e) => setSectorForm({ ...sectorForm, name: e.target.value })} placeholder="Sektor adı" className="text-sm" required data-testid="sector-name-input" />
+              </div>
+              <div className="flex gap-2 items-end">
+                <Button type="submit" size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="sector-submit-btn">
+                  {editingSector ? 'Yenilə' : 'Əlavə et'}
+                </Button>
+                {editingSector && (
+                  <Button type="button" variant="outline" size="sm" onClick={() => { setEditingSector(null); setSectorForm({ name: '' }); }} data-testid="sector-cancel-btn">Ləğv</Button>
+                )}
+              </div>
+            </form>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {sectors.map(sec => (
+                <div key={sec.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors" data-testid={`sector-item-${sec.id}`}>
+                  <p className="font-medium text-sm text-[#3D4F6F]">{sec.name}</p>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => { setEditingSector(sec); setSectorForm({ name: sec.name }); }} data-testid={`sector-edit-${sec.id}`}>
+                      <Pencil className="w-3.5 h-3.5 text-slate-500" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleDeleteSector(sec.id)} data-testid={`sector-delete-${sec.id}`}>
+                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {sectors.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Sektor yoxdur</p>}
             </div>
           </div>
         </TabsContent>
