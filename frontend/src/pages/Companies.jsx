@@ -190,11 +190,14 @@ const InfoCard = ({ icon: Icon, label, value, badge, badgeClass }) => (
 );
 
 // Mobile Card
-const CompanyCard = ({ company, onView, onEdit, onDelete }) => (
+const CompanyCard = ({ company, index, onView, onEdit, onDelete }) => (
   <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
     <div className="flex items-start justify-between mb-3">
       <div className="flex-1 min-w-0">
-        <h3 className="font-semibold text-[#3D4F6F] truncate">{company.brand_name}</h3>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">#{index}</span>
+          <h3 className="font-semibold text-[#3D4F6F] truncate">{company.brand_name}</h3>
+        </div>
         <div className="flex flex-wrap gap-1.5 mt-1.5">
           <Badge className={`text-xs ${getPackageColor(company.package)}`}>{company.package}</Badge>
           <Badge className={`text-xs ${getSizeColor(company.company_size)}`}>{company.company_size}</Badge>
@@ -519,8 +522,8 @@ export default function Companies() {
             <p className="text-slate-500">Şirkət tapılmadı</p>
           </div>
         ) : (
-          filteredCompanies.map(company => (
-            <CompanyCard key={company.id} company={company} onView={handleView} onEdit={handleEdit} onDelete={handleDelete} />
+          filteredCompanies.map((company, index) => (
+            <CompanyCard key={company.id} company={company} index={index + 1} onView={handleView} onEdit={handleEdit} onDelete={handleDelete} />
           ))
         )}
       </div>
@@ -531,6 +534,7 @@ export default function Companies() {
           <table className="w-full" data-testid="companies-table">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm w-16">ID</th>
                 {['Şirkət', 'Sektor', 'Paket', 'Sahibkar', 'Telefon', 'Kurator', 'Borc', 'Status', 'Əməliyyat'].map(h => (
                   <th key={h} className={`text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm ${h === 'Əməliyyat' ? 'text-right' : ''}`}>{h}</th>
                 ))}
@@ -539,14 +543,17 @@ export default function Companies() {
             <tbody>
               {filteredCompanies.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-12 text-slate-500">
+                  <td colSpan={10} className="text-center py-12 text-slate-500">
                     <Building2 className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                     <p>Şirkət tapılmadı</p>
                   </td>
                 </tr>
               ) : (
-                filteredCompanies.map(company => (
+                filteredCompanies.map((company, index) => (
                   <tr key={company.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                    <td className="px-4 py-3">
+                      <span className="text-sm font-mono text-slate-500">{index + 1}</span>
+                    </td>
                     <td className="px-4 py-3">
                       <div>
                         <p className="font-semibold text-[#3D4F6F] text-sm">{company.brand_name}</p>
