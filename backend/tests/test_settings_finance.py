@@ -7,7 +7,7 @@ import requests
 import os
 import uuid
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://marsol-erp-demo.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://marsol-erp-preview.preview.emergentagent.com')
 
 # Test credentials
 TEST_EMAIL = "settings@marsol.az"
