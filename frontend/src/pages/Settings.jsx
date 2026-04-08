@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Settings as SettingsIcon, Package, FolderKanban, Users, Columns3,
   Plus, Pencil, Trash2, Loader2, Shield, Eye, UserCog, User,
-  ChevronDown, Search, X, Building2
+  ChevronDown, Search, X, Building2, Layers, Briefcase, Activity
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -50,6 +50,9 @@ export default function Settings() {
   const [customFields, setCustomFields] = useState([]);
   const [users, setUsers] = useState([]);
   const [sectors, setSectors] = useState([]);
+  const [subSectors, setSubSectors] = useState([]);
+  const [positions, setPositions] = useState([]);
+  const [activities, setActivities] = useState([]);
 
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0 });
@@ -57,6 +60,9 @@ export default function Settings() {
   const [fieldForm, setFieldForm] = useState({ module: '', field_name: '', field_label: '', field_type: 'text', options: '', required: false });
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'user', department: '', phone: '', status: 'Aktiv' });
   const [sectorForm, setSectorForm] = useState({ name: '' });
+  const [subSectorForm, setSubSectorForm] = useState({ name: '', sector: '' });
+  const [positionForm, setPositionForm] = useState({ name: '' });
+  const [activityForm, setActivityForm] = useState({ name: '' });
 
   // Edit states
   const [editingPackage, setEditingPackage] = useState(null);
@@ -64,6 +70,9 @@ export default function Settings() {
   const [editingField, setEditingField] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
   const [editingSector, setEditingSector] = useState(null);
+  const [editingSubSector, setEditingSubSector] = useState(null);
+  const [editingPosition, setEditingPosition] = useState(null);
+  const [editingActivity, setEditingActivity] = useState(null);
 
   // Modal states
   const [showFieldModal, setShowFieldModal] = useState(false);
@@ -77,18 +86,24 @@ export default function Settings() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [pkgRes, prjRes, cfRes, usrRes, secRes] = await Promise.all([
+      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes] = await Promise.all([
         axios.get(`${API}/settings/packages`, { headers }),
         axios.get(`${API}/settings/projects`, { headers }),
         axios.get(`${API}/settings/custom-fields`, { headers }),
         axios.get(`${API}/settings/users`, { headers }),
         axios.get(`${API}/settings/sectors`, { headers }),
+        axios.get(`${API}/settings/sub-sectors`, { headers }),
+        axios.get(`${API}/settings/positions`, { headers }),
+        axios.get(`${API}/settings/activities`, { headers }),
       ]);
       setPackages(pkgRes.data);
       setProjects(prjRes.data);
       setCustomFields(cfRes.data);
       setUsers(usrRes.data);
       setSectors(secRes.data);
+      setSubSectors(subSecRes.data);
+      setPositions(posRes.data);
+      setActivities(actRes.data);
     } catch (err) {
       console.error('Error fetching settings:', err);
     } finally {
@@ -172,6 +187,72 @@ export default function Settings() {
     try {
       await axios.delete(`${API}/settings/sectors/${id}`, { headers });
       toast.success('Sektor silindi');
+      fetchData();
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  // ========= SUB-SECTOR CRUD =========
+  const handleSubSectorSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingSubSector) {
+        await axios.put(`${API}/settings/sub-sectors/${editingSubSector.id}`, subSectorForm, { headers });
+        toast.success('Alt sektor yeniləndi');
+      } else {
+        await axios.post(`${API}/settings/sub-sectors`, subSectorForm, { headers });
+        toast.success('Alt sektor əlavə edildi');
+      }
+      setEditingSubSector(null);
+      setSubSectorForm({ name: '', sector: '' });
+      fetchData();
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  const handleDeleteSubSector = async (id) => {
+    if (!window.confirm('Bu alt sektoru silmək istədiyinizə əminsiniz?')) return;
+    try {
+      await axios.delete(`${API}/settings/sub-sectors/${id}`, { headers });
+      toast.success('Alt sektor silindi');
+      fetchData();
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  // ========= POSITION CRUD =========
+  const handlePositionSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API}/settings/positions`, positionForm, { headers });
+      toast.success('Vəzifə əlavə edildi');
+      setPositionForm({ name: '' });
+      fetchData();
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  const handleDeletePosition = async (id) => {
+    if (!window.confirm('Bu vəzifəni silmək istədiyinizə əminsiniz?')) return;
+    try {
+      await axios.delete(`${API}/settings/positions/${id}`, { headers });
+      toast.success('Vəzifə silindi');
+      fetchData();
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  // ========= ACTIVITY CRUD =========
+  const handleActivitySubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API}/settings/activities`, activityForm, { headers });
+      toast.success('Fəaliyyət əlavə edildi');
+      setActivityForm({ name: '' });
+      fetchData();
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  const handleDeleteActivity = async (id) => {
+    if (!window.confirm('Bu fəaliyyəti silmək istədiyinizə əminsiniz?')) return;
+    try {
+      await axios.delete(`${API}/settings/activities/${id}`, { headers });
+      toast.success('Fəaliyyət silindi');
       fetchData();
     } catch { toast.error('Xəta baş verdi'); }
   };
@@ -297,6 +378,9 @@ export default function Settings() {
           <TabsTrigger value="packages" className="text-xs sm:text-sm" data-testid="tab-packages"><Package className="w-4 h-4 mr-1 hidden sm:inline" />Paketlər</TabsTrigger>
           <TabsTrigger value="projects" className="text-xs sm:text-sm" data-testid="tab-projects"><FolderKanban className="w-4 h-4 mr-1 hidden sm:inline" />Layihələr</TabsTrigger>
           <TabsTrigger value="sectors" className="text-xs sm:text-sm" data-testid="tab-sectors"><Building2 className="w-4 h-4 mr-1 hidden sm:inline" />Sektorlar</TabsTrigger>
+          <TabsTrigger value="sub-sectors" className="text-xs sm:text-sm" data-testid="tab-sub-sectors"><Layers className="w-4 h-4 mr-1 hidden sm:inline" />Alt Sektorlar</TabsTrigger>
+          <TabsTrigger value="positions" className="text-xs sm:text-sm" data-testid="tab-positions"><Briefcase className="w-4 h-4 mr-1 hidden sm:inline" />Vəzifələr</TabsTrigger>
+          <TabsTrigger value="activities" className="text-xs sm:text-sm" data-testid="tab-activities"><Activity className="w-4 h-4 mr-1 hidden sm:inline" />Fəaliyyətlər</TabsTrigger>
           <TabsTrigger value="custom-fields" className="text-xs sm:text-sm" data-testid="tab-custom-fields"><Columns3 className="w-4 h-4 mr-1 hidden sm:inline" />Xüsusi sahələr</TabsTrigger>
           <TabsTrigger value="users" className="text-xs sm:text-sm" data-testid="tab-users"><Users className="w-4 h-4 mr-1 hidden sm:inline" />İstifadəçilər</TabsTrigger>
         </TabsList>
@@ -433,6 +517,115 @@ export default function Settings() {
                 </div>
               ))}
               {sectors.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Sektor yoxdur</p>}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ========= SUB-SECTORS TAB ========= */}
+        <TabsContent value="sub-sectors">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold" style={{ color: '#3D4F6F' }}>Alt Sektorlar</h2>
+            </div>
+            <form onSubmit={handleSubSectorSubmit} className="flex flex-col sm:flex-row gap-3 mb-6 p-4 bg-slate-50 rounded-lg" data-testid="sub-sector-form">
+              <div className="flex-1">
+                <Label className="text-xs mb-1">Əsas sektor *</Label>
+                <Select value={subSectorForm.sector} onValueChange={v => setSubSectorForm({ ...subSectorForm, sector: v })}>
+                  <SelectTrigger className="text-sm" data-testid="sub-sector-parent-select"><SelectValue placeholder="Sektor seçin" /></SelectTrigger>
+                  <SelectContent>
+                    {sectors.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1">
+                <Label className="text-xs mb-1">Alt sektor adı *</Label>
+                <Input value={subSectorForm.name} onChange={(e) => setSubSectorForm({ ...subSectorForm, name: e.target.value })} placeholder="Alt sektor adı" className="text-sm" required data-testid="sub-sector-name-input" />
+              </div>
+              <div className="flex gap-2 items-end">
+                <Button type="submit" size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="sub-sector-submit-btn">
+                  {editingSubSector ? 'Yenilə' : 'Əlavə et'}
+                </Button>
+                {editingSubSector && (
+                  <Button type="button" variant="outline" size="sm" onClick={() => { setEditingSubSector(null); setSubSectorForm({ name: '', sector: '' }); }}>Ləğv</Button>
+                )}
+              </div>
+            </form>
+            <div className="space-y-2">
+              {subSectors.map(ss => (
+                <div key={ss.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors" data-testid={`sub-sector-item-${ss.id}`}>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-[#3D4F6F] text-white text-xs">{ss.sector}</Badge>
+                    <p className="font-medium text-sm text-[#3D4F6F]">{ss.name}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => { setEditingSubSector(ss); setSubSectorForm({ name: ss.name, sector: ss.sector }); }}>
+                      <Pencil className="w-3.5 h-3.5 text-slate-500" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleDeleteSubSector(ss.id)}>
+                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {subSectors.length === 0 && <p className="text-center text-slate-400 py-8 text-sm">Alt sektor yoxdur. Əvvəlcə sektor yaradın, sonra alt sektor əlavə edin.</p>}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ========= POSITIONS TAB ========= */}
+        <TabsContent value="positions">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold" style={{ color: '#3D4F6F' }}>Vəzifələr</h2>
+            </div>
+            <form onSubmit={handlePositionSubmit} className="flex flex-col sm:flex-row gap-3 mb-6 p-4 bg-slate-50 rounded-lg" data-testid="position-form">
+              <div className="flex-1">
+                <Label className="text-xs mb-1">Vəzifə adı *</Label>
+                <Input value={positionForm.name} onChange={(e) => setPositionForm({ ...positionForm, name: e.target.value })} placeholder="Vəzifə adı" className="text-sm" required data-testid="position-name-input" />
+              </div>
+              <div className="flex gap-2 items-end">
+                <Button type="submit" size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="position-submit-btn">Əlavə et</Button>
+              </div>
+            </form>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {positions.map(pos => (
+                <div key={pos.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors" data-testid={`position-item-${pos.id}`}>
+                  <p className="font-medium text-sm text-[#3D4F6F]">{pos.name}</p>
+                  <Button variant="ghost" size="sm" onClick={() => handleDeletePosition(pos.id)}>
+                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                  </Button>
+                </div>
+              ))}
+              {positions.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Vəzifə yoxdur</p>}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ========= ACTIVITIES TAB ========= */}
+        <TabsContent value="activities">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold" style={{ color: '#3D4F6F' }}>Fəaliyyətlər</h2>
+            </div>
+            <form onSubmit={handleActivitySubmit} className="flex flex-col sm:flex-row gap-3 mb-6 p-4 bg-slate-50 rounded-lg" data-testid="activity-form">
+              <div className="flex-1">
+                <Label className="text-xs mb-1">Fəaliyyət adı *</Label>
+                <Input value={activityForm.name} onChange={(e) => setActivityForm({ ...activityForm, name: e.target.value })} placeholder="Fəaliyyət adı" className="text-sm" required data-testid="activity-name-input" />
+              </div>
+              <div className="flex gap-2 items-end">
+                <Button type="submit" size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="activity-submit-btn">Əlavə et</Button>
+              </div>
+            </form>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {activities.map(act => (
+                <div key={act.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors" data-testid={`activity-item-${act.id}`}>
+                  <p className="font-medium text-sm text-[#3D4F6F]">{act.name}</p>
+                  <Button variant="ghost" size="sm" onClick={() => handleDeleteActivity(act.id)}>
+                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                  </Button>
+                </div>
+              ))}
+              {activities.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Fəaliyyət yoxdur</p>}
             </div>
           </div>
         </TabsContent>

@@ -789,13 +789,12 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
             {"name": "Digər xərclər", "subcategories": ["Cərimələr", "Hüquqi xidmətlər"]}
         ],
         "reference_sources": ["Media", "Partnyor", "Referans", "Digər"],
-        "statuses": ["Aktiv", "Qeyri-aktiv", "Gözləmədə"]
+        "statuses": ["Aktiv", "Qeyri-aktiv", "Gözləmədə"],
+        "sub_sectors": sub_sectors,
+        "positions": positions,
+        "activities": activities,
+        "education_levels": ["Orta təhsil", "Sub bakalavr", "Bakalavr", "Magistratura", "Doktorantura"],
     }
-    result["sub_sectors"] = sub_sectors
-    result["positions"] = positions
-    result["activities"] = activities
-    result["education_levels"] = ["Orta təhsil", "Sub bakalavr", "Bakalavr", "Magistratura", "Doktorantura"]
-    return result
 
 # Get companies for select dropdown (simplified)
 @api_router.get("/options/companies")

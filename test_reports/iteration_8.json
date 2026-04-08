@@ -1,0 +1,151 @@
+{
+  "summary": "Iteration 8 - Settings (Sub-sectors, Positions, Activities) and Companies Module Testing: 26/28 backend tests passed (93%). All frontend features verified working: Settings page with 8 tabs including new Alt Sektorlar, Vəzifələr, Fəaliyyətlər tabs. Companies page with multi-tab modal (Şirkət, Sahibkar, Əlaqədar şəxs, Müqavilə, Ödəniş). File upload working.",
+  
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/companies",
+        "issue": "New fields (voen, sub_sector, region, employee_count) are not included in CompanyCreate Pydantic model. Fields are sent from frontend but not returned in response. Data may be stored in MongoDB but not validated/returned by API.",
+        "priority": "MEDIUM"
+      },
+      {
+        "endpoint": "PUT /api/companies/{id}",
+        "issue": "Same issue - CompanyUpdate model doesn't include voen, sub_sector, region, employee_count fields",
+        "priority": "MEDIUM"
+      }
+    ]
+  },
+  
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  
+  "passed_tests": [
+    "Backend: GET /api/options/all returns sub_sectors field (dict of sector -> sub-sectors)",
+    "Backend: GET /api/options/all returns positions field (list)",
+    "Backend: GET /api/options/all returns activities field (list)",
+    "Backend: GET /api/options/all returns education_levels field with 5 levels",
+    "Backend: GET /api/options/all returns sectors field",
+    "Backend: GET /api/settings/sectors returns list of sectors",
+    "Backend: POST /api/settings/sectors creates new sector",
+    "Backend: GET /api/settings/sub-sectors returns list of sub-sectors",
+    "Backend: POST /api/settings/sub-sectors creates sub-sector with parent sector",
+    "Backend: PUT /api/settings/sub-sectors/{id} updates sub-sector",
+    "Backend: DELETE /api/settings/sub-sectors/{id} deletes sub-sector",
+    "Backend: Created sub-sectors appear in /api/options/all under correct sector",
+    "Backend: GET /api/settings/positions returns list of positions",
+    "Backend: POST /api/settings/positions creates new position",
+    "Backend: DELETE /api/settings/positions/{id} deletes position",
+    "Backend: Created positions appear in /api/options/all",
+    "Backend: GET /api/settings/activities returns list of activities",
+    "Backend: POST /api/settings/activities creates new activity",
+    "Backend: DELETE /api/settings/activities/{id} deletes activity",
+    "Backend: Created activities appear in /api/options/all",
+    "Backend: POST /api/upload uploads file and returns URL",
+    "Backend: GET /api/companies returns list of companies",
+    "Backend: POST /api/companies creates company with owners array",
+    "Backend: POST /api/companies creates company with contracts array",
+    "Backend: GET /api/companies/{id} returns company by ID",
+    "Backend: DELETE /api/companies/{id} deletes company",
+    "Frontend: Settings page loads with 8 tabs (Paketlər, Layihələr, Sektorlar, Alt Sektorlar, Vəzifələr, Fəaliyyətlər, Xüsusi sahələr, İstifadəçilər)",
+    "Frontend: Sektorlar tab - create sector works with toast 'Sektor əlavə edildi'",
+    "Frontend: Alt Sektorlar tab - parent sector dropdown shows all sectors",
+    "Frontend: Alt Sektorlar tab - create sub-sector works",
+    "Frontend: Vəzifələr tab - shows default positions (Direktor, Təsisçi, etc.)",
+    "Frontend: Vəzifələr tab - create position works with toast 'Vəzifə əlavə edildi'",
+    "Frontend: Fəaliyyətlər tab - shows default activities (Networking, Təlim, etc.)",
+    "Frontend: Fəaliyyətlər tab - create activity works with toast 'Fəaliyyət əlavə edildi'",
+    "Frontend: Companies page loads with table showing companies",
+    "Frontend: Companies page - 'Yeni Şirkət' button opens modal",
+    "Frontend: Company modal has 6 tabs (Şirkət, Sahibkar, Əlaqədar şəxs, Müqavilə, Ödəniş, Əlavə)",
+    "Frontend: Şirkət tab - shows all fields (Brend adı, VÖEN, Sektor, Alt sektor, Ölçü, İşçi sayı, Region, etc.)",
+    "Frontend: Şirkət tab - Sektor dropdown works",
+    "Frontend: Şirkət tab - Alt sektor dropdown is dependent on Sektor selection",
+    "Frontend: Şirkət tab - Logo upload button present",
+    "Frontend: Şirkət tab - Bank rekvizitləri upload button present",
+    "Frontend: Sahibkar tab - shows owner fields (Ad, Soyad, Vəzifə, Telefon, Email, Təhsil, etc.)",
+    "Frontend: Sahibkar tab - Vəzifə dropdown shows positions from settings",
+    "Frontend: Sahibkar tab - Təhsil dropdown shows education levels",
+    "Frontend: Sahibkar tab - Qatılmaq istədiyi fəaliyyətlər shows activities from settings",
+    "Frontend: Sahibkar tab - 'Sahibkar əlavə et' button for multiple owners",
+    "Frontend: Müqavilə tab - shows contract fields (Kurator, Layihə, Paket, Ümumi məbləğ)",
+    "Frontend: Müqavilə tab - 'Müqavilə əlavə et' button for multiple contracts",
+    "Frontend: Müqavilə tab - Müqavilə skanı file upload present"
+  ],
+  
+  "failed_tests": [
+    "Backend: POST /api/companies with voen field - voen not returned in response (KeyError)",
+    "Backend: PUT /api/companies/{id} with voen field - voen not returned in response (KeyError)"
+  ],
+  
+  "test_report_links": [
+    "/app/backend/tests/test_iteration8_settings_companies.py",
+    "/app/test_reports/pytest/pytest_results_iter8.xml"
+  ],
+  
+  "action_items": [
+    "Update CompanyCreate and CompanyUpdate Pydantic models in server.py to include: voen, sub_sector, region, employee_count fields",
+    "These fields are used in frontend Companies.jsx but backend models don't define them"
+  ],
+  
+  "critical_code_review_comments": [
+    "Backend Pydantic models (CompanyCreate, CompanyUpdate) are missing new fields that frontend sends: voen, sub_sector, region, employee_count. While MongoDB stores them, the API doesn't validate or return them properly."
+  ],
+  
+  "updated_files": [
+    "/app/backend/tests/test_iteration8_settings_companies.py"
+  ],
+  
+  "success_rate": {
+    "backend": "93% (26/28 tests passed)",
+    "frontend": "100% (all features verified)"
+  },
+  
+  "test_credentials": {
+    "email": "settings@marsol.az",
+    "password": "marsol123",
+    "role": "admin"
+  },
+  
+  "seed_data_creation": "Test sectors, positions, activities created and cleaned up during tests. Existing data in DB: 7 sectors (Qeyri qida, İnşaat, Təhsil, Qida, İKT, Mətbəə), 6 default positions, 6 default activities.",
+  
+  "retest_needed": false,
+  
+  "should_main_agent_self_test": true,
+  
+  "context_for_next_testing_agent": "Settings page has 8 tabs. New tabs (Alt Sektorlar, Vəzifələr, Fəaliyyətlər) are fully functional. Companies page has multi-tab modal with all fields. Key issue: Backend Pydantic models need to be updated to include voen, sub_sector, region, employee_count fields. The /api/options/all endpoint correctly returns sub_sectors (as dict), positions, activities, education_levels. File upload at /api/upload works. All UI is in Azerbaijani language.",
+  
+  "features_verified": {
+    "settings_sub_sectors_tab": {
+      "status": "WORKING",
+      "details": "Alt Sektorlar tab shows parent sector dropdown and sub-sector name input. Create, update, delete operations work. Sub-sectors appear in /api/options/all under their parent sector."
+    },
+    "settings_positions_tab": {
+      "status": "WORKING",
+      "details": "Vəzifələr tab shows position name input and list of positions. Create and delete operations work. Positions appear in /api/options/all and in company form Vəzifə dropdown."
+    },
+    "settings_activities_tab": {
+      "status": "WORKING",
+      "details": "Fəaliyyətlər tab shows activity name input and list of activities. Create and delete operations work. Activities appear in /api/options/all and in company form 'Qatılmaq istədiyi fəaliyyətlər' section."
+    },
+    "companies_modal_tabs": {
+      "status": "WORKING",
+      "details": "Company modal has 6 tabs: Şirkət (company info), Sahibkar (owner info with multiple owners support), Əlaqədar şəxs (contact person), Müqavilə (contracts with multiple contracts support), Ödəniş (payment), Əlavə (custom fields)."
+    },
+    "companies_sub_sector_dropdown": {
+      "status": "WORKING",
+      "details": "Alt sektor dropdown is dependent on Sektor selection. Shows 'Alt sektor yoxdur' when no sub-sectors exist for selected sector."
+    },
+    "file_upload": {
+      "status": "WORKING",
+      "details": "POST /api/upload accepts file and returns {url, filename, stored_name}. Logo and bank files upload buttons present in company form."
+    },
+    "options_all_endpoint": {
+      "status": "WORKING",
+      "details": "/api/options/all returns sub_sectors (dict), positions (list), activities (list), education_levels (list) along with existing fields."
+    }
+  }
+}
