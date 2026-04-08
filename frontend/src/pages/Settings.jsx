@@ -53,6 +53,7 @@ export default function Settings() {
   const [subSectors, setSubSectors] = useState([]);
   const [positions, setPositions] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [regions, setRegions] = useState([]);
 
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0 });
@@ -63,6 +64,7 @@ export default function Settings() {
   const [subSectorForm, setSubSectorForm] = useState({ name: '', sector: '' });
   const [positionForm, setPositionForm] = useState({ name: '' });
   const [activityForm, setActivityForm] = useState({ name: '' });
+  const [regionForm, setRegionForm] = useState({ name: '' });
 
   // Edit states
   const [editingPackage, setEditingPackage] = useState(null);
@@ -86,7 +88,7 @@ export default function Settings() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes] = await Promise.all([
+      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes] = await Promise.all([
         axios.get(`${API}/settings/packages`, { headers }),
         axios.get(`${API}/settings/projects`, { headers }),
         axios.get(`${API}/settings/custom-fields`, { headers }),
@@ -95,6 +97,7 @@ export default function Settings() {
         axios.get(`${API}/settings/sub-sectors`, { headers }),
         axios.get(`${API}/settings/positions`, { headers }),
         axios.get(`${API}/settings/activities`, { headers }),
+        axios.get(`${API}/settings/regions`, { headers }),
       ]);
       setPackages(pkgRes.data);
       setProjects(prjRes.data);
@@ -104,6 +107,7 @@ export default function Settings() {
       setSubSectors(subSecRes.data);
       setPositions(posRes.data);
       setActivities(actRes.data);
+      setRegions(regRes.data);
     } catch (err) {
       console.error('Error fetching settings:', err);
     } finally {
@@ -257,6 +261,26 @@ export default function Settings() {
     } catch { toast.error('Xəta baş verdi'); }
   };
 
+  // ========= REGION CRUD =========
+  const handleRegionSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API}/settings/regions`, regionForm, { headers });
+      toast.success('Region əlavə edildi');
+      setRegionForm({ name: '' });
+      fetchData();
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  const handleDeleteRegion = async (id) => {
+    if (!window.confirm('Bu regionu silmək istədiyinizə əminsiniz?')) return;
+    try {
+      await axios.delete(`${API}/settings/regions/${id}`, { headers });
+      toast.success('Region silindi');
+      fetchData();
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
   // ========= CUSTOM FIELD CRUD =========
   const openFieldModal = (field = null) => {
     if (field) {
@@ -381,6 +405,7 @@ export default function Settings() {
           <TabsTrigger value="sub-sectors" className="text-xs sm:text-sm" data-testid="tab-sub-sectors"><Layers className="w-4 h-4 mr-1 hidden sm:inline" />Alt Sektorlar</TabsTrigger>
           <TabsTrigger value="positions" className="text-xs sm:text-sm" data-testid="tab-positions"><Briefcase className="w-4 h-4 mr-1 hidden sm:inline" />Vəzifələr</TabsTrigger>
           <TabsTrigger value="activities" className="text-xs sm:text-sm" data-testid="tab-activities"><Activity className="w-4 h-4 mr-1 hidden sm:inline" />Fəaliyyətlər</TabsTrigger>
+          <TabsTrigger value="regions" className="text-xs sm:text-sm" data-testid="tab-regions"><Building2 className="w-4 h-4 mr-1 hidden sm:inline" />Regionlar</TabsTrigger>
           <TabsTrigger value="custom-fields" className="text-xs sm:text-sm" data-testid="tab-custom-fields"><Columns3 className="w-4 h-4 mr-1 hidden sm:inline" />Xüsusi sahələr</TabsTrigger>
           <TabsTrigger value="users" className="text-xs sm:text-sm" data-testid="tab-users"><Users className="w-4 h-4 mr-1 hidden sm:inline" />İstifadəçilər</TabsTrigger>
         </TabsList>
@@ -626,6 +651,35 @@ export default function Settings() {
                 </div>
               ))}
               {activities.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Fəaliyyət yoxdur</p>}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ========= REGIONS TAB ========= */}
+        <TabsContent value="regions">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold" style={{ color: '#3D4F6F' }}>Regionlar</h2>
+            </div>
+            <form onSubmit={handleRegionSubmit} className="flex flex-col sm:flex-row gap-3 mb-6 p-4 bg-slate-50 rounded-lg" data-testid="region-form">
+              <div className="flex-1">
+                <Label className="text-xs mb-1">Region adı *</Label>
+                <Input value={regionForm.name} onChange={(e) => setRegionForm({ ...regionForm, name: e.target.value })} placeholder="Region adı" className="text-sm" required data-testid="region-name-input" />
+              </div>
+              <div className="flex gap-2 items-end">
+                <Button type="submit" size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="region-submit-btn">Əlavə et</Button>
+              </div>
+            </form>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {regions.map(reg => (
+                <div key={reg.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors" data-testid={`region-item-${reg.id}`}>
+                  <p className="font-medium text-sm text-[#3D4F6F]">{reg.name}</p>
+                  <Button variant="ghost" size="sm" onClick={() => handleDeleteRegion(reg.id)}>
+                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                  </Button>
+                </div>
+              ))}
+              {regions.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Region yoxdur</p>}
             </div>
           </div>
         </TabsContent>

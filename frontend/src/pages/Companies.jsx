@@ -53,11 +53,13 @@ export default function Companies() {
   const [filters, setFilters] = useState({ sector: '', package: '', company_size: '', marsol_representative: '', status: '' });
 
   const emptyOwner = { first_name: '', last_name: '', father_name: '', position: '', phone: '', email: '', birth_date: '', citizenship: '', education: '', specialty: '', university: '', social_links: [], children: [], desired_activities: [] };
-  const emptyContract = { project: '', package: '', start_date: '', end_date: '', join_date: '', total_amount: 0, contract_file: '' };
+  const emptyContract = { project: '', package: '', start_date: '', end_date: '', join_date: '', total_amount: 0, paid_amount: 0, debt_amount: 0, contract_file: '' };
 
   const initialFormData = {
     brand_name: '', legal_name: '', voen: '', sector: '', sub_sector: '', company_size: '', employee_count: '', region: '',
-    registration_date: '', address: '', company_phone: '', company_website: '', reference_source: '', social_links: [],
+    registration_date: '', address: '', company_phone: '', company_website: '',
+    reference_source: '', reference_company_id: '', reference_company_name: '', reference_person_name: '', reference_person_surname: '', reference_person_position: '', reference_note: '',
+    social_links: [],
     logo_url: '', bank_files: [],
     owners: [{ ...emptyOwner }],
     contact_first_name: '', contact_last_name: '', contact_position: '', contact_phone: '', contact_email: '',
@@ -70,13 +72,18 @@ export default function Companies() {
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
 
+  const recalcTotals = (contracts) => {
+    const totalAll = contracts.reduce((s, c) => s + (parseFloat(c.total_amount) || 0), 0);
+    const paidAll = contracts.reduce((s, c) => s + (parseFloat(c.paid_amount) || 0), 0);
+    return { total_amount: totalAll, paid_amount: paidAll, debt_amount: totalAll - paidAll };
+  };
+
   const handlePackageSelect = (pkgName, contractIdx) => {
     const pkg = options?.packages_with_prices?.find(p => p.name === pkgName);
     const price = pkg?.price || 0;
     const newContracts = [...formData.contracts];
-    newContracts[contractIdx] = { ...newContracts[contractIdx], package: pkgName, total_amount: price };
-    const totalAll = newContracts.reduce((s, c) => s + (c.total_amount || 0), 0);
-    setFormData({ ...formData, contracts: newContracts, total_amount: totalAll, debt_amount: totalAll - (formData.paid_amount || 0) });
+    newContracts[contractIdx] = { ...newContracts[contractIdx], package: pkgName, total_amount: price, debt_amount: price - (parseFloat(newContracts[contractIdx].paid_amount) || 0) };
+    setFormData({ ...formData, contracts: newContracts, ...recalcTotals(newContracts) });
   };
 
   const handleProjectSelect = (project, contractIdx) => {
@@ -95,14 +102,18 @@ export default function Companies() {
     finally { setLoading(false); }
   }, [filters]);
 
+  const [allCompanies, setAllCompanies] = useState([]);
+
   const fetchOptions = async () => {
     try {
-      const [optRes, cfRes] = await Promise.all([
+      const [optRes, cfRes, compRes] = await Promise.all([
         axios.get(`${API}/options/all`, { headers }),
         axios.get(`${API}/settings/custom-fields?module=companies`, { headers }),
+        axios.get(`${API}/options/companies`, { headers }),
       ]);
       setOptions(optRes.data);
       setCustomFields(cfRes.data);
+      setAllCompanies(compRes.data);
     } catch (err) { console.error(err); }
   };
 
@@ -150,7 +161,7 @@ export default function Companies() {
       data.owners = [{ ...emptyOwner, first_name: company.owner_first_name || company.owner_name || '', last_name: company.owner_last_name || '', phone: company.owner_phone || '', email: company.owner_email || '' }];
     }
     if (!data.contracts || data.contracts.length === 0) {
-      data.contracts = [{ project: company.joined_project || '', package: company.package || '', start_date: company.contract_start_date || '', end_date: company.contract_end_date || '', join_date: company.join_date || '', total_amount: company.total_amount || 0, contract_file: '' }];
+      data.contracts = [{ project: company.joined_project || '', package: company.package || '', start_date: company.contract_start_date || '', end_date: company.contract_end_date || '', join_date: company.join_date || '', total_amount: company.total_amount || 0, paid_amount: company.paid_amount || 0, debt_amount: company.debt_amount || 0, contract_file: '' }];
     }
     if (!data.social_links) data.social_links = [];
     if (!data.bank_files) data.bank_files = [];
@@ -187,8 +198,8 @@ export default function Companies() {
   const addOwner = () => setFormData({ ...formData, owners: [...formData.owners, { ...emptyOwner }] });
   const removeOwner = (idx) => { if (formData.owners.length <= 1) return; const o = formData.owners.filter((_, i) => i !== idx); setFormData({ ...formData, owners: o }); };
 
-  const addContract = () => setFormData({ ...formData, contracts: [...formData.contracts, { ...emptyContract }] });
-  const removeContract = (idx) => { if (formData.contracts.length <= 1) return; const c = formData.contracts.filter((_, i) => i !== idx); setFormData({ ...formData, contracts: c }); };
+  const addContract = () => { const nc = [...formData.contracts, { ...emptyContract }]; setFormData({ ...formData, contracts: nc }); };
+  const removeContract = (idx) => { if (formData.contracts.length <= 1) return; const c = formData.contracts.filter((_, i) => i !== idx); setFormData({ ...formData, contracts: c, ...recalcTotals(c) }); };
 
   const addSocialLink = (ownerIdx = null) => {
     if (ownerIdx !== null) {
@@ -423,7 +434,12 @@ export default function Companies() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div><Label className="text-xs">İşçi sayı</Label><Input type="number" value={formData.employee_count} onChange={e => setFormData({...formData, employee_count: e.target.value})} className="text-sm" /></div>
-                <div><Label className="text-xs">Region</Label><Input value={formData.region} onChange={e => setFormData({...formData, region: e.target.value})} className="text-sm" /></div>
+                <div><Label className="text-xs">Region</Label>
+                  <Select value={formData.region} onValueChange={v => setFormData({...formData, region: v})}>
+                    <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                    <SelectContent>{options?.regions?.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
                 <div><Label className="text-xs">Qeydiyyat tarixi</Label><Input type="date" value={formData.registration_date} onChange={e => setFormData({...formData, registration_date: e.target.value})} className="text-sm" /></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -433,12 +449,45 @@ export default function Companies() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><Label className="text-xs">Veb sayt</Label><Input value={formData.company_website} onChange={e => setFormData({...formData, company_website: e.target.value})} className="text-sm" /></div>
                 <div><Label className="text-xs">Referans mənbəsi</Label>
-                  <Select value={formData.reference_source} onValueChange={v => setFormData({...formData, reference_source: v})}>
-                    <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                  <Select value={formData.reference_source} onValueChange={v => setFormData({...formData, reference_source: v, reference_company_id: '', reference_company_name: '', reference_person_name: '', reference_person_surname: '', reference_person_position: '', reference_note: ''})}>
+                    <SelectTrigger className="text-sm" data-testid="reference-source-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
                     <SelectContent>{options?.reference_sources?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               </div>
+              {/* Referans detalları */}
+              {formData.reference_source === 'Şirkət' && (
+                <div className="p-3 bg-blue-50 rounded-lg space-y-3">
+                  <Label className="text-xs font-semibold text-[#3D4F6F]">Referans şirkət məlumatları</Label>
+                  <div><Label className="text-xs">Referans şirkət</Label>
+                    <Select value={formData.reference_company_id} onValueChange={v => {
+                      const comp = allCompanies.find(c => c.id === v);
+                      setFormData({...formData, reference_company_id: v, reference_company_name: comp?.brand_name || ''});
+                    }}>
+                      <SelectTrigger className="text-sm" data-testid="reference-company-select"><SelectValue placeholder="Şirkət seçin" /></SelectTrigger>
+                      <SelectContent>{allCompanies.map(c => <SelectItem key={c.id} value={c.id}>{c.brand_name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div><Label className="text-xs">Nümayəndə adı</Label><Input value={formData.reference_person_name} onChange={e => setFormData({...formData, reference_person_name: e.target.value})} className="text-sm" /></div>
+                    <div><Label className="text-xs">Nümayəndə soyadı</Label><Input value={formData.reference_person_surname} onChange={e => setFormData({...formData, reference_person_surname: e.target.value})} className="text-sm" /></div>
+                    <div><Label className="text-xs">Nümayəndə vəzifəsi</Label><Input value={formData.reference_person_position} onChange={e => setFormData({...formData, reference_person_position: e.target.value})} className="text-sm" /></div>
+                  </div>
+                </div>
+              )}
+              {formData.reference_source === 'Şəxs' && (
+                <div className="p-3 bg-green-50 rounded-lg space-y-3">
+                  <Label className="text-xs font-semibold text-[#3D4F6F]">Referans şəxs məlumatları</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div><Label className="text-xs">Ad</Label><Input value={formData.reference_person_name} onChange={e => setFormData({...formData, reference_person_name: e.target.value})} className="text-sm" /></div>
+                    <div><Label className="text-xs">Soyad</Label><Input value={formData.reference_person_surname} onChange={e => setFormData({...formData, reference_person_surname: e.target.value})} className="text-sm" /></div>
+                    <div><Label className="text-xs">Vəzifə</Label><Input value={formData.reference_person_position} onChange={e => setFormData({...formData, reference_person_position: e.target.value})} className="text-sm" /></div>
+                  </div>
+                </div>
+              )}
+              {(formData.reference_source === 'Media' || formData.reference_source === 'Digər') && formData.reference_source && (
+                <div><Label className="text-xs">Referans qeydi</Label><Input value={formData.reference_note} onChange={e => setFormData({...formData, reference_note: e.target.value})} className="text-sm" placeholder="Qeyd..." /></div>
+              )}
               {/* Sosial media linkleri */}
               <div>
                 <div className="flex items-center justify-between"><Label className="text-xs">Sosial media</Label><Button type="button" variant="ghost" size="sm" onClick={() => addSocialLink()} className="text-xs h-6"><PlusCircle className="w-3 h-3 mr-1" />Əlavə et</Button></div>
@@ -549,7 +598,12 @@ export default function Companies() {
                 <div><Label className="text-xs">Soyad</Label><Input value={formData.contact_last_name} onChange={e => setFormData({...formData, contact_last_name: e.target.value})} className="text-sm" /></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div><Label className="text-xs">Vəzifə</Label><Input value={formData.contact_position} onChange={e => setFormData({...formData, contact_position: e.target.value})} className="text-sm" /></div>
+                <div><Label className="text-xs">Vəzifə</Label>
+                  <Select value={formData.contact_position} onValueChange={v => setFormData({...formData, contact_position: v})}>
+                    <SelectTrigger className="text-sm" data-testid="contact-position-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                    <SelectContent>{options?.positions?.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
                 <div><Label className="text-xs">Telefon</Label><Input value={formData.contact_phone} onChange={e => setFormData({...formData, contact_phone: e.target.value})} className="text-sm" /></div>
                 <div><Label className="text-xs">Email</Label><Input type="email" value={formData.contact_email} onChange={e => setFormData({...formData, contact_email: e.target.value})} className="text-sm" /></div>
               </div>
@@ -608,17 +662,33 @@ export default function Companies() {
 
             {/* ÖDƏNİŞ TAB */}
             <TabsContent value="payment" className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div><Label className="text-xs">Ümumi məbləğ (AZN)</Label><Input type="number" value={formData.total_amount} onChange={e => { const t=parseFloat(e.target.value)||0; setFormData({...formData, total_amount:t, debt_amount:t-(formData.paid_amount||0)}); }} className="text-sm" />{formData.contracts?.some(c=>c.package) && <p className="text-xs text-slate-400 mt-1">Müqavilələrdən hesablanıb</p>}</div>
-                <div><Label className="text-xs">Ödənilən (AZN)</Label><Input type="number" value={formData.paid_amount} onChange={e => { const p=parseFloat(e.target.value)||0; setFormData({...formData, paid_amount:p, debt_amount:(formData.total_amount||0)-p}); }} className="text-sm" /></div>
-                <div><Label className="text-xs">Son tarix</Label><Input type="date" value={formData.payment_due_date} onChange={e => setFormData({...formData, payment_due_date: e.target.value})} className="text-sm" /></div>
+              {formData.contracts.map((ct, ci) => (
+                <div key={ci} className="p-4 bg-slate-50 rounded-lg space-y-3">
+                  <h4 className="font-semibold text-sm text-[#3D4F6F]">Müqavilə {ci + 1}{ct.package ? ` — ${ct.package}` : ''}</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div><Label className="text-xs">Ümumi məbləğ (AZN)</Label><Input type="number" value={ct.total_amount} onChange={e => { const nc=[...formData.contracts]; const t=parseFloat(e.target.value)||0; nc[ci]={...nc[ci], total_amount:t, debt_amount:t-(parseFloat(nc[ci].paid_amount)||0)}; setFormData({...formData, contracts:nc, ...recalcTotals(nc)}); }} className="text-sm" data-testid={`payment-total-${ci}`} /></div>
+                    <div><Label className="text-xs">Ödənilən (AZN)</Label><Input type="number" value={ct.paid_amount} onChange={e => { const nc=[...formData.contracts]; const p=parseFloat(e.target.value)||0; nc[ci]={...nc[ci], paid_amount:p, debt_amount:(parseFloat(nc[ci].total_amount)||0)-p}; setFormData({...formData, contracts:nc, ...recalcTotals(nc)}); }} className="text-sm" data-testid={`payment-paid-${ci}`} /></div>
+                    <div><Label className="text-xs">Qalıq borc (AZN)</Label><Input type="number" value={(parseFloat(ct.total_amount)||0) - (parseFloat(ct.paid_amount)||0)} className="text-sm bg-white" readOnly /><p className={`text-xs mt-1 font-semibold ${((parseFloat(ct.total_amount)||0)-(parseFloat(ct.paid_amount)||0))>0?'text-red-600':'text-green-600'}`}>{((parseFloat(ct.total_amount)||0)-(parseFloat(ct.paid_amount)||0)).toLocaleString()} AZN</p></div>
+                  </div>
+                </div>
+              ))}
+              {/* Ümumi cəm */}
+              <div className="p-4 bg-[#3D4F6F] rounded-lg text-white">
+                <h4 className="font-semibold text-sm mb-3">Ümumi yekun</h4>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div><p className="text-xs text-slate-300">Ümumi</p><p className="text-lg font-bold">{(formData.total_amount||0).toLocaleString()} AZN</p></div>
+                  <div><p className="text-xs text-slate-300">Ödənilib</p><p className="text-lg font-bold text-green-400">{(formData.paid_amount||0).toLocaleString()} AZN</p></div>
+                  <div><p className="text-xs text-slate-300">Borc</p><p className="text-lg font-bold text-red-400">{(formData.debt_amount||0).toLocaleString()} AZN</p></div>
+                </div>
               </div>
-              {formData.total_amount > 0 && <div className="p-3 bg-slate-50 rounded-lg flex justify-between text-sm"><span className="text-slate-600">Borc:</span><span className={`font-bold ${(formData.debt_amount||0)>0?'text-red-600':'text-green-600'}`}>{(formData.debt_amount||0).toLocaleString()} AZN</span></div>}
-              <div><Label className="text-xs">Status</Label>
-                <Select value={formData.status} onValueChange={v => setFormData({...formData, status: v})}>
-                  <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>{options?.statuses?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><Label className="text-xs">Ödəniş son tarixi</Label><Input type="date" value={formData.payment_due_date} onChange={e => setFormData({...formData, payment_due_date: e.target.value})} className="text-sm" /></div>
+                <div><Label className="text-xs">Status</Label>
+                  <Select value={formData.status} onValueChange={v => setFormData({...formData, status: v})}>
+                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>{options?.statuses?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
               </div>
             </TabsContent>
 
