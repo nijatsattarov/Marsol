@@ -10,67 +10,57 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 - **2025-02-C**: Maliyyə modulu yenidən yazıldı (şirkətlər bazalı, filtrlər, qeydlər, ödəniş redaktə)
 - **2025-02-D**: Faza 5 tamamlandı: Satış (Kanban), Mesajlar, Bildirişlər, RBAC, Xüsusi sahə inteqrasiyası
 - **2025-02-E**: Öhdəliklər modulu
-- **2026-04-08**: Şirkətlər modulu 15 nöqtəli yenidən yazma (çoxlu sahibkar, çoxlu müqavilə, fayl yükləmə, VOEN, alt sektorlar, fəaliyyətlər). Settings-ə 3 yeni tab (Alt Sektorlar, Vəzifələr, Fəaliyyətlər). Backend /api/options/all bug-u düzəldildi.
+- **2026-04-08A**: Şirkətlər modulu 15 nöqtəli yenidən yazma, Settings-ə Alt Sektorlar/Vəzifələr/Fəaliyyətlər tabları, backend bug fix
+- **2026-04-08B**: Müqaviləyə uyğun ödəniş sistemi, Referans mənbəsi genişləndirilməsi (Şirkət/Şəxs/Media/Digər), Əlaqədar şəxs vəzifəsi Select, Region Select + Regionlar tab
 
 ## Əsas Modullar
 
 ### 1. Şirkət Məlumatları ✅ (YENİLƏNDİ)
 - Cədvəl, filtrlər, axtarış, Excel export
-- Detallı görünüş (5 tab: Şirkət, Sahibkar, Əlaqədar şəxs, Müqavilə, Ödəniş + Əlavə sahələr tab)
-- Çoxlu sahibkar (ad, soyad, ata adı, vəzifə, telefon, email, doğum tarixi, vətəndaşlıq, təhsil, ixtisas, universitet, sosial media, övladlar, fəaliyyətlər)
-- Çoxlu müqavilə (layihə, paket, başlama/bitmə tarixi, qoşulma tarixi, məbləğ, müqavilə skanı)
-- Fayl yükləmə (logo, bank rekvizitləri, müqavilə skanı)
-- VÖEN, region, işçi sayı, hüquqi adı, veb sayt, referans mənbəsi
-- Alt sektor (sektora asılı dropdown)
-- CRUD əməliyyatları, paket seçimdə avtomatik borc hesablama
+- 6 tab: Şirkət, Sahibkar, Əlaqədar şəxs, Müqavilə, Ödəniş, Əlavə sahələr
+- Çoxlu sahibkar, çoxlu müqavilə, fayl yükləmə (logo, bank, müqavilə skanı)
+- VÖEN, region (Select), işçi sayı, alt sektor (asılı dropdown)
+- Referans mənbəsi: Şirkət→şirkət seçimi+nümayəndə, Şəxs→ad/soyad/vəzifə, Media/Digər→qeyd
+- Əlaqədar şəxs vəzifəsi Select (tənzimləmələrdən)
+- Müqaviləyə uyğun ödəniş (hər müqavilə üçün ayrı ödəniş + ümumi yekun kartı)
 
 ### 2. İnsan Resurları ✅
-- Əməkdaş cədvəli, detallı görünüş (4 tab)
-
 ### 3. Maliyyə ✅
-- Gəlirlər = Bütün şirkətlər avtomatik
-- Qeyd sistemi, Ödəniş redaktə modalı, Filtrlər, Xərclər CRUD
-
-### 4. Satış ✅
-- Kanban board (6 mərhələ), Lead CRUD
-
+### 4. Satış ✅ (Kanban)
 ### 5. Görüşlər ✅
 ### 6. Tapşırıqlar ✅
 ### 7. Mesajlar ✅
 ### 8. Bildirişlər ✅
 ### 9. Tənzimləmələr ✅ (YENİLƏNDİ)
-- 8 tab: Paketlər, Layihələr, Sektorlar, Alt Sektorlar, Vəzifələr, Fəaliyyətlər, Xüsusi sahələr, İstifadəçilər
-
+- 9 tab: Paketlər, Layihələr, Sektorlar, Alt Sektorlar, Vəzifələr, Fəaliyyətlər, Regionlar, Xüsusi sahələr, İstifadəçilər
 ### 10. Öhdəliklər ✅
 
 ## Texniki Struktur
 - Backend: FastAPI + PyMongo (async) + JWT
 - Frontend: React 18 + Tailwind + Shadcn UI
 - Database: MongoDB
-- Fayl yükləmə: /api/upload endpoint, /app/backend/uploads/ qovluğu
+- Fayl yükləmə: /api/upload, /app/backend/uploads/
 
 ## API Endpoints
 - /api/auth/* — Autentifikasiya
-- /api/dashboard/stats — İdarə paneli statistikalar
-- /api/companies, /api/companies/{id} — Şirkətlər (dict-based, bütün sahələr dəstəklənir)
-- /api/companies/{id}/finance — Şirkət maliyyə qeydi
-- /api/employees — Əməkdaşlar
-- /api/finance/expenses — Xərclər
-- /api/sales/leads, /api/sales/stats — Satış
-- /api/messages/*, /api/notifications — Mesajlar, Bildirişlər
-- /api/tasks, /api/meetings — Tapşırıqlar, Görüşlər
-- /api/options/all — Dropdown seçimlər (sectors, sub_sectors, positions, activities, education_levels, packages, etc.)
-- /api/options/companies — Şirkət seçimləri
-- /api/settings/* — Paketlər, Layihələr, Sektorlar, Alt Sektorlar, Vəzifələr, Fəaliyyətlər, Xüsusi sahələr, İstifadəçilər
+- /api/dashboard/stats — İdarə paneli
+- /api/companies, /api/companies/{id} — Şirkətlər (dict-based)
+- /api/options/all — Dropdown seçimlər (sectors, sub_sectors, positions, activities, regions, education_levels, reference_sources, packages, etc.)
+- /api/options/companies — Şirkət seçimləri (referans üçün)
+- /api/settings/* — Paketlər, Layihələr, Sektorlar, Alt Sektorlar, Vəzifələr, Fəaliyyətlər, Regionlar, Xüsusi sahələr, İstifadəçilər
 - /api/upload — Fayl yükləmə
-- /api/obligations — Öhdəliklər
+- /api/finance/*, /api/sales/*, /api/messages/*, /api/notifications, /api/tasks, /api/meetings, /api/obligations
 
 ## Backlog
 
 ### P0 — Kritik
 - [x] Şirkətlər modulu 15 nöqtəli yenidən yazma (TAMAMLANDI)
 - [x] Settings-ə Alt Sektorlar, Vəzifələr, Fəaliyyətlər tabları (TAMAMLANDI)
-- [ ] RBAC enforcement (admin-only write endpoints for settings/users)
+- [x] Müqaviləyə uyğun ödəniş sistemi (TAMAMLANDI)
+- [x] Referans mənbəsi genişləndirilməsi (TAMAMLANDI)
+- [x] Region Select + Regionlar tab (TAMAMLANDI)
+- [x] Əlaqədar şəxs vəzifəsi Select (TAMAMLANDI)
+- [ ] RBAC enforcement
 
 ### P1 — Yüksək
 - [ ] Davamiyyət modulu (gəliş/gediş, icazə, xəstəlik)
