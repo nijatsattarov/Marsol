@@ -434,15 +434,17 @@ async def get_companies(
     return companies
 
 @api_router.post("/companies")
-async def create_company(company_data: CompanyCreate, current_user: dict = Depends(get_current_user)):
+async def create_company(company_data: dict, current_user: dict = Depends(get_current_user)):
     company_id = str(uuid.uuid4())
     company_doc = {
         "id": company_id,
-        **company_data.model_dump(),
+        **company_data,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     # Calculate debt
-    company_doc["debt_amount"] = company_doc["total_amount"] - company_doc["paid_amount"]
+    total = company_doc.get("total_amount", 0) or 0
+    paid = company_doc.get("paid_amount", 0) or 0
+    company_doc["debt_amount"] = total - paid
     
     await db.companies.insert_one(company_doc)
     company_doc.pop("_id", None)
@@ -456,16 +458,16 @@ async def get_company(company_id: str, current_user: dict = Depends(get_current_
     return company
 
 @api_router.put("/companies/{company_id}")
-async def update_company(company_id: str, company_data: CompanyUpdate, current_user: dict = Depends(get_current_user)):
-    update_data = {k: v for k, v in company_data.model_dump().items() if v is not None}
+async def update_company(company_id: str, company_data: dict, current_user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in company_data.items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="Yenilənəcək məlumat yoxdur")
     
     # Recalculate debt if amounts changed
     if "total_amount" in update_data or "paid_amount" in update_data:
         company = await db.companies.find_one({"id": company_id}, {"_id": 0})
-        total = update_data.get("total_amount", company.get("total_amount", 0))
-        paid = update_data.get("paid_amount", company.get("paid_amount", 0))
+        total = update_data.get("total_amount", company.get("total_amount", 0)) or 0
+        paid = update_data.get("paid_amount", company.get("paid_amount", 0)) or 0
         update_data["debt_amount"] = total - paid
     
     result = await db.companies.update_one({"id": company_id}, {"$set": update_data})
