@@ -1084,6 +1084,7 @@ async def create_custom_field(field_data: dict, current_user: dict = Depends(get
     field_doc = {
         "id": field_id,
         "module": field_data.get("module"),
+        "sub_tab": field_data.get("sub_tab", ""),
         "field_name": field_data.get("field_name"),
         "field_label": field_data.get("field_label", ""),
         "field_type": field_data.get("field_type", "text"),

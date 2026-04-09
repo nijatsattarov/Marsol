@@ -18,16 +18,44 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const MODULES = [
   { value: 'companies', label: 'Şirkət Məlumatları' },
+  { value: 'hr', label: 'İnsan Resurları' },
   { value: 'finance', label: 'Maliyyə' },
   { value: 'sales', label: 'Satış' },
-  { value: 'hr', label: 'İnsan Resurları' },
   { value: 'meetings', label: 'Görüşlər' },
   { value: 'tasks', label: 'Tapşırıqlar' },
+  { value: 'projects', label: 'Layihələr' },
+  { value: 'marketing', label: 'Marketinq' },
 ];
+
+const MODULE_TABS = {
+  companies: [
+    { value: 'company', label: 'Şirkət' },
+    { value: 'owner', label: 'Sahibkar' },
+    { value: 'contact', label: 'Əlaqədar şəxs' },
+    { value: 'contract', label: 'Müqavilə' },
+    { value: 'payment', label: 'Ödəniş' },
+  ],
+  hr: [
+    { value: 'personal', label: 'Şəxsi' },
+    { value: 'education', label: 'Təhsil' },
+    { value: 'experience', label: 'İş təcrübəsi' },
+    { value: 'contact', label: 'Əlaqə' },
+    { value: 'contract', label: 'Müqavilə' },
+    { value: 'salary', label: 'Əmək haqqı' },
+    { value: 'documents', label: 'Sənədlər' },
+  ],
+  finance: [{ value: 'general', label: 'Ümumi' }],
+  sales: [{ value: 'general', label: 'Ümumi' }],
+  meetings: [{ value: 'general', label: 'Ümumi' }],
+  tasks: [{ value: 'general', label: 'Ümumi' }],
+  projects: [{ value: 'general', label: 'Ümumi' }],
+  marketing: [{ value: 'general', label: 'Ümumi' }],
+};
 
 const FIELD_TYPES = [
   { value: 'text', label: 'Mətn' },
   { value: 'number', label: 'Rəqəm' },
+  { value: 'amount', label: 'Məbləğ (AZN)' },
   { value: 'date', label: 'Tarix' },
   { value: 'select', label: 'Seçim (dropdown)' },
   { value: 'textarea', label: 'Uzun mətn' },
@@ -59,7 +87,7 @@ export default function Settings() {
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0 });
   const [projectForm, setProjectForm] = useState({ name: '', description: '' });
-  const [fieldForm, setFieldForm] = useState({ module: '', field_name: '', field_label: '', field_type: 'text', options: '', required: false });
+  const [fieldForm, setFieldForm] = useState({ module: '', sub_tab: '', field_name: '', field_label: '', field_type: 'text', options: '', required: false });
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'user', department: '', phone: '', status: 'Aktiv' });
   const [sectorForm, setSectorForm] = useState({ name: '' });
   const [subSectorForm, setSubSectorForm] = useState({ name: '', sector: '' });
@@ -311,6 +339,7 @@ export default function Settings() {
       setEditingField(field);
       setFieldForm({
         module: field.module,
+        sub_tab: field.sub_tab || '',
         field_name: field.field_name,
         field_label: field.field_label || '',
         field_type: field.field_type,
@@ -319,7 +348,7 @@ export default function Settings() {
       });
     } else {
       setEditingField(null);
-      setFieldForm({ module: '', field_name: '', field_label: '', field_type: 'text', options: '', required: false });
+      setFieldForm({ module: '', sub_tab: '', field_name: '', field_label: '', field_type: 'text', options: '', required: false });
     }
     setShowFieldModal(true);
   };
@@ -767,6 +796,10 @@ export default function Settings() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-sm text-[#3D4F6F]">{field.field_label || field.field_name}</p>
                         <Badge className="bg-blue-100 text-blue-700 text-xs">{mod?.label || field.module}</Badge>
+                        {field.sub_tab && (() => {
+                          const tabDef = MODULE_TABS[field.module]?.find(t => t.value === field.sub_tab);
+                          return tabDef ? <Badge className="bg-purple-100 text-purple-700 text-xs">{tabDef.label}</Badge> : null;
+                        })()}
                         <Badge variant="outline" className="text-xs">{FIELD_TYPES.find(t => t.value === field.field_type)?.label || field.field_type}</Badge>
                         {field.required && <Badge className="bg-amber-100 text-amber-700 text-xs">Məcburi</Badge>}
                       </div>
@@ -851,14 +884,25 @@ export default function Settings() {
             <DialogTitle style={{ color: '#3D4F6F' }}>{editingField ? 'Sahəni redaktə et' : 'Xüsusi sahə əlavə et'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleFieldSubmit} className="space-y-4" data-testid="field-form">
-            <div>
-              <Label className="text-xs">Modul *</Label>
-              <Select value={fieldForm.module} onValueChange={(v) => setFieldForm({ ...fieldForm, module: v })}>
-                <SelectTrigger className="text-sm" data-testid="field-module-select"><SelectValue placeholder="Modul seçin" /></SelectTrigger>
-                <SelectContent>
-                  {MODULES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Modul *</Label>
+                <Select value={fieldForm.module} onValueChange={(v) => setFieldForm({ ...fieldForm, module: v, sub_tab: '' })}>
+                  <SelectTrigger className="text-sm" data-testid="field-module-select"><SelectValue placeholder="Modul seçin" /></SelectTrigger>
+                  <SelectContent>
+                    {MODULES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Tab *</Label>
+                <Select value={fieldForm.sub_tab} onValueChange={(v) => setFieldForm({ ...fieldForm, sub_tab: v })} disabled={!fieldForm.module}>
+                  <SelectTrigger className="text-sm" data-testid="field-subtab-select"><SelectValue placeholder="Tab seçin" /></SelectTrigger>
+                  <SelectContent>
+                    {(MODULE_TABS[fieldForm.module] || []).map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>

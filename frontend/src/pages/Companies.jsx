@@ -16,6 +16,33 @@ import { Toaster, toast } from 'sonner';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+const CompanyCustomFieldsRenderer = ({ fields, tabName, formData, setFormData }) => {
+  const tabFields = fields.filter(cf => cf.sub_tab === tabName);
+  if (tabFields.length === 0) return null;
+  return (
+    <div className="pt-3 mt-3 border-t border-slate-200">
+      <p className="text-xs font-semibold text-slate-500 mb-2">Xüsusi sahələr</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {tabFields.map(cf => (
+          <div key={cf.id}>
+            <Label className="text-xs">{cf.field_label || cf.field_name}{cf.required ? ' *' : ''}</Label>
+            {cf.field_type === 'select' ? (
+              <Select value={formData[cf.field_name]||''} onValueChange={v => setFormData({...formData, [cf.field_name]:v})}>
+                <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                <SelectContent>{cf.options?.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+              </Select>
+            ) : cf.field_type === 'textarea' ? (
+              <textarea value={formData[cf.field_name]||''} onChange={e => setFormData({...formData, [cf.field_name]:e.target.value})} className="w-full text-sm border rounded-lg px-3 py-2 min-h-[60px]" />
+            ) : (
+              <Input type={cf.field_type==='number'||cf.field_type==='amount'?'number':cf.field_type==='date'?'date':cf.field_type==='email'?'email':'text'} value={formData[cf.field_name]||''} onChange={e => setFormData({...formData, [cf.field_name]:e.target.value})} className="text-sm" required={cf.required} />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // Mobile card
 const CompanyCard = ({ company, index, onView, onEdit, onDelete }) => (
   <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
@@ -399,7 +426,6 @@ export default function Companies() {
               <TabsTrigger value="rep" className="text-xs">Əlaqədar şəxs</TabsTrigger>
               <TabsTrigger value="contract" className="text-xs">Müqavilə</TabsTrigger>
               <TabsTrigger value="payment" className="text-xs">Ödəniş</TabsTrigger>
-              {customFields.length > 0 && <TabsTrigger value="custom" className="text-xs">Əlavə</TabsTrigger>}
             </TabsList>
 
             {/* ŞIRKƏT TAB */}
@@ -510,6 +536,7 @@ export default function Companies() {
                   {(formData.bank_files || []).map((f, i) => <p key={i} className="text-xs text-slate-500 mt-1">{f.name}</p>)}
                 </div>
               </div>
+              <CompanyCustomFieldsRenderer fields={customFields} tabName="company" formData={formData} setFormData={setFormData} />
             </TabsContent>
 
             {/* SAHİBKAR TAB */}
@@ -589,6 +616,7 @@ export default function Companies() {
                 </div>
               ))}
               <Button type="button" variant="outline" size="sm" onClick={addOwner} className="w-full text-xs"><PlusCircle className="w-4 h-4 mr-1" />Sahibkar əlavə et</Button>
+              <CompanyCustomFieldsRenderer fields={customFields} tabName="owner" formData={formData} setFormData={setFormData} />
             </TabsContent>
 
             {/* ƏLAQƏDAR ŞƏXS TAB */}
@@ -607,6 +635,7 @@ export default function Companies() {
                 <div><Label className="text-xs">Telefon</Label><Input value={formData.contact_phone} onChange={e => setFormData({...formData, contact_phone: e.target.value})} className="text-sm" /></div>
                 <div><Label className="text-xs">Email</Label><Input type="email" value={formData.contact_email} onChange={e => setFormData({...formData, contact_email: e.target.value})} className="text-sm" /></div>
               </div>
+              <CompanyCustomFieldsRenderer fields={customFields} tabName="contact" formData={formData} setFormData={setFormData} />
             </TabsContent>
 
             {/* MÜQAVİLƏ TAB */}
@@ -658,6 +687,7 @@ export default function Companies() {
                 </div>
               ))}
               <Button type="button" variant="outline" size="sm" onClick={addContract} className="w-full text-xs"><PlusCircle className="w-4 h-4 mr-1" />Müqavilə əlavə et</Button>
+              <CompanyCustomFieldsRenderer fields={customFields} tabName="contract" formData={formData} setFormData={setFormData} />
             </TabsContent>
 
             {/* ÖDƏNİŞ TAB */}
@@ -690,23 +720,8 @@ export default function Companies() {
                   </Select>
                 </div>
               </div>
+              <CompanyCustomFieldsRenderer fields={customFields} tabName="payment" formData={formData} setFormData={setFormData} />
             </TabsContent>
-
-            {customFields.length > 0 && <TabsContent value="custom" className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {customFields.map(cf => (
-                  <div key={cf.id}>
-                    <Label className="text-xs">{cf.field_label || cf.field_name}{cf.required ? ' *' : ''}</Label>
-                    {cf.field_type === 'select' ? (
-                      <Select value={formData[cf.field_name]||''} onValueChange={v => setFormData({...formData, [cf.field_name]:v})}>
-                        <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
-                        <SelectContent>{cf.options?.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
-                      </Select>
-                    ) : <Input type={cf.field_type==='number'?'number':cf.field_type==='date'?'date':'text'} value={formData[cf.field_name]||''} onChange={e => setFormData({...formData, [cf.field_name]:e.target.value})} className="text-sm" />}
-                  </div>
-                ))}
-              </div>
-            </TabsContent>}
           </Tabs>
           <div className="flex justify-end gap-2 pt-4 border-t mt-4">
             <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>Ləğv et</Button>
