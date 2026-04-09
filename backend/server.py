@@ -527,11 +527,15 @@ async def get_employees(
     return employees
 
 @api_router.post("/employees")
-async def create_employee(employee_data: EmployeeCreate, current_user: dict = Depends(get_current_user)):
+async def create_employee(employee_data: dict, current_user: dict = Depends(get_current_user)):
     employee_id = str(uuid.uuid4())
+    # Auto-generate employee code (E001, E002...)
+    count = await db.employees.count_documents({})
+    employee_code = f"E{str(count + 1).zfill(3)}"
     employee_doc = {
         "id": employee_id,
-        **employee_data.model_dump(),
+        "employee_code": employee_code,
+        **employee_data,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.employees.insert_one(employee_doc)

@@ -3,7 +3,7 @@ import axios from 'axios';
 import { 
   Plus, Download, Search, Filter, X, Loader2, User, Phone, Mail, 
   MoreVertical, Eye, ChevronLeft, Calendar, Briefcase, GraduationCap,
-  MapPin, CreditCard, Clock, ChevronDown, Pencil, Trash2
+  MapPin, CreditCard, Clock, ChevronDown, Pencil, Trash2, Upload, MinusCircle, PlusCircle, FileText, Image
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -41,54 +41,88 @@ const InfoCard = ({ icon: Icon, label, value }) => (
   </div>
 );
 
+const ProfileAvatar = ({ employee, size = 'md' }) => {
+  const sizeClasses = { sm: 'w-8 h-8 text-sm', md: 'w-12 h-12 text-lg', lg: 'w-20 h-20 text-2xl' };
+  const initial = employee.first_name?.charAt(0) || employee.full_name?.charAt(0) || 'E';
+  const displayName = employee.first_name && employee.last_name ? `${employee.first_name} ${employee.last_name}` : employee.full_name;
+  
+  if (employee.photo_url) {
+    return <img src={employee.photo_url.startsWith('http') ? employee.photo_url : `${process.env.REACT_APP_BACKEND_URL}${employee.photo_url}`} alt={displayName} className={`${sizeClasses[size]} rounded-full object-cover border-2 border-slate-200`} />;
+  }
+  return <div className={`${sizeClasses[size]} rounded-full bg-[#3D4F6F] flex items-center justify-center text-white font-bold`}>{initial}</div>;
+};
+
+const getDisplayName = (emp) => emp.first_name && emp.last_name ? `${emp.first_name} ${emp.last_name}` : emp.full_name || '';
+
 // Employee Detail View
 const EmployeeDetail = ({ employee, onBack, onEdit }) => {
   if (!employee) return null;
+  const displayName = getDisplayName(employee);
   
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={onBack}>
-            <ChevronLeft className="w-4 h-4 mr-1" /> Geri
-          </Button>
+          <Button variant="ghost" size="sm" onClick={onBack}><ChevronLeft className="w-4 h-4 mr-1" /> Geri</Button>
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-[#3D4F6F] flex items-center justify-center text-white font-bold text-lg">
-              {employee.full_name?.charAt(0) || 'E'}
-            </div>
+            <ProfileAvatar employee={employee} size="lg" />
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold" style={{ color: '#3D4F6F' }}>{employee.full_name}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-bold" style={{ color: '#3D4F6F' }}>{displayName}</h1>
+                {employee.employee_code && <Badge className="bg-slate-200 text-slate-700 text-xs">{employee.employee_code}</Badge>}
+              </div>
               <p className="text-sm text-slate-500">{employee.position} • {employee.department}</p>
             </div>
           </div>
         </div>
         <div className="flex gap-2">
           <Badge className={getStatusColor(employee.status)}>{employee.status}</Badge>
-          <Button size="sm" onClick={() => onEdit(employee)}>
-            <Pencil className="w-4 h-4 mr-1" /> Redaktə
-          </Button>
+          <Button size="sm" onClick={() => onEdit(employee)}><Pencil className="w-4 h-4 mr-1" /> Redaktə</Button>
         </div>
       </div>
 
       <Tabs defaultValue="personal" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="personal" className="text-xs sm:text-sm">Şəxsi</TabsTrigger>
+          <TabsTrigger value="education" className="text-xs sm:text-sm">Təhsil</TabsTrigger>
           <TabsTrigger value="contact" className="text-xs sm:text-sm">Əlaqə</TabsTrigger>
           <TabsTrigger value="contract" className="text-xs sm:text-sm">Müqavilə</TabsTrigger>
           <TabsTrigger value="salary" className="text-xs sm:text-sm">Əmək haqqı</TabsTrigger>
+          <TabsTrigger value="documents" className="text-xs sm:text-sm">Sənədlər</TabsTrigger>
         </TabsList>
 
         <TabsContent value="personal" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <InfoCard icon={CreditCard} label="Əməkdaş ID" value={employee.employee_code} />
+            <InfoCard icon={User} label="Ad" value={employee.first_name} />
+            <InfoCard icon={User} label="Soyad" value={employee.last_name} />
             <InfoCard icon={User} label="Ata adı" value={employee.father_name} />
             <InfoCard icon={Calendar} label="Doğum tarixi" value={employee.birth_date} />
             <InfoCard icon={User} label="Cins" value={employee.gender} />
             <InfoCard icon={CreditCard} label="Ş.V. seriya №" value={employee.id_card_number} />
             <InfoCard icon={CreditCard} label="FİN kod" value={employee.fin_code} />
-            <InfoCard icon={GraduationCap} label="Təhsil səviyyəsi" value={employee.education_level} />
-            <InfoCard icon={GraduationCap} label="Təhsil müəssisəsi" value={employee.education_institution} />
             <InfoCard icon={User} label="Ailə vəziyyəti" value={employee.marital_status} />
             <InfoCard icon={User} label="Uşaq sayı" value={employee.children_count?.toString()} />
+          </div>
+          {employee.children_birth_dates?.length > 0 && (
+            <div className="bg-blue-50 rounded-xl p-4">
+              <h4 className="font-semibold text-blue-800 mb-2 text-sm">Uşaqların doğum tarixləri</h4>
+              <div className="flex flex-wrap gap-2">
+                {employee.children_birth_dates.map((d, i) => (
+                  <Badge key={i} className="bg-blue-100 text-blue-700">{i+1}. uşaq: {d || '-'}</Badge>
+                ))}
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="education" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <InfoCard icon={GraduationCap} label="Təhsil səviyyəsi" value={employee.education_level} />
+            <InfoCard icon={GraduationCap} label="Təhsil müəssisəsi" value={employee.education_institution} />
+            <InfoCard icon={GraduationCap} label="İxtisas" value={employee.specialty} />
+            <InfoCard icon={Calendar} label="Qəbul tarixi" value={employee.admission_date} />
+            <InfoCard icon={Calendar} label="Bitirdiyi tarix" value={employee.graduation_date} />
           </div>
         </TabsContent>
 
@@ -98,7 +132,8 @@ const EmployeeDetail = ({ employee, onBack, onEdit }) => {
             <InfoCard icon={MapPin} label="Faktiki ünvan" value={employee.actual_address} />
             <InfoCard icon={Phone} label="Korporativ telefon" value={employee.company_phone} />
             <InfoCard icon={Phone} label="Şəxsi telefon" value={employee.personal_phone} />
-            <InfoCard icon={Mail} label="Email" value={employee.email} />
+            <InfoCard icon={Mail} label="Şəxsi email" value={employee.personal_email} />
+            <InfoCard icon={Mail} label="Korporativ email" value={employee.corporate_email} />
           </div>
           <div className="bg-amber-50 rounded-xl p-4 mt-4">
             <h4 className="font-semibold text-amber-800 mb-2">Təcili əlaqə</h4>
@@ -128,16 +163,38 @@ const EmployeeDetail = ({ employee, onBack, onEdit }) => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="bg-slate-50 rounded-xl p-6 text-center">
               <p className="text-sm text-slate-500 mb-1">Gross əmək haqqı</p>
-              <p className="text-3xl font-bold" style={{ color: '#3D4F6F' }}>
-                {(employee.gross_salary || 0).toLocaleString()} AZN
-              </p>
+              <p className="text-3xl font-bold" style={{ color: '#3D4F6F' }}>{(employee.gross_salary || 0).toLocaleString()} AZN</p>
             </div>
             <div className="bg-green-50 rounded-xl p-6 text-center">
               <p className="text-sm text-green-600 mb-1">Net əmək haqqı</p>
-              <p className="text-3xl font-bold text-green-600">
-                {(employee.net_salary || 0).toLocaleString()} AZN
-              </p>
+              <p className="text-3xl font-bold text-green-600">{(employee.net_salary || 0).toLocaleString()} AZN</p>
             </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="documents" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {employee.criminal_record_scan && (
+              <a href={employee.criminal_record_scan.startsWith('http') ? employee.criminal_record_scan : `${process.env.REACT_APP_BACKEND_URL}${employee.criminal_record_scan}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                <FileText className="w-5 h-5 text-red-500" />
+                <span className="text-sm font-medium">Məhkumluq skanı</span>
+              </a>
+            )}
+            {employee.health_certificate_scan && (
+              <a href={employee.health_certificate_scan.startsWith('http') ? employee.health_certificate_scan : `${process.env.REACT_APP_BACKEND_URL}${employee.health_certificate_scan}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                <FileText className="w-5 h-5 text-green-500" />
+                <span className="text-sm font-medium">Sağlamlıq arayışı</span>
+              </a>
+            )}
+            {employee.document_scans?.length > 0 && employee.document_scans.map((doc, i) => (
+              <a key={i} href={doc.startsWith('http') ? doc : `${process.env.REACT_APP_BACKEND_URL}${doc}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                <FileText className="w-5 h-5 text-blue-500" />
+                <span className="text-sm font-medium">Sənəd {i+1}</span>
+              </a>
+            ))}
+            {!employee.criminal_record_scan && !employee.health_certificate_scan && (!employee.document_scans || employee.document_scans.length === 0) && (
+              <p className="col-span-full text-center text-slate-400 py-8">Sənəd yoxdur</p>
+            )}
           </div>
         </TabsContent>
       </Tabs>
@@ -146,45 +203,38 @@ const EmployeeDetail = ({ employee, onBack, onEdit }) => {
 };
 
 // Mobile Card
-const EmployeeCard = ({ employee, onView, onEdit, onDelete }) => (
-  <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-    <div className="flex items-start justify-between mb-3">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-[#3D4F6F] flex items-center justify-center text-white font-bold">
-          {employee.full_name?.charAt(0) || 'E'}
+const EmployeeCard = ({ employee, onView, onEdit, onDelete }) => {
+  const displayName = getDisplayName(employee);
+  return (
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <ProfileAvatar employee={employee} size="sm" />
+          <div>
+            <h3 className="font-semibold text-[#3D4F6F]">{displayName}</h3>
+            <p className="text-xs text-slate-500">{employee.employee_code} • {employee.position}</p>
+          </div>
         </div>
-        <div>
-          <h3 className="font-semibold text-[#3D4F6F]">{employee.full_name}</h3>
-          <p className="text-xs text-slate-500">{employee.position}</p>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="h-8 w-8 p-0"><MoreVertical className="w-4 h-4" /></Button></DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onView(employee)}><Eye className="w-4 h-4 mr-2" />Ətraflı</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onEdit(employee)}><Pencil className="w-4 h-4 mr-2" />Redaktə</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onDelete(employee.id)} className="text-red-600"><Trash2 className="w-4 h-4 mr-2" />Sil</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <div className="space-y-1.5 text-sm">
+        <div className="flex items-center gap-2 text-slate-600"><Briefcase className="w-3.5 h-3.5" /><span>{employee.department}</span></div>
+        <div className="flex items-center gap-2 text-slate-600"><Phone className="w-3.5 h-3.5" /><span>{employee.personal_phone}</span></div>
+        <div className="flex items-center justify-between mt-2">
+          <Badge className={`text-xs ${getStatusColor(employee.status)}`}>{employee.status}</Badge>
+          <span className="text-xs text-slate-500">{(employee.net_salary || 0).toLocaleString()} AZN</span>
         </div>
-      </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-            <MoreVertical className="w-4 h-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => onView(employee)}><Eye className="w-4 h-4 mr-2" />Ətraflı</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onEdit(employee)}><Pencil className="w-4 h-4 mr-2" />Redaktə</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onDelete(employee.id)} className="text-red-600"><Trash2 className="w-4 h-4 mr-2" />Sil</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-    <div className="space-y-1.5 text-sm">
-      <div className="flex items-center gap-2 text-slate-600">
-        <Briefcase className="w-3.5 h-3.5" /><span>{employee.department}</span>
-      </div>
-      <div className="flex items-center gap-2 text-slate-600">
-        <Phone className="w-3.5 h-3.5" /><span>{employee.personal_phone}</span>
-      </div>
-      <div className="flex items-center justify-between mt-2">
-        <Badge className={`text-xs ${getStatusColor(employee.status)}`}>{employee.status}</Badge>
-        <span className="text-xs text-slate-500">{(employee.net_salary || 0).toLocaleString()} AZN</span>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default function HR() {
   const [employees, setEmployees] = useState([]);
@@ -196,6 +246,7 @@ export default function HR() {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('personal');
   const [filters, setFilters] = useState({ department: '', status: '' });
+  const [uploading, setUploading] = useState(false);
 
   const departments = ['Satış', 'Marketing', 'HR', 'Maliyyə', 'Layihə', 'İT', 'İdarəetmə'];
   const statuses = ['Aktiv', 'Qeyri-aktiv', 'Sınaq müddətində'];
@@ -204,14 +255,18 @@ export default function HR() {
   const maritalStatuses = ['Evli', 'Subay', 'Boşanmış'];
 
   const initialFormData = {
-    photo: '', full_name: '', father_name: '', birth_date: '', gender: '',
+    photo_url: '', first_name: '', last_name: '', father_name: '', birth_date: '', gender: '',
     id_card_number: '', fin_code: '', education_level: '', education_institution: '',
-    marital_status: '', children_count: 0, registration_address: '', actual_address: '',
-    company_phone: '', personal_phone: '', email: '', emergency_contact_name: '',
-    emergency_contact_relation: '', emergency_contact_phone: '', department: '',
-    position: '', contract_start_date: '', work_start_date: '', contract_end_date: '',
-    probation_end_date: '', main_vacation_days: 21, additional_vacation_days: 0,
-    gross_salary: 0, net_salary: 0, work_schedule: '', status: 'Aktiv'
+    specialty: '', admission_date: '', graduation_date: '',
+    marital_status: '', children_count: 0, children_birth_dates: [],
+    registration_address: '', actual_address: '',
+    company_phone: '', personal_phone: '', personal_email: '', corporate_email: '',
+    emergency_contact_name: '', emergency_contact_relation: '', emergency_contact_phone: '',
+    department: '', position: '', contract_start_date: '', work_start_date: '',
+    contract_end_date: '', probation_end_date: '', main_vacation_days: 21,
+    additional_vacation_days: 0, gross_salary: 0, net_salary: 0, work_schedule: '',
+    criminal_record_scan: '', health_certificate_scan: '', document_scans: [],
+    status: 'Aktiv'
   };
 
   const [formData, setFormData] = useState(initialFormData);
@@ -219,66 +274,108 @@ export default function HR() {
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
 
+  const uploadFile = async (file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      setUploading(true);
+      const res = await axios.post(`${API}/upload`, fd, { headers: { ...headers, 'Content-Type': 'multipart/form-data' } });
+      return res.data.url;
+    } catch { toast.error('Fayl yüklənmədi'); return ''; }
+    finally { setUploading(false); }
+  };
+
+  const handleFileUpload = async (e, field) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const url = await uploadFile(file);
+    if (url) setFormData(prev => ({ ...prev, [field]: url }));
+  };
+
+  const handleMultiFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    const urls = [];
+    for (const file of files) {
+      const url = await uploadFile(file);
+      if (url) urls.push(url);
+    }
+    setFormData(prev => ({ ...prev, document_scans: [...(prev.document_scans || []), ...urls] }));
+  };
+
+  const updateChildrenCount = (delta) => {
+    const newCount = Math.max(0, (formData.children_count || 0) + delta);
+    const dates = [...(formData.children_birth_dates || [])];
+    while (dates.length < newCount) dates.push('');
+    setFormData({ ...formData, children_count: newCount, children_birth_dates: dates.slice(0, newCount) });
+  };
+
+  const updateChildDate = (idx, value) => {
+    const dates = [...(formData.children_birth_dates || [])];
+    dates[idx] = value;
+    setFormData({ ...formData, children_birth_dates: dates });
+  };
+
   const fetchEmployees = useCallback(async () => {
     try {
       const params = new URLSearchParams();
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value && value !== 'all') params.append(key, value);
-      });
+      Object.entries(filters).forEach(([key, value]) => { if (value && value !== 'all') params.append(key, value); });
       const response = await axios.get(`${API}/employees?${params.toString()}`, { headers });
       setEmployees(response.data);
-    } catch (error) {
-      toast.error('Əməkdaşlar yüklənmədi');
-    } finally {
-      setLoading(false);
-    }
+    } catch { toast.error('Əməkdaşlar yüklənmədi'); }
+    finally { setLoading(false); }
   }, [filters]);
 
   useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Build full_name for backward compat
+    const submitData = { ...formData, full_name: `${formData.first_name} ${formData.last_name}`.trim() };
     try {
       if (editingEmployee) {
-        await axios.put(`${API}/employees/${editingEmployee.id}`, formData, { headers });
+        await axios.put(`${API}/employees/${editingEmployee.id}`, submitData, { headers });
         toast.success('Əməkdaş yeniləndi');
       } else {
-        await axios.post(`${API}/employees`, formData, { headers });
+        await axios.post(`${API}/employees`, submitData, { headers });
         toast.success('Yeni əməkdaş əlavə edildi');
       }
-      setShowModal(false);
-      setEditingEmployee(null);
-      setFormData(initialFormData);
-      fetchEmployees();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Xəta baş verdi');
-    }
+      setShowModal(false); setEditingEmployee(null); setFormData(initialFormData); fetchEmployees();
+    } catch (error) { toast.error(error.response?.data?.detail || 'Xəta baş verdi'); }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Bu əməkdaşı silmək istədiyinizə əminsiniz?')) return;
-    try {
-      await axios.delete(`${API}/employees/${id}`, { headers });
-      toast.success('Əməkdaş silindi');
-      fetchEmployees();
-    } catch (error) {
-      toast.error('Silinmə zamanı xəta');
-    }
+    try { await axios.delete(`${API}/employees/${id}`, { headers }); toast.success('Əməkdaş silindi'); fetchEmployees(); }
+    catch { toast.error('Silinmə zamanı xəta'); }
   };
 
   const handleEdit = (emp) => {
     setEditingEmployee(emp);
-    setFormData({ ...initialFormData, ...emp });
+    const data = { ...initialFormData, ...emp };
+    // Populate first_name/last_name from full_name if not set
+    if (!data.first_name && data.full_name) {
+      const parts = data.full_name.split(' ');
+      data.first_name = parts[0] || '';
+      data.last_name = parts.slice(1).join(' ') || '';
+    }
+    // Ensure children_birth_dates array matches count
+    if (!data.children_birth_dates) data.children_birth_dates = [];
+    while (data.children_birth_dates.length < (data.children_count || 0)) data.children_birth_dates.push('');
+    // Backward compat for email fields
+    if (!data.personal_email && data.email) data.personal_email = data.email;
+    setFormData(data);
     setActiveTab('personal');
     setShowModal(true);
   };
 
   const exportToExcel = () => {
     const csvContent = [
-      ['Ad Soyad', 'Şöbə', 'Vəzifə', 'Telefon', 'Email', 'Gross', 'Net', 'Status'].join(','),
+      ['ID', 'Ad', 'Soyad', 'Şöbə', 'Vəzifə', 'Telefon', 'Email', 'Gross', 'Net', 'Status'].join(','),
       ...filteredEmployees.map(e => [
-        `"${e.full_name}"`, `"${e.department}"`, `"${e.position}"`, `"${e.personal_phone}"`,
-        `"${e.email}"`, e.gross_salary || 0, e.net_salary || 0, `"${e.status}"`
+        `"${e.employee_code || ''}"`, `"${e.first_name || ''}"`, `"${e.last_name || ''}"`,
+        `"${e.department}"`, `"${e.position}"`, `"${e.personal_phone}"`,
+        `"${e.personal_email || e.email || ''}"`, e.gross_salary || 0, e.net_salary || 0, `"${e.status}"`
       ].join(','))
     ].join('\n');
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -289,21 +386,15 @@ export default function HR() {
     toast.success('Excel faylı yükləndi');
   };
 
-  const filteredEmployees = employees.filter(e =>
-    e.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.position?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.department?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredEmployees = employees.filter(e => {
+    const name = getDisplayName(e).toLowerCase();
+    const term = searchTerm.toLowerCase();
+    return name.includes(term) || e.position?.toLowerCase().includes(term) || e.department?.toLowerCase().includes(term) || e.employee_code?.toLowerCase().includes(term);
+  });
 
   const activeFilterCount = Object.values(filters).filter(v => v && v !== 'all').length;
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#3D4F6F' }} />
-      </div>
-    );
-  }
+  if (loading) return <div className="flex items-center justify-center h-[60vh]"><Loader2 className="w-8 h-8 animate-spin" style={{ color: '#3D4F6F' }} /></div>;
 
   if (viewingEmployee) {
     return (
@@ -321,15 +412,15 @@ export default function HR() {
       {/* Header */}
       <div className="flex flex-col gap-4 mb-6">
         <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>İnsan Resurları</h1>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Insan Resurları</h1>
           <p className="text-slate-500 text-sm mt-1">Cəmi {employees.length} əməkdaş</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={exportToExcel} variant="outline" size="sm" className="text-xs sm:text-sm">
+          <Button onClick={exportToExcel} variant="outline" size="sm" className="text-xs sm:text-sm" data-testid="export-btn">
             <Download className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Excel Export</span>
           </Button>
           <Button onClick={() => { setFormData(initialFormData); setEditingEmployee(null); setActiveTab('personal'); setShowModal(true); }}
-            size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold text-xs sm:text-sm">
+            size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold text-xs sm:text-sm" data-testid="add-employee-btn">
             <Plus className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Əməkdaş əlavə et</span><span className="sm:hidden">Əlavə et</span>
           </Button>
         </div>
@@ -340,7 +431,7 @@ export default function HR() {
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input placeholder="Axtar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 text-sm" />
+            <Input placeholder="Axtar (ad, vəzifə, ID)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 text-sm" data-testid="search-input" />
           </div>
           <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}
             className={activeFilterCount > 0 ? 'border-[#9ACD32] bg-[#9ACD32]/10' : ''}>
@@ -354,20 +445,14 @@ export default function HR() {
               <Label className="text-xs">Şöbə</Label>
               <Select value={filters.department} onValueChange={(v) => setFilters({...filters, department: v})}>
                 <SelectTrigger className="text-sm"><SelectValue placeholder="Hamısı" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Hamısı</SelectItem>
-                  {departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                </SelectContent>
+                <SelectContent><SelectItem value="all">Hamısı</SelectItem>{departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>
               <Label className="text-xs">Status</Label>
               <Select value={filters.status} onValueChange={(v) => setFilters({...filters, status: v})}>
                 <SelectTrigger className="text-sm"><SelectValue placeholder="Hamısı" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Hamısı</SelectItem>
-                  {statuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
+                <SelectContent><SelectItem value="all">Hamısı</SelectItem>{statuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           </div>
@@ -377,15 +462,8 @@ export default function HR() {
       {/* Mobile Cards */}
       <div className="lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
         {filteredEmployees.length === 0 ? (
-          <div className="col-span-full bg-white rounded-xl p-8 text-center">
-            <User className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-            <p className="text-slate-500">Əməkdaş tapılmadı</p>
-          </div>
-        ) : (
-          filteredEmployees.map(emp => (
-            <EmployeeCard key={emp.id} employee={emp} onView={setViewingEmployee} onEdit={handleEdit} onDelete={handleDelete} />
-          ))
-        )}
+          <div className="col-span-full bg-white rounded-xl p-8 text-center"><User className="w-12 h-12 mx-auto mb-3 text-slate-300" /><p className="text-slate-500">Əməkdaş tapılmadı</p></div>
+        ) : filteredEmployees.map(emp => <EmployeeCard key={emp.id} employee={emp} onView={setViewingEmployee} onEdit={handleEdit} onDelete={handleDelete} />)}
       </div>
 
       {/* Desktop Table */}
@@ -393,44 +471,41 @@ export default function HR() {
         <table className="w-full">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100">
-              {['Əməkdaş', 'Şöbə', 'Vəzifə', 'Telefon', 'Email', 'Əmək haqqı', 'Status', 'Əməliyyat'].map(h => (
-                <th key={h} className={`text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm ${h === 'Əməliyyat' ? 'text-right' : ''}`}>{h}</th>
+              {['ID', 'Əməkdaş', 'Şöbə', 'Vəzifə', 'Telefon', 'Email', 'Əmək haqqı', 'Status', ''].map(h => (
+                <th key={h} className={`text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm ${!h ? 'text-right' : ''}`}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filteredEmployees.length === 0 ? (
-              <tr><td colSpan={8} className="text-center py-12 text-slate-500"><User className="w-12 h-12 mx-auto mb-3 text-slate-300" /><p>Əməkdaş tapılmadı</p></td></tr>
-            ) : (
-              filteredEmployees.map(emp => (
-                <tr key={emp.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-[#3D4F6F] flex items-center justify-center text-white text-sm font-bold">
-                        {emp.full_name?.charAt(0)}
-                      </div>
-                      <span className="font-medium text-sm">{emp.full_name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{emp.department}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{emp.position}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{emp.personal_phone}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{emp.email}</td>
-                  <td className="px-4 py-3 text-sm font-medium">{(emp.net_salary || 0).toLocaleString()} AZN</td>
-                  <td className="px-4 py-3"><Badge className={`text-xs ${getStatusColor(emp.status)}`}>{emp.status}</Badge></td>
-                  <td className="px-4 py-3 text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild><Button variant="ghost" size="sm"><ChevronDown className="w-4 h-4" /></Button></DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setViewingEmployee(emp)}><Eye className="w-4 h-4 mr-2" />Ətraflı</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleEdit(emp)}><Pencil className="w-4 h-4 mr-2" />Redaktə</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDelete(emp.id)} className="text-red-600"><Trash2 className="w-4 h-4 mr-2" />Sil</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
-                </tr>
-              ))
-            )}
+              <tr><td colSpan={9} className="text-center py-12 text-slate-500"><User className="w-12 h-12 mx-auto mb-3 text-slate-300" /><p>Əməkdaş tapılmadı</p></td></tr>
+            ) : filteredEmployees.map(emp => (
+              <tr key={emp.id} className="border-b border-slate-50 hover:bg-slate-50/50" data-testid={`employee-row-${emp.id}`}>
+                <td className="px-4 py-3 text-xs text-slate-500 font-mono">{emp.employee_code}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <ProfileAvatar employee={emp} size="sm" />
+                    <span className="font-medium text-sm">{getDisplayName(emp)}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-600">{emp.department}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{emp.position}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{emp.personal_phone}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{emp.personal_email || emp.corporate_email || emp.email}</td>
+                <td className="px-4 py-3 text-sm font-medium">{(emp.net_salary || 0).toLocaleString()} AZN</td>
+                <td className="px-4 py-3"><Badge className={`text-xs ${getStatusColor(emp.status)}`}>{emp.status}</Badge></td>
+                <td className="px-4 py-3 text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild><Button variant="ghost" size="sm"><ChevronDown className="w-4 h-4" /></Button></DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setViewingEmployee(emp)}><Eye className="w-4 h-4 mr-2" />Ətraflı</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleEdit(emp)}><Pencil className="w-4 h-4 mr-2" />Redaktə</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDelete(emp.id)} className="text-red-600"><Trash2 className="w-4 h-4 mr-2" />Sil</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -448,14 +523,44 @@ export default function HR() {
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="flex-wrap h-auto gap-1 mb-4">
                   <TabsTrigger value="personal" className="text-xs">Şəxsi</TabsTrigger>
+                  <TabsTrigger value="education" className="text-xs">Təhsil</TabsTrigger>
                   <TabsTrigger value="contact" className="text-xs">Əlaqə</TabsTrigger>
                   <TabsTrigger value="contract" className="text-xs">Müqavilə</TabsTrigger>
                   <TabsTrigger value="salary" className="text-xs">Əmək haqqı</TabsTrigger>
+                  <TabsTrigger value="documents" className="text-xs">Sənədlər</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="personal" className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div><Label className="text-xs">Ad Soyad *</Label><Input value={formData.full_name} onChange={(e) => setFormData({...formData, full_name: e.target.value})} required className="text-sm" /></div>
+                {/* ŞƏXSİ TAB */}
+                <TabsContent value="personal" className="space-y-4" data-testid="personal-tab">
+                  {/* Photo upload */}
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      {formData.photo_url ? (
+                        <img src={formData.photo_url.startsWith('http') ? formData.photo_url : `${process.env.REACT_APP_BACKEND_URL}${formData.photo_url}`} alt="Profile" className="w-20 h-24 rounded-lg object-cover border-2 border-slate-200" />
+                      ) : (
+                        <div className="w-20 h-24 rounded-lg bg-slate-100 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center">
+                          <Image className="w-6 h-6 text-slate-400" />
+                          <span className="text-[10px] text-slate-400 mt-1">3x4</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <Label className="text-xs font-semibold">Profil şəkli (3x4)</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <label className="cursor-pointer">
+                          <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'photo_url')} className="hidden" data-testid="photo-upload" />
+                          <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+                            <Upload className="w-3.5 h-3.5" /> {uploading ? 'Yüklənir...' : 'Şəkil seç'}
+                          </span>
+                        </label>
+                        {formData.photo_url && <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, photo_url: ''})}><X className="w-3.5 h-3.5 text-red-500" /></Button>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div><Label className="text-xs">Ad *</Label><Input value={formData.first_name} onChange={(e) => setFormData({...formData, first_name: e.target.value})} required className="text-sm" data-testid="first-name-input" placeholder="Ad" /></div>
+                    <div><Label className="text-xs">Soyad *</Label><Input value={formData.last_name} onChange={(e) => setFormData({...formData, last_name: e.target.value})} required className="text-sm" data-testid="last-name-input" placeholder="Soyad" /></div>
                     <div><Label className="text-xs">Ata adı</Label><Input value={formData.father_name} onChange={(e) => setFormData({...formData, father_name: e.target.value})} className="text-sm" /></div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -478,22 +583,61 @@ export default function HR() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div><Label className="text-xs">Ş.V. seriya №</Label><Input value={formData.id_card_number} onChange={(e) => setFormData({...formData, id_card_number: e.target.value})} className="text-sm" /></div>
                     <div><Label className="text-xs">FİN kod</Label><Input value={formData.fin_code} onChange={(e) => setFormData({...formData, fin_code: e.target.value})} className="text-sm" /></div>
+                    <div><Label className="text-xs">Qeydiyyat ünvanı</Label><Input value={formData.registration_address} onChange={(e) => setFormData({...formData, registration_address: e.target.value})} className="text-sm" /></div>
+                  </div>
+
+                  {/* Children */}
+                  <div className="p-3 bg-slate-50 rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold">Uşaqların sayı</Label>
+                      <div className="flex items-center gap-2">
+                        <Button type="button" variant="ghost" size="sm" onClick={() => updateChildrenCount(-1)} className="h-8 w-8 p-0" data-testid="children-minus"><MinusCircle className="w-5 h-5 text-red-500" /></Button>
+                        <span className="text-lg font-bold w-8 text-center" style={{ color: '#3D4F6F' }}>{formData.children_count || 0}</span>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => updateChildrenCount(1)} className="h-8 w-8 p-0" data-testid="children-plus"><PlusCircle className="w-5 h-5 text-green-500" /></Button>
+                      </div>
+                    </div>
+                    {formData.children_count > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {Array.from({ length: formData.children_count }).map((_, i) => (
+                          <div key={i}>
+                            <Label className="text-xs">{i+1}. uşağın doğum tarixi</Label>
+                            <Input type="date" value={formData.children_birth_dates?.[i] || ''} onChange={(e) => updateChildDate(i, e.target.value)} className="text-sm" data-testid={`child-date-${i}`} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* TƏHSİL TAB */}
+                <TabsContent value="education" className="space-y-4" data-testid="education-tab">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <Label className="text-xs">Təhsil</Label>
+                      <Label className="text-xs">Təhsil səviyyəsi</Label>
                       <Select value={formData.education_level} onValueChange={(v) => setFormData({...formData, education_level: v})}>
                         <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
                         <SelectContent>{educationLevels.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
+                    <div><Label className="text-xs">Təhsil müəssisəsi</Label><Input value={formData.education_institution} onChange={(e) => setFormData({...formData, education_institution: e.target.value})} className="text-sm" placeholder="Universitet / Kollec" data-testid="education-institution" /></div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div><Label className="text-xs">İxtisas</Label><Input value={formData.specialty} onChange={(e) => setFormData({...formData, specialty: e.target.value})} className="text-sm" placeholder="İxtisas adı" data-testid="specialty-input" /></div>
+                    <div><Label className="text-xs">Qəbul tarixi</Label><Input type="date" value={formData.admission_date} onChange={(e) => setFormData({...formData, admission_date: e.target.value})} className="text-sm" /></div>
+                    <div><Label className="text-xs">Bitirdiyi tarix</Label><Input type="date" value={formData.graduation_date} onChange={(e) => setFormData({...formData, graduation_date: e.target.value})} className="text-sm" /></div>
                   </div>
                 </TabsContent>
 
-                <TabsContent value="contact" className="space-y-4">
+                {/* ƏLAQƏ TAB */}
+                <TabsContent value="contact" className="space-y-4" data-testid="contact-tab">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div><Label className="text-xs">Şəxsi telefon *</Label><Input value={formData.personal_phone} onChange={(e) => setFormData({...formData, personal_phone: e.target.value})} required className="text-sm" /></div>
                     <div><Label className="text-xs">Korporativ telefon</Label><Input value={formData.company_phone} onChange={(e) => setFormData({...formData, company_phone: e.target.value})} className="text-sm" /></div>
                   </div>
-                  <div><Label className="text-xs">Email *</Label><Input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} required className="text-sm" /></div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div><Label className="text-xs">Şəxsi email</Label><Input type="email" value={formData.personal_email} onChange={(e) => setFormData({...formData, personal_email: e.target.value})} className="text-sm" data-testid="personal-email" /></div>
+                    <div><Label className="text-xs">Korporativ email</Label><Input type="email" value={formData.corporate_email} onChange={(e) => setFormData({...formData, corporate_email: e.target.value})} className="text-sm" data-testid="corporate-email" /></div>
+                  </div>
                   <div><Label className="text-xs">Faktiki ünvan</Label><Input value={formData.actual_address} onChange={(e) => setFormData({...formData, actual_address: e.target.value})} className="text-sm" /></div>
                   <h4 className="font-semibold text-sm text-slate-700 pt-2">Təcili əlaqə</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -503,7 +647,8 @@ export default function HR() {
                   </div>
                 </TabsContent>
 
-                <TabsContent value="contract" className="space-y-4">
+                {/* MÜQAVİLƏ TAB */}
+                <TabsContent value="contract" className="space-y-4" data-testid="contract-tab">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <Label className="text-xs">Şöbə *</Label>
@@ -531,18 +676,83 @@ export default function HR() {
                   </div>
                 </TabsContent>
 
-                <TabsContent value="salary" className="space-y-4">
+                {/* ƏMƏK HAQQI TAB */}
+                <TabsContent value="salary" className="space-y-4" data-testid="salary-tab">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div><Label className="text-xs">Gross əmək haqqı (AZN)</Label><Input type="number" value={formData.gross_salary} onChange={(e) => setFormData({...formData, gross_salary: parseFloat(e.target.value) || 0})} className="text-sm" /></div>
                     <div><Label className="text-xs">Net əmək haqqı (AZN)</Label><Input type="number" value={formData.net_salary} onChange={(e) => setFormData({...formData, net_salary: parseFloat(e.target.value) || 0})} className="text-sm" /></div>
                   </div>
                   <div><Label className="text-xs">İş qrafiki</Label><Input value={formData.work_schedule} onChange={(e) => setFormData({...formData, work_schedule: e.target.value})} placeholder="Məs: 09:00-18:00" className="text-sm" /></div>
                 </TabsContent>
+
+                {/* SƏNƏDLƏR TAB */}
+                <TabsContent value="documents" className="space-y-4" data-testid="documents-tab">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Məhkumluq skanı */}
+                    <div className="p-4 bg-slate-50 rounded-lg space-y-2">
+                      <Label className="text-xs font-semibold">Məhkumluq skanı</Label>
+                      {formData.criminal_record_scan ? (
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-green-500" />
+                          <span className="text-xs text-green-600 truncate flex-1">Yüklənib</span>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, criminal_record_scan: ''})}><X className="w-3.5 h-3.5 text-red-500" /></Button>
+                        </div>
+                      ) : (
+                        <label className="cursor-pointer">
+                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, 'criminal_record_scan')} className="hidden" data-testid="criminal-record-upload" />
+                          <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors">
+                            <Upload className="w-3.5 h-3.5" /> Fayl seç
+                          </span>
+                        </label>
+                      )}
+                    </div>
+                    {/* Sağlamlıq arayışı */}
+                    <div className="p-4 bg-slate-50 rounded-lg space-y-2">
+                      <Label className="text-xs font-semibold">Sağlamlıq arayışı skanı</Label>
+                      {formData.health_certificate_scan ? (
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-green-500" />
+                          <span className="text-xs text-green-600 truncate flex-1">Yüklənib</span>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, health_certificate_scan: ''})}><X className="w-3.5 h-3.5 text-red-500" /></Button>
+                        </div>
+                      ) : (
+                        <label className="cursor-pointer">
+                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, 'health_certificate_scan')} className="hidden" data-testid="health-cert-upload" />
+                          <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors">
+                            <Upload className="w-3.5 h-3.5" /> Fayl seç
+                          </span>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                  {/* Sənədlərin skanı (çoxlu) */}
+                  <div className="p-4 bg-slate-50 rounded-lg space-y-3">
+                    <Label className="text-xs font-semibold">Digər sənədlər</Label>
+                    {formData.document_scans?.length > 0 && (
+                      <div className="space-y-1">
+                        {formData.document_scans.map((doc, i) => (
+                          <div key={i} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2">
+                            <FileText className="w-4 h-4 text-blue-500" />
+                            <span className="text-xs truncate flex-1">Sənəd {i+1}</span>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, document_scans: formData.document_scans.filter((_, j) => j !== i)})}><X className="w-3.5 h-3.5 text-red-500" /></Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <label className="cursor-pointer">
+                      <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" multiple onChange={handleMultiFileUpload} className="hidden" data-testid="document-scans-upload" />
+                      <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors">
+                        <Upload className="w-3.5 h-3.5" /> Sənəd əlavə et
+                      </span>
+                    </label>
+                  </div>
+                </TabsContent>
               </Tabs>
 
               <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t mt-6">
                 <Button type="button" variant="outline" onClick={() => setShowModal(false)} className="text-sm">Ləğv et</Button>
-                <Button type="submit" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold text-sm">
+                <Button type="submit" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold text-sm" disabled={uploading} data-testid="submit-employee-btn">
+                  {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
                   {editingEmployee ? 'Yadda saxla' : 'Əlavə et'}
                 </Button>
               </div>
