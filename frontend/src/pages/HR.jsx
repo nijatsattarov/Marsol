@@ -117,13 +117,26 @@ const EmployeeDetail = ({ employee, onBack, onEdit }) => {
         </TabsContent>
 
         <TabsContent value="education" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <InfoCard icon={GraduationCap} label="Təhsil səviyyəsi" value={employee.education_level} />
-            <InfoCard icon={GraduationCap} label="Təhsil müəssisəsi" value={employee.education_institution} />
-            <InfoCard icon={GraduationCap} label="İxtisas" value={employee.specialty} />
-            <InfoCard icon={Calendar} label="Qəbul tarixi" value={employee.admission_date} />
-            <InfoCard icon={Calendar} label="Bitirdiyi tarix" value={employee.graduation_date} />
-          </div>
+          {employee.educations?.length > 0 ? employee.educations.map((edu, i) => (
+            <div key={i} className="p-4 bg-slate-50 rounded-xl space-y-2">
+              <h4 className="font-semibold text-sm text-[#3D4F6F]">Təhsil {i + 1}</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <InfoCard icon={GraduationCap} label="Təhsil səviyyəsi" value={edu.education_level} />
+                <InfoCard icon={GraduationCap} label="Təhsil müəssisəsi" value={edu.education_institution} />
+                <InfoCard icon={GraduationCap} label="İxtisas" value={edu.specialty} />
+                <InfoCard icon={Calendar} label="Qəbul tarixi" value={edu.admission_date} />
+                <InfoCard icon={Calendar} label="Bitirdiyi tarix" value={edu.graduation_date} />
+              </div>
+            </div>
+          )) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <InfoCard icon={GraduationCap} label="Təhsil səviyyəsi" value={employee.education_level} />
+              <InfoCard icon={GraduationCap} label="Təhsil müəssisəsi" value={employee.education_institution} />
+              <InfoCard icon={GraduationCap} label="İxtisas" value={employee.specialty} />
+              <InfoCard icon={Calendar} label="Qəbul tarixi" value={employee.admission_date} />
+              <InfoCard icon={Calendar} label="Bitirdiyi tarix" value={employee.graduation_date} />
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="contact" className="space-y-4">
@@ -149,25 +162,52 @@ const EmployeeDetail = ({ employee, onBack, onEdit }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <InfoCard icon={Briefcase} label="Şöbə" value={employee.department} />
             <InfoCard icon={Briefcase} label="Vəzifə" value={employee.position} />
-            <InfoCard icon={Calendar} label="Müqavilə başlama" value={employee.contract_start_date} />
-            <InfoCard icon={Calendar} label="İşə başlama" value={employee.work_start_date} />
-            <InfoCard icon={Calendar} label="Müqavilə bitmə" value={employee.contract_end_date} />
+            <InfoCard icon={Calendar} label="Müqavilənin bağlanma tarixi" value={employee.contract_signing_date || employee.contract_start_date} />
+            <InfoCard icon={Calendar} label="İşə başlama tarixi" value={employee.work_start_date} />
+            <InfoCard icon={Calendar} label="Müqavilənin bitmə tarixi" value={employee.contract_indefinite ? 'Müddətsiz' : employee.contract_end_date} />
             <InfoCard icon={Calendar} label="Sınaq müddəti bitmə" value={employee.probation_end_date} />
+            <InfoCard icon={Briefcase} label="Vəzifə dəyişikliyi" value={employee.position_change ? 'Bəli' : 'Xeyr'} />
+            <InfoCard icon={Briefcase} label="Əməyin ödənilməsi" value={employee.payment_system} />
             <InfoCard icon={Clock} label="İş qrafiki" value={employee.work_schedule} />
             <InfoCard icon={Calendar} label="Əsas məzuniyyət" value={`${employee.main_vacation_days || 21} gün`} />
             <InfoCard icon={Calendar} label="Əlavə məzuniyyət" value={`${employee.additional_vacation_days || 0} gün`} />
+            <InfoCard icon={Clock} label="Xatırlatma" value={employee.contract_reminder ? 'Aktiv' : 'Deaktiv'} />
           </div>
+          {(employee.position_instructions_file || employee.employment_contract_file || employee.position_change_file) && (
+            <div className="border-t pt-4 mt-4">
+              <h4 className="font-semibold text-sm text-slate-700 mb-3">Müqavilə sənədləri</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {employee.position_instructions_file && (
+                  <a href={employee.position_instructions_file.startsWith('http') ? employee.position_instructions_file : `${process.env.REACT_APP_BACKEND_URL}${employee.position_instructions_file}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100"><FileText className="w-5 h-5 text-blue-500" /><span className="text-sm">Vəzifə təlimatları</span></a>
+                )}
+                {employee.employment_contract_file && (
+                  <a href={employee.employment_contract_file.startsWith('http') ? employee.employment_contract_file : `${process.env.REACT_APP_BACKEND_URL}${employee.employment_contract_file}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100"><FileText className="w-5 h-5 text-green-500" /><span className="text-sm">Əmək müqaviləsi</span></a>
+                )}
+                {employee.position_change_file && (
+                  <a href={employee.position_change_file.startsWith('http') ? employee.position_change_file : `${process.env.REACT_APP_BACKEND_URL}${employee.position_change_file}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100"><FileText className="w-5 h-5 text-amber-500" /><span className="text-sm">Vəzifə dəyişikliyi</span></a>
+                )}
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="salary" className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-slate-50 rounded-xl p-6 text-center">
-              <p className="text-sm text-slate-500 mb-1">Gross əmək haqqı</p>
-              <p className="text-3xl font-bold" style={{ color: '#3D4F6F' }}>{(employee.gross_salary || 0).toLocaleString()} AZN</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-slate-50 rounded-xl p-5 text-center">
+              <p className="text-xs text-slate-500 mb-1">Gross əmək haqqı</p>
+              <p className="text-2xl font-bold" style={{ color: '#3D4F6F' }}>{(employee.gross_salary || 0).toLocaleString()} AZN</p>
             </div>
-            <div className="bg-green-50 rounded-xl p-6 text-center">
-              <p className="text-sm text-green-600 mb-1">Net əmək haqqı</p>
-              <p className="text-3xl font-bold text-green-600">{(employee.net_salary || 0).toLocaleString()} AZN</p>
+            <div className="bg-green-50 rounded-xl p-5 text-center">
+              <p className="text-xs text-green-600 mb-1">Net əmək haqqı</p>
+              <p className="text-2xl font-bold text-green-600">{(employee.net_salary || 0).toLocaleString()} AZN</p>
+            </div>
+            <div className="bg-blue-50 rounded-xl p-5 text-center">
+              <p className="text-xs text-blue-600 mb-1">Əlavə</p>
+              <p className="text-2xl font-bold text-blue-600">{(employee.salary_supplement || 0).toLocaleString()} AZN</p>
+            </div>
+            <div className="bg-amber-50 rounded-xl p-5 text-center">
+              <p className="text-xs text-amber-600 mb-1">Mükafatlar</p>
+              <p className="text-lg font-bold text-amber-600">{employee.bonuses || '-'}</p>
             </div>
           </div>
         </TabsContent>
@@ -175,27 +215,43 @@ const EmployeeDetail = ({ employee, onBack, onEdit }) => {
         <TabsContent value="documents" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {employee.criminal_record_scan && (
-              <a href={employee.criminal_record_scan.startsWith('http') ? employee.criminal_record_scan : `${process.env.REACT_APP_BACKEND_URL}${employee.criminal_record_scan}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
-                <FileText className="w-5 h-5 text-red-500" />
-                <span className="text-sm font-medium">Məhkumluq skanı</span>
+              <a href={employee.criminal_record_scan.startsWith('http') ? employee.criminal_record_scan : `${process.env.REACT_APP_BACKEND_URL}${employee.criminal_record_scan}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl hover:bg-slate-100">
+                <FileText className="w-5 h-5 text-red-500" /><span className="text-sm font-medium">Məhkumluq skanı</span>
               </a>
             )}
             {employee.health_certificate_scan && (
-              <a href={employee.health_certificate_scan.startsWith('http') ? employee.health_certificate_scan : `${process.env.REACT_APP_BACKEND_URL}${employee.health_certificate_scan}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
-                <FileText className="w-5 h-5 text-green-500" />
-                <span className="text-sm font-medium">Sağlamlıq arayışı</span>
+              <a href={employee.health_certificate_scan.startsWith('http') ? employee.health_certificate_scan : `${process.env.REACT_APP_BACKEND_URL}${employee.health_certificate_scan}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl hover:bg-slate-100">
+                <FileText className="w-5 h-5 text-green-500" /><span className="text-sm font-medium">Sağlamlıq arayışı</span>
               </a>
-            )}
-            {employee.document_scans?.length > 0 && employee.document_scans.map((doc, i) => (
-              <a key={i} href={doc.startsWith('http') ? doc : `${process.env.REACT_APP_BACKEND_URL}${doc}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
-                <FileText className="w-5 h-5 text-blue-500" />
-                <span className="text-sm font-medium">Sənəd {i+1}</span>
-              </a>
-            ))}
-            {!employee.criminal_record_scan && !employee.health_certificate_scan && (!employee.document_scans || employee.document_scans.length === 0) && (
-              <p className="col-span-full text-center text-slate-400 py-8">Sənəd yoxdur</p>
             )}
           </div>
+          {employee.certificate_scans?.length > 0 && (
+            <div>
+              <h4 className="font-semibold text-sm text-amber-800 mb-2">Sertifikatlar</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {employee.certificate_scans.map((cert, i) => (
+                  <a key={i} href={cert.startsWith('http') ? cert : `${process.env.REACT_APP_BACKEND_URL}${cert}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-amber-50 rounded-xl hover:bg-amber-100">
+                    <GraduationCap className="w-5 h-5 text-amber-500" /><span className="text-sm">Sertifikat {i+1}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+          {employee.document_scans?.length > 0 && (
+            <div>
+              <h4 className="font-semibold text-sm text-slate-700 mb-2">Digər sənədlər</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {employee.document_scans.map((doc, i) => (
+                  <a key={i} href={doc.startsWith('http') ? doc : `${process.env.REACT_APP_BACKEND_URL}${doc}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100">
+                    <FileText className="w-5 h-5 text-blue-500" /><span className="text-sm">Sənəd {i+1}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+          {!employee.criminal_record_scan && !employee.health_certificate_scan && (!employee.certificate_scans || employee.certificate_scans.length === 0) && (!employee.document_scans || employee.document_scans.length === 0) && (
+            <p className="text-center text-slate-400 py-8">Sənəd yoxdur</p>
+          )}
         </TabsContent>
       </Tabs>
     </div>
@@ -254,18 +310,24 @@ export default function HR() {
   const educationLevels = ['Ali', 'Orta-ixtisas', 'Orta', 'Natamam ali'];
   const maritalStatuses = ['Evli', 'Subay', 'Boşanmış'];
 
+  const emptyEducation = { education_level: '', education_institution: '', specialty: '', admission_date: '', graduation_date: '' };
+
   const initialFormData = {
     photo_url: '', first_name: '', last_name: '', father_name: '', birth_date: '', gender: '',
-    id_card_number: '', fin_code: '', education_level: '', education_institution: '',
-    specialty: '', admission_date: '', graduation_date: '',
+    id_card_number: '', fin_code: '',
+    educations: [{ ...emptyEducation }],
     marital_status: '', children_count: 0, children_birth_dates: [],
     registration_address: '', actual_address: '',
     company_phone: '', personal_phone: '', personal_email: '', corporate_email: '',
     emergency_contact_name: '', emergency_contact_relation: '', emergency_contact_phone: '',
-    department: '', position: '', contract_start_date: '', work_start_date: '',
-    contract_end_date: '', probation_end_date: '', main_vacation_days: 21,
-    additional_vacation_days: 0, gross_salary: 0, net_salary: 0, work_schedule: '',
-    criminal_record_scan: '', health_certificate_scan: '', document_scans: [],
+    department: '', position: '', contract_signing_date: '', work_start_date: '',
+    contract_end_date: '', contract_indefinite: false, probation_end_date: '',
+    contract_reminder: true, position_change: false,
+    salary_supplement: 0, bonuses: '', payment_system: '',
+    position_instructions_file: '', employment_contract_file: '', position_change_file: '',
+    main_vacation_days: 21, additional_vacation_days: 0,
+    gross_salary: 0, net_salary: 0, work_schedule: '',
+    criminal_record_scan: '', health_certificate_scan: '', certificate_scans: [], document_scans: [],
     status: 'Aktiv'
   };
 
@@ -292,7 +354,7 @@ export default function HR() {
     if (url) setFormData(prev => ({ ...prev, [field]: url }));
   };
 
-  const handleMultiFileUpload = async (e) => {
+  const handleMultiFileUpload = async (e, field = 'document_scans') => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
     const urls = [];
@@ -300,8 +362,12 @@ export default function HR() {
       const url = await uploadFile(file);
       if (url) urls.push(url);
     }
-    setFormData(prev => ({ ...prev, document_scans: [...(prev.document_scans || []), ...urls] }));
+    setFormData(prev => ({ ...prev, [field]: [...(prev[field] || []), ...urls] }));
   };
+
+  const addEducation = () => setFormData(prev => ({ ...prev, educations: [...(prev.educations || []), { ...emptyEducation }] }));
+  const removeEducation = (idx) => { if ((formData.educations || []).length <= 1) return; setFormData(prev => ({ ...prev, educations: prev.educations.filter((_, i) => i !== idx) })); };
+  const updateEducation = (idx, field, value) => { const eds = [...(formData.educations || [])]; eds[idx] = { ...eds[idx], [field]: value }; setFormData({ ...formData, educations: eds }); };
 
   const updateChildrenCount = (delta) => {
     const newCount = Math.max(0, (formData.children_count || 0) + delta);
@@ -353,17 +419,22 @@ export default function HR() {
   const handleEdit = (emp) => {
     setEditingEmployee(emp);
     const data = { ...initialFormData, ...emp };
-    // Populate first_name/last_name from full_name if not set
     if (!data.first_name && data.full_name) {
       const parts = data.full_name.split(' ');
       data.first_name = parts[0] || '';
       data.last_name = parts.slice(1).join(' ') || '';
     }
-    // Ensure children_birth_dates array matches count
     if (!data.children_birth_dates) data.children_birth_dates = [];
     while (data.children_birth_dates.length < (data.children_count || 0)) data.children_birth_dates.push('');
-    // Backward compat for email fields
     if (!data.personal_email && data.email) data.personal_email = data.email;
+    // Backward compat: migrate old single education to educations array
+    if (!data.educations || data.educations.length === 0) {
+      data.educations = [{ education_level: data.education_level || '', education_institution: data.education_institution || '', specialty: data.specialty || '', admission_date: data.admission_date || '', graduation_date: data.graduation_date || '' }];
+    }
+    // Backward compat: contract_start_date → contract_signing_date
+    if (!data.contract_signing_date && data.contract_start_date) data.contract_signing_date = data.contract_start_date;
+    if (!data.certificate_scans) data.certificate_scans = [];
+    if (!data.document_scans) data.document_scans = [];
     setFormData(data);
     setActiveTab('personal');
     setShowModal(true);
@@ -611,21 +682,34 @@ export default function HR() {
 
                 {/* TƏHSİL TAB */}
                 <TabsContent value="education" className="space-y-4" data-testid="education-tab">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs">Təhsil səviyyəsi</Label>
-                      <Select value={formData.education_level} onValueChange={(v) => setFormData({...formData, education_level: v})}>
-                        <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
-                        <SelectContent>{educationLevels.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
-                      </Select>
+                  {(formData.educations || []).map((edu, ei) => (
+                    <div key={ei} className="p-4 bg-slate-50 rounded-lg space-y-3 relative">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-sm text-[#3D4F6F]">Təhsil {ei + 1}</h4>
+                        {(formData.educations || []).length > 1 && (
+                          <Button type="button" variant="ghost" size="sm" onClick={() => removeEducation(ei)} data-testid={`remove-education-${ei}`}><X className="w-4 h-4 text-red-500" /></Button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs">Təhsil səviyyəsi</Label>
+                          <Select value={edu.education_level} onValueChange={(v) => updateEducation(ei, 'education_level', v)}>
+                            <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                            <SelectContent>{educationLevels.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                        <div><Label className="text-xs">Təhsil müəssisəsi</Label><Input value={edu.education_institution} onChange={(e) => updateEducation(ei, 'education_institution', e.target.value)} className="text-sm" placeholder="Universitet / Kollec" /></div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div><Label className="text-xs">İxtisas</Label><Input value={edu.specialty} onChange={(e) => updateEducation(ei, 'specialty', e.target.value)} className="text-sm" placeholder="İxtisas adı" /></div>
+                        <div><Label className="text-xs">Qəbul tarixi</Label><Input type="date" value={edu.admission_date} onChange={(e) => updateEducation(ei, 'admission_date', e.target.value)} className="text-sm" /></div>
+                        <div><Label className="text-xs">Bitirdiyi tarix</Label><Input type="date" value={edu.graduation_date} onChange={(e) => updateEducation(ei, 'graduation_date', e.target.value)} className="text-sm" /></div>
+                      </div>
                     </div>
-                    <div><Label className="text-xs">Təhsil müəssisəsi</Label><Input value={formData.education_institution} onChange={(e) => setFormData({...formData, education_institution: e.target.value})} className="text-sm" placeholder="Universitet / Kollec" data-testid="education-institution" /></div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div><Label className="text-xs">İxtisas</Label><Input value={formData.specialty} onChange={(e) => setFormData({...formData, specialty: e.target.value})} className="text-sm" placeholder="İxtisas adı" data-testid="specialty-input" /></div>
-                    <div><Label className="text-xs">Qəbul tarixi</Label><Input type="date" value={formData.admission_date} onChange={(e) => setFormData({...formData, admission_date: e.target.value})} className="text-sm" /></div>
-                    <div><Label className="text-xs">Bitirdiyi tarix</Label><Input type="date" value={formData.graduation_date} onChange={(e) => setFormData({...formData, graduation_date: e.target.value})} className="text-sm" /></div>
-                  </div>
+                  ))}
+                  <Button type="button" variant="outline" size="sm" onClick={addEducation} className="w-full border-dashed" data-testid="add-education-btn">
+                    <PlusCircle className="w-4 h-4 mr-2 text-green-500" /> Təhsil əlavə et
+                  </Button>
                 </TabsContent>
 
                 {/* ƏLAQƏ TAB */}
@@ -659,19 +743,82 @@ export default function HR() {
                     </div>
                     <div><Label className="text-xs">Vəzifə *</Label><Input value={formData.position} onChange={(e) => setFormData({...formData, position: e.target.value})} required className="text-sm" /></div>
                   </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div><Label className="text-xs">Müqavilənin bağlanma tarixi</Label><Input type="date" value={formData.contract_signing_date} onChange={(e) => setFormData({...formData, contract_signing_date: e.target.value})} className="text-sm" data-testid="contract-signing-date" /></div>
+                    <div><Label className="text-xs">İşə başlama tarixi</Label><Input type="date" value={formData.work_start_date} onChange={(e) => setFormData({...formData, work_start_date: e.target.value})} className="text-sm" data-testid="work-start-date" /></div>
+                    <div>
+                      <Label className="text-xs">Müqavilənin bitmə tarixi</Label>
+                      <div className="flex items-center gap-2">
+                        <Input type="date" value={formData.contract_indefinite ? '' : formData.contract_end_date} onChange={(e) => setFormData({...formData, contract_end_date: e.target.value})} className="text-sm flex-1" disabled={formData.contract_indefinite} />
+                        <label className="flex items-center gap-1 cursor-pointer whitespace-nowrap">
+                          <input type="checkbox" checked={formData.contract_indefinite || false} onChange={(e) => setFormData({...formData, contract_indefinite: e.target.checked, contract_end_date: e.target.checked ? '' : formData.contract_end_date})} className="rounded" data-testid="contract-indefinite" />
+                          <span className="text-xs text-slate-600">Müddətsiz</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div><Label className="text-xs">Müqavilə başlama</Label><Input type="date" value={formData.contract_start_date} onChange={(e) => setFormData({...formData, contract_start_date: e.target.value})} className="text-sm" /></div>
-                    <div><Label className="text-xs">Sınaq müddəti bitmə</Label><Input type="date" value={formData.probation_end_date} onChange={(e) => setFormData({...formData, probation_end_date: e.target.value})} className="text-sm" /></div>
+                    <div><Label className="text-xs">Sınaq müddətinin bitmə tarixi</Label><Input type="date" value={formData.probation_end_date} onChange={(e) => setFormData({...formData, probation_end_date: e.target.value})} className="text-sm" /></div>
+                    <div className="flex items-end pb-1">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={formData.contract_reminder || false} onChange={(e) => setFormData({...formData, contract_reminder: e.target.checked})} className="rounded" data-testid="contract-reminder" />
+                        <span className="text-xs text-slate-600">Xatırlatma (bitməsinə 1 ay qalmış)</span>
+                      </label>
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div><Label className="text-xs">Əsas məzuniyyət (gün)</Label><Input type="number" value={formData.main_vacation_days} onChange={(e) => setFormData({...formData, main_vacation_days: parseInt(e.target.value) || 0})} className="text-sm" /></div>
-                    <div><Label className="text-xs">Əlavə məzuniyyət (gün)</Label><Input type="number" value={formData.additional_vacation_days} onChange={(e) => setFormData({...formData, additional_vacation_days: parseInt(e.target.value) || 0})} className="text-sm" /></div>
+                    <div>
+                      <Label className="text-xs">Vəzifə dəyişikliyi</Label>
+                      <Select value={formData.position_change ? 'Bəli' : 'Xeyr'} onValueChange={(v) => setFormData({...formData, position_change: v === 'Bəli'})}>
+                        <SelectTrigger className="text-sm" data-testid="position-change-select"><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="Bəli">Bəli</SelectItem><SelectItem value="Xeyr">Xeyr</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Əməyin ödənilməsi sistemi</Label>
+                      <Select value={formData.payment_system} onValueChange={(v) => setFormData({...formData, payment_system: v})}>
+                        <SelectTrigger className="text-sm" data-testid="payment-system-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                        <SelectContent><SelectItem value="Vaxtamuzd">Vaxtamuzd</SelectItem><SelectItem value="İşəmuzd">İşəmuzd</SelectItem></SelectContent>
+                      </Select>
+                    </div>
                     <div>
                       <Label className="text-xs">Status</Label>
                       <Select value={formData.status} onValueChange={(v) => setFormData({...formData, status: v})}>
                         <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>{statuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                       </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div><Label className="text-xs">Əsas məzuniyyət (gün)</Label><Input type="number" value={formData.main_vacation_days} onChange={(e) => setFormData({...formData, main_vacation_days: parseInt(e.target.value) || 0})} className="text-sm" /></div>
+                    <div><Label className="text-xs">Əlavə məzuniyyət (gün)</Label><Input type="number" value={formData.additional_vacation_days} onChange={(e) => setFormData({...formData, additional_vacation_days: parseInt(e.target.value) || 0})} className="text-sm" /></div>
+                    <div><Label className="text-xs">İş qrafiki</Label><Input value={formData.work_schedule} onChange={(e) => setFormData({...formData, work_schedule: e.target.value})} placeholder="Məs: 09:00-18:00" className="text-sm" /></div>
+                  </div>
+                  {/* Fayl yükləmələr */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3 bg-slate-50 rounded-lg space-y-2">
+                      <Label className="text-xs font-semibold">Vəzifə təlimatları</Label>
+                      {formData.position_instructions_file ? (
+                        <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-green-500" /><span className="text-xs text-green-600 flex-1">Yüklənib</span><Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, position_instructions_file: ''})}><X className="w-3.5 h-3.5 text-red-500" /></Button></div>
+                      ) : (
+                        <label className="cursor-pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={(e) => handleFileUpload(e, 'position_instructions_file')} className="hidden" data-testid="position-instructions-upload" /><span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-100 rounded-lg border border-slate-200"><Upload className="w-3.5 h-3.5" /> Fayl seç</span></label>
+                      )}
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-lg space-y-2">
+                      <Label className="text-xs font-semibold">Əmək müqaviləsi</Label>
+                      {formData.employment_contract_file ? (
+                        <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-green-500" /><span className="text-xs text-green-600 flex-1">Yüklənib</span><Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, employment_contract_file: ''})}><X className="w-3.5 h-3.5 text-red-500" /></Button></div>
+                      ) : (
+                        <label className="cursor-pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={(e) => handleFileUpload(e, 'employment_contract_file')} className="hidden" data-testid="employment-contract-upload" /><span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-100 rounded-lg border border-slate-200"><Upload className="w-3.5 h-3.5" /> Fayl seç</span></label>
+                      )}
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-lg space-y-2">
+                      <Label className="text-xs font-semibold">Vəzifə dəyişikliyi faylı</Label>
+                      {formData.position_change_file ? (
+                        <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-green-500" /><span className="text-xs text-green-600 flex-1">Yüklənib</span><Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, position_change_file: ''})}><X className="w-3.5 h-3.5 text-red-500" /></Button></div>
+                      ) : (
+                        <label className="cursor-pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={(e) => handleFileUpload(e, 'position_change_file')} className="hidden" data-testid="position-change-upload" /><span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-100 rounded-lg border border-slate-200"><Upload className="w-3.5 h-3.5" /> Fayl seç</span></label>
+                      )}
                     </div>
                   </div>
                 </TabsContent>
@@ -682,50 +829,54 @@ export default function HR() {
                     <div><Label className="text-xs">Gross əmək haqqı (AZN)</Label><Input type="number" value={formData.gross_salary} onChange={(e) => setFormData({...formData, gross_salary: parseFloat(e.target.value) || 0})} className="text-sm" /></div>
                     <div><Label className="text-xs">Net əmək haqqı (AZN)</Label><Input type="number" value={formData.net_salary} onChange={(e) => setFormData({...formData, net_salary: parseFloat(e.target.value) || 0})} className="text-sm" /></div>
                   </div>
-                  <div><Label className="text-xs">İş qrafiki</Label><Input value={formData.work_schedule} onChange={(e) => setFormData({...formData, work_schedule: e.target.value})} placeholder="Məs: 09:00-18:00" className="text-sm" /></div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div><Label className="text-xs">Əmək haqqına əlavə (AZN)</Label><Input type="number" value={formData.salary_supplement} onChange={(e) => setFormData({...formData, salary_supplement: parseFloat(e.target.value) || 0})} className="text-sm" data-testid="salary-supplement" /></div>
+                    <div><Label className="text-xs">Mükafatlar</Label><Input value={formData.bonuses} onChange={(e) => setFormData({...formData, bonuses: e.target.value})} placeholder="Mükafat məlumatları" className="text-sm" data-testid="bonuses-input" /></div>
+                  </div>
                 </TabsContent>
 
                 {/* SƏNƏDLƏR TAB */}
                 <TabsContent value="documents" className="space-y-4" data-testid="documents-tab">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Məhkumluq skanı */}
                     <div className="p-4 bg-slate-50 rounded-lg space-y-2">
                       <Label className="text-xs font-semibold">Məhkumluq skanı</Label>
                       {formData.criminal_record_scan ? (
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-green-500" />
-                          <span className="text-xs text-green-600 truncate flex-1">Yüklənib</span>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, criminal_record_scan: ''})}><X className="w-3.5 h-3.5 text-red-500" /></Button>
-                        </div>
+                        <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-green-500" /><span className="text-xs text-green-600 truncate flex-1">Yüklənib</span><Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, criminal_record_scan: ''})}><X className="w-3.5 h-3.5 text-red-500" /></Button></div>
                       ) : (
-                        <label className="cursor-pointer">
-                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, 'criminal_record_scan')} className="hidden" data-testid="criminal-record-upload" />
-                          <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors">
-                            <Upload className="w-3.5 h-3.5" /> Fayl seç
-                          </span>
-                        </label>
+                        <label className="cursor-pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, 'criminal_record_scan')} className="hidden" data-testid="criminal-record-upload" /><span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-100 rounded-lg border border-slate-200"><Upload className="w-3.5 h-3.5" /> Fayl seç</span></label>
                       )}
                     </div>
-                    {/* Sağlamlıq arayışı */}
                     <div className="p-4 bg-slate-50 rounded-lg space-y-2">
                       <Label className="text-xs font-semibold">Sağlamlıq arayışı skanı</Label>
                       {formData.health_certificate_scan ? (
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-green-500" />
-                          <span className="text-xs text-green-600 truncate flex-1">Yüklənib</span>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, health_certificate_scan: ''})}><X className="w-3.5 h-3.5 text-red-500" /></Button>
-                        </div>
+                        <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-green-500" /><span className="text-xs text-green-600 truncate flex-1">Yüklənib</span><Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, health_certificate_scan: ''})}><X className="w-3.5 h-3.5 text-red-500" /></Button></div>
                       ) : (
-                        <label className="cursor-pointer">
-                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, 'health_certificate_scan')} className="hidden" data-testid="health-cert-upload" />
-                          <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors">
-                            <Upload className="w-3.5 h-3.5" /> Fayl seç
-                          </span>
-                        </label>
+                        <label className="cursor-pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, 'health_certificate_scan')} className="hidden" data-testid="health-cert-upload" /><span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-100 rounded-lg border border-slate-200"><Upload className="w-3.5 h-3.5" /> Fayl seç</span></label>
                       )}
                     </div>
                   </div>
-                  {/* Sənədlərin skanı (çoxlu) */}
+                  {/* Sertifikat skanları */}
+                  <div className="p-4 bg-amber-50 rounded-lg space-y-3">
+                    <Label className="text-xs font-semibold text-amber-800">Sertifikatlar</Label>
+                    {formData.certificate_scans?.length > 0 && (
+                      <div className="space-y-1">
+                        {formData.certificate_scans.map((cert, i) => (
+                          <div key={i} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2">
+                            <GraduationCap className="w-4 h-4 text-amber-500" />
+                            <span className="text-xs truncate flex-1">Sertifikat {i+1}</span>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, certificate_scans: formData.certificate_scans.filter((_, j) => j !== i)})}><X className="w-3.5 h-3.5 text-red-500" /></Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <label className="cursor-pointer">
+                      <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" multiple onChange={(e) => handleMultiFileUpload(e, 'certificate_scans')} className="hidden" data-testid="certificate-scans-upload" />
+                      <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white hover:bg-amber-100 rounded-lg border border-amber-200 transition-colors">
+                        <Upload className="w-3.5 h-3.5" /> Sertifikat əlavə et
+                      </span>
+                    </label>
+                  </div>
+                  {/* Digər sənədlər */}
                   <div className="p-4 bg-slate-50 rounded-lg space-y-3">
                     <Label className="text-xs font-semibold">Digər sənədlər</Label>
                     {formData.document_scans?.length > 0 && (
@@ -740,7 +891,7 @@ export default function HR() {
                       </div>
                     )}
                     <label className="cursor-pointer">
-                      <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" multiple onChange={handleMultiFileUpload} className="hidden" data-testid="document-scans-upload" />
+                      <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" multiple onChange={(e) => handleMultiFileUpload(e, 'document_scans')} className="hidden" data-testid="document-scans-upload" />
                       <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors">
                         <Upload className="w-3.5 h-3.5" /> Sənəd əlavə et
                       </span>
