@@ -1,5 +1,5 @@
 import { useState, createContext, useContext } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Building2, 
@@ -10,25 +10,56 @@ import {
   MessageSquare,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   LogOut,
   Menu,
   X,
   TrendingUp,
   Settings,
   Bell,
-  FileCheck
+  FileCheck,
+  Megaphone,
+  FolderKanban,
+  Users2,
+  BarChart3,
+  Presentation,
+  FolderOpen,
+  StickyNote,
+  Database,
+  History,
+  MessageCircle,
+  Lightbulb,
+  Send
 } from 'lucide-react';
 
+const salesSubItems = [
+  { path: '/sales/company-database', label: 'Şirkət bazası', icon: Database },
+  { path: '/sales/members', label: 'Üzvlər', icon: Users2 },
+  { path: '/sales/obligations', label: 'Öhdəliklər', icon: FileCheck },
+  { path: '/sales/obligation-history', label: 'Öhdəlik tarixçəsi', icon: History },
+  { path: '/sales/membership-forum', label: 'Üzvlük forumu', icon: MessageCircle },
+  { path: '/sales/proposals', label: 'Təkliflər', icon: Lightbulb },
+  { path: '/sales/invitations', label: 'Dəvətlər', icon: Send },
+];
+
 const menuItems = [
-  { path: '/dashboard', label: 'İdarə Paneli', icon: LayoutDashboard },
   { path: '/companies', label: 'Şirkət Məlumatları', icon: Building2 },
-  { path: '/hr', label: 'İnsan Resurları', icon: UserCog },
+  { path: '/hr', label: 'İnsan Resursları', icon: UserCog },
+  { path: '/sales', label: 'Satış', icon: TrendingUp, children: salesSubItems },
+  { path: '/marketing', label: 'Marketinq', icon: Megaphone },
+  { path: '/projects', label: 'Layihələr', icon: FolderKanban },
+  { path: '/organization', label: 'Təşkilatçılıq', icon: Users2 },
   { path: '/finance', label: 'Maliyyə', icon: Wallet },
-  { path: '/sales', label: 'Satış', icon: TrendingUp },
-  { path: '/obligations', label: 'Öhdəliklər', icon: FileCheck },
+  { path: '/reports', label: 'Hesabatlar', icon: BarChart3 },
   { path: '/meetings', label: 'Görüşlər', icon: Calendar },
+  { path: '/assembly', label: 'İclas', icon: Presentation },
   { path: '/tasks', label: 'Tapşırıqlar', icon: ClipboardList },
   { path: '/messages', label: 'Mesajlar', icon: MessageSquare },
+  { path: '/files', label: 'Fayllar', icon: FolderOpen },
+  { path: '/notes', label: 'Qeydlər', icon: StickyNote },
+];
+
+const bottomItems = [
   { path: '/notifications', label: 'Bildirişlər', icon: Bell },
   { path: '/settings', label: 'Tənzimləmələr', icon: Settings },
 ];
@@ -72,6 +103,105 @@ export const SidebarProvider = ({ children }) => {
     }}>
       {children}
     </SidebarContext.Provider>
+  );
+};
+
+const MenuLink = ({ item, collapsed, mobileOpen, onClick }) => {
+  return (
+    <NavLink
+      to={item.path}
+      onClick={onClick}
+      className={({ isActive }) => `
+        flex items-center
+        px-4 lg:px-5 py-2.5 lg:py-3
+        mx-2 lg:mx-3 my-0.5
+        rounded-xl
+        text-sm
+        font-medium
+        transition-all duration-200
+        ${isActive 
+          ? 'bg-[#9ACD32] text-[#3D4F6F] font-bold' 
+          : 'text-white/75 hover:bg-white/10 hover:text-[#9ACD32]'
+        }
+        ${collapsed && !mobileOpen ? 'lg:justify-center lg:px-3' : ''}
+      `}
+      data-testid={`menu-${item.path.split('/').filter(Boolean).join('-')}`}
+    >
+      <item.icon className={`w-[18px] h-[18px] flex-shrink-0 ${collapsed && !mobileOpen ? 'lg:mr-0' : 'mr-3'}`} />
+      {(!collapsed || mobileOpen) && <span>{item.label}</span>}
+    </NavLink>
+  );
+};
+
+const ExpandableMenu = ({ item, collapsed, mobileOpen, onClick }) => {
+  const location = useLocation();
+  const isChildActive = item.children?.some(child => location.pathname === child.path);
+  const [expanded, setExpanded] = useState(isChildActive);
+
+  const handleToggle = (e) => {
+    e.preventDefault();
+    if (collapsed && !mobileOpen) return;
+    setExpanded(prev => !prev);
+  };
+
+  return (
+    <div>
+      <button
+        onClick={handleToggle}
+        className={`
+          flex items-center w-full
+          px-4 lg:px-5 py-2.5 lg:py-3
+          mx-2 lg:mx-3 my-0.5
+          rounded-xl
+          text-sm
+          font-medium
+          transition-all duration-200
+          ${isChildActive 
+            ? 'bg-white/15 text-[#9ACD32]' 
+            : 'text-white/75 hover:bg-white/10 hover:text-[#9ACD32]'
+          }
+          ${collapsed && !mobileOpen ? 'lg:justify-center lg:px-3' : ''}
+        `}
+        style={{ width: 'calc(100% - 1rem)', marginLeft: '0.5rem', marginRight: '0.5rem' }}
+        data-testid={`menu-${item.path.slice(1)}`}
+      >
+        <item.icon className={`w-[18px] h-[18px] flex-shrink-0 ${collapsed && !mobileOpen ? 'lg:mr-0' : 'mr-3'}`} />
+        {(!collapsed || mobileOpen) && (
+          <>
+            <span className="flex-1 text-left">{item.label}</span>
+            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+          </>
+        )}
+      </button>
+      {expanded && (!collapsed || mobileOpen) && (
+        <div className="ml-4 lg:ml-6 border-l border-white/10 pl-2 mt-1 mb-1">
+          {item.children.map(child => (
+            <NavLink
+              key={child.path}
+              to={child.path}
+              onClick={onClick}
+              className={({ isActive }) => `
+                flex items-center
+                px-3 py-2
+                mx-2 my-0.5
+                rounded-lg
+                text-xs lg:text-sm
+                font-medium
+                transition-all duration-200
+                ${isActive 
+                  ? 'bg-[#9ACD32] text-[#3D4F6F] font-bold' 
+                  : 'text-white/65 hover:bg-white/10 hover:text-[#9ACD32]'
+                }
+              `}
+              data-testid={`menu-${child.path.split('/').filter(Boolean).join('-')}`}
+            >
+              <child.icon className="w-4 h-4 flex-shrink-0 mr-2.5" />
+              <span>{child.label}</span>
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -120,7 +250,7 @@ export const Sidebar = () => {
         data-testid="sidebar"
       >
         {/* Logo Section */}
-        <div className="p-4 lg:p-6 border-b border-white/10">
+        <div className="p-4 lg:p-5 border-b border-white/10">
           <div className="flex items-center justify-between">
             {(!collapsed || mobileOpen) && (
               <img 
@@ -156,31 +286,49 @@ export const Sidebar = () => {
         </div>
 
         {/* Menu Items */}
-        <nav className="flex-1 py-4 lg:py-6 overflow-y-auto">
-          {menuItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              onClick={handleNavClick}
-              className={({ isActive }) => `
-                flex items-center
-                px-4 lg:px-5 py-3 lg:py-3.5
-                mx-2 lg:mx-3 my-1
-                rounded-xl
-                text-sm lg:text-base
-                font-medium
-                transition-all duration-200
-                ${isActive 
-                  ? 'bg-[#9ACD32] text-[#3D4F6F] font-bold' 
-                  : 'text-white/75 hover:bg-white/10 hover:text-[#9ACD32]'
-                }
-                ${collapsed && !mobileOpen ? 'lg:justify-center lg:px-3' : ''}
-              `}
-              data-testid={`menu-${item.path.slice(1)}`}
-            >
-              <item.icon className={`w-5 h-5 flex-shrink-0 ${collapsed && !mobileOpen ? 'lg:mr-0' : 'mr-3'}`} />
-              {(!collapsed || mobileOpen) && <span>{item.label}</span>}
-            </NavLink>
+        <nav className="flex-1 py-3 lg:py-4 overflow-y-auto scrollbar-thin">
+          {/* Dashboard link */}
+          <MenuLink 
+            item={{ path: '/dashboard', label: 'İdarə Paneli', icon: LayoutDashboard }} 
+            collapsed={collapsed} 
+            mobileOpen={mobileOpen} 
+            onClick={handleNavClick} 
+          />
+          
+          <div className="my-2 mx-4 border-t border-white/8" />
+
+          {/* Main menu items */}
+          {menuItems.map((item) => 
+            item.children ? (
+              <ExpandableMenu 
+                key={item.path} 
+                item={item} 
+                collapsed={collapsed} 
+                mobileOpen={mobileOpen} 
+                onClick={handleNavClick} 
+              />
+            ) : (
+              <MenuLink 
+                key={item.path} 
+                item={item} 
+                collapsed={collapsed} 
+                mobileOpen={mobileOpen} 
+                onClick={handleNavClick} 
+              />
+            )
+          )}
+
+          <div className="my-2 mx-4 border-t border-white/8" />
+
+          {/* Bottom utility items */}
+          {bottomItems.map((item) => (
+            <MenuLink 
+              key={item.path} 
+              item={item} 
+              collapsed={collapsed} 
+              mobileOpen={mobileOpen} 
+              onClick={handleNavClick} 
+            />
           ))}
         </nav>
 

@@ -12,7 +12,20 @@ import Messages from "./pages/Messages";
 import SettingsPage from "./pages/Settings";
 import Notifications from "./pages/Notifications";
 import Obligations from "./pages/Obligations";
+import Members from "./pages/Members";
 import DashboardLayout from "./layouts/DashboardLayout";
+import Marketing from "./pages/Marketing";
+import Projects from "./pages/Projects";
+import Organization from "./pages/Organization";
+import Reports from "./pages/Reports";
+import Assembly from "./pages/Assembly";
+import Files from "./pages/Files";
+import Notes from "./pages/Notes";
+import CompanyDatabase from "./pages/CompanyDatabase";
+import ObligationHistory from "./pages/ObligationHistory";
+import MembershipForum from "./pages/MembershipForum";
+import Proposals from "./pages/Proposals";
+import Invitations from "./pages/Invitations";
 
 function App() {
   return (
@@ -30,12 +43,25 @@ function App() {
             <Route path="hr" element={<HR />} />
             <Route path="finance" element={<Finance />} />
             <Route path="sales" element={<Sales />} />
+            <Route path="sales/company-database" element={<CompanyDatabase />} />
+            <Route path="sales/members" element={<Members />} />
+            <Route path="sales/obligations" element={<Obligations />} />
+            <Route path="sales/obligation-history" element={<ObligationHistory />} />
+            <Route path="sales/membership-forum" element={<MembershipForum />} />
+            <Route path="sales/proposals" element={<Proposals />} />
+            <Route path="sales/invitations" element={<Invitations />} />
+            <Route path="marketing" element={<Marketing />} />
+            <Route path="projects" element={<Projects />} />
+            <Route path="organization" element={<Organization />} />
+            <Route path="reports" element={<Reports />} />
             <Route path="meetings" element={<Meetings />} />
+            <Route path="assembly" element={<Assembly />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="messages" element={<Messages />} />
+            <Route path="files" element={<Files />} />
+            <Route path="notes" element={<Notes />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="notifications" element={<Notifications />} />
-            <Route path="obligations" element={<Obligations />} />
           </Route>
           
           {/* Redirect unknown routes */}

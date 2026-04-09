@@ -1,0 +1,125 @@
+{
+  "summary": "Iteration 13 - Sidebar Menu Restructure Testing: All frontend features verified working (100%). Sidebar menu order is correct with İdarə Paneli first, followed by main menu items, and Bildirişlər/Tənzimləmələr at bottom. Satış expandable menu works with chevron rotation and 7 submenu items. All ComingSoon placeholder pages load correctly. Existing pages (Members, Obligations) work at new /sales/* routes. Active state highlighting works for submenu items.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+
+  "passed_tests": [
+    "Sidebar menu order: İdarə Paneli first (data-testid=menu-dashboard)",
+    "Sidebar menu order: Şirkət Məlumatları (data-testid=menu-companies)",
+    "Sidebar menu order: İnsan Resursları (data-testid=menu-hr)",
+    "Sidebar menu order: Satış with expandable submenu (data-testid=menu-sales)",
+    "Sidebar menu order: Marketinq (data-testid=menu-marketing)",
+    "Sidebar menu order: Layihələr (data-testid=menu-projects)",
+    "Sidebar menu order: Təşkilatçılıq (data-testid=menu-organization)",
+    "Sidebar menu order: Maliyyə (data-testid=menu-finance)",
+    "Sidebar menu order: Hesabatlar (data-testid=menu-reports)",
+    "Sidebar menu order: Görüşlər (data-testid=menu-meetings)",
+    "Sidebar menu order: İclas (data-testid=menu-assembly)",
+    "Sidebar menu order: Tapşırıqlar (data-testid=menu-tasks)",
+    "Sidebar menu order: Mesajlar (data-testid=menu-messages)",
+    "Sidebar menu order: Fayllar (data-testid=menu-files)",
+    "Sidebar menu order: Qeydlər (data-testid=menu-notes)",
+    "Sidebar bottom items: Bildirişlər (data-testid=menu-notifications)",
+    "Sidebar bottom items: Tənzimləmələr (data-testid=menu-settings)",
+    "Satış menu is expandable/collapsible with chevron icon",
+    "Satış chevron rotates 180° when expanded",
+    "Satış chevron returns to original position when collapsed",
+    "Satış submenu item 1: Şirkət bazası (data-testid=menu-sales-company-database)",
+    "Satış submenu item 2: Üzvlər (data-testid=menu-sales-members)",
+    "Satış submenu item 3: Öhdəliklər (data-testid=menu-sales-obligations)",
+    "Satış submenu item 4: Öhdəlik tarixçəsi (data-testid=menu-sales-obligation-history)",
+    "Satış submenu item 5: Üzvlük forumu (data-testid=menu-sales-membership-forum)",
+    "Satış submenu item 6: Təkliflər (data-testid=menu-sales-proposals)",
+    "Satış submenu item 7: Dəvətlər (data-testid=menu-sales-invitations)",
+    "Navigation: /sales/company-database shows ComingSoon with title 'Şirkət bazası'",
+    "Navigation: /sales/members shows actual Members page (Üzvlər)",
+    "Navigation: /sales/obligations shows actual Obligations page (Öhdəliklər)",
+    "Navigation: /sales/obligation-history shows ComingSoon with title 'Öhdəlik tarixçəsi'",
+    "Navigation: /sales/membership-forum shows ComingSoon with title 'Üzvlük forumu'",
+    "Navigation: /sales/proposals shows ComingSoon with title 'Təkliflər'",
+    "Navigation: /sales/invitations shows ComingSoon with title 'Dəvətlər'",
+    "Navigation: /marketing shows ComingSoon with title 'Marketinq'",
+    "Navigation: /projects shows ComingSoon with title 'Layihələr'",
+    "Navigation: /organization shows ComingSoon with title 'Təşkilatçılıq'",
+    "Navigation: /reports shows ComingSoon with title 'Hesabatlar'",
+    "Navigation: /assembly shows ComingSoon with title 'İclas'",
+    "Navigation: /files shows ComingSoon with title 'Fayllar'",
+    "Navigation: /notes shows ComingSoon with title 'Qeydlər'",
+    "Existing page: /companies shows Şirkət Məlumatları",
+    "Existing page: /hr shows Insan Resurları",
+    "Existing page: /finance shows Maliyyə",
+    "Existing page: /meetings shows Görüşlər",
+    "Existing page: /tasks shows Tapşırıqlar",
+    "Existing page: /messages shows Mesajlar",
+    "Sidebar active state: Submenu item highlighted when active (bg-[#9ACD32])",
+    "Sidebar active state: Parent Satış menu highlighted when child is active (text-[#9ACD32])",
+    "Sidebar collapse/expand: Toggle button works (data-testid=sidebar-toggle-btn)",
+    "Sidebar collapse: Width changes to lg:w-20",
+    "Sidebar expand: Width changes to lg:w-[280px]"
+  ],
+
+  "failed_tests": [],
+
+  "test_report_links": [],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [],
+
+  "updated_files": [],
+
+  "success_rate": {
+    "backend": "N/A (frontend only testing)",
+    "frontend": "100% (all 52 tests passed)"
+  },
+
+  "test_credentials": {
+    "email": "settings@marsol.az",
+    "password": "marsol123",
+    "role": "admin"
+  },
+
+  "seed_data_creation": "No seed data created - used existing data",
+
+  "retest_needed": false,
+
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Iteration 13 verified sidebar menu restructure: 1) Menu order is İdarə Paneli first, then main items (Şirkət Məlumatları through Qeydlər), then Bildirişlər/Tənzimləmələr at bottom. 2) Satış has expandable submenu with 7 items using ChevronDown icon that rotates 180° when expanded. 3) New ComingSoon pages created for: Marketinq, Layihələr, Təşkilatçılıq, Hesabatlar, İclas, Fayllar, Qeydlər, Şirkət bazası, Öhdəlik tarixçəsi, Üzvlük forumu, Təkliflər, Dəvətlər. 4) Members and Obligations pages moved to /sales/members and /sales/obligations routes. 5) All data-testid attributes follow pattern menu-{path-segments-joined-by-dash}.",
+
+  "features_verified": {
+    "sidebar_menu_order": {
+      "status": "WORKING",
+      "details": "Menu order correct: İdarə Paneli → Şirkət Məlumatları → İnsan Resursları → Satış → Marketinq → Layihələr → Təşkilatçılıq → Maliyyə → Hesabatlar → Görüşlər → İclas → Tapşırıqlar → Mesajlar → Fayllar → Qeydlər → [separator] → Bildirişlər → Tənzimləmələr"
+    },
+    "sales_expandable_menu": {
+      "status": "WORKING",
+      "details": "Satış menu expands/collapses with chevron icon rotation. Contains 7 submenu items: Şirkət bazası, Üzvlər, Öhdəliklər, Öhdəlik tarixçəsi, Üzvlük forumu, Təkliflər, Dəvətlər"
+    },
+    "coming_soon_pages": {
+      "status": "WORKING",
+      "details": "All 12 new ComingSoon placeholder pages load correctly with proper titles"
+    },
+    "existing_pages_at_new_routes": {
+      "status": "WORKING",
+      "details": "Members page at /sales/members and Obligations page at /sales/obligations work correctly"
+    },
+    "active_state_highlighting": {
+      "status": "WORKING",
+      "details": "Submenu items show active state (bg-[#9ACD32]) and parent Satış shows highlighted state (text-[#9ACD32]) when child is active"
+    },
+    "sidebar_collapse_expand": {
+      "status": "WORKING",
+      "details": "Desktop sidebar collapse/expand toggle works correctly (lg:w-20 collapsed, lg:w-[280px] expanded)"
+    }
+  }
+}
