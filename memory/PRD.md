@@ -8,21 +8,17 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 ### 1. Şirkət Məlumatları ✅
 - 6 tab forma: Şirkət, Sahibkar, Əlaqədar şəxs, Müqavilə, Ödəniş, Əlavə
 - Çoxlu sahibkar, çoxlu müqavilə, fayl yükləmə
-- Müqaviləyə uyğun ödəniş (hər müqavilə ayrı ödəniş + ümumi yekun)
+- Müqaviləyə uyğun ödəniş + ümumi yekun
 - Referans mənbəsi: Şirkət/Şəxs/Media/Digər + şərti inputlar
 - Region Select, Əlaqədar şəxs vəzifəsi Select, Alt sektor asılı dropdown
 
 ### 2. İnsan Resurları ✅ (YENİLƏNDİ - 2026-04-09)
 - 6 tab forma: Şəxsi, Təhsil, Əlaqə, Müqavilə, Əmək haqqı, Sənədlər
-- 6 tab detail view: eyni tablar InfoCard komponentləri ilə
-- Əməkdaş ID avtomatik (E001, E002...)
-- Profil şəkli (3x4) fayl yükləmə, avatar kimi göstərilir
-- Ad və Soyad ayrı inputlar (geriyə uyğunluq: full_name avtomatik hesablanır)
-- Təhsil müəssisəsi, İxtisas, Qəbul tarixi, Bitirdiyi tarix
-- Uşaqların sayı +/- düymələr + hər uşağın doğum tarixi
-- Şəxsi Email + Korporativ Email (ayrı)
-- Məhkumluq skanı, Sağlamlıq arayışı, Sənədlər skanı (çoxlu fayl)
-- Qeydiyyat ünvanı
+- **Şəxsi**: Profil şəkli (3x4), Ad/Soyad ayrı, Uşaq sayı +/- düymə + doğum tarixləri
+- **Təhsil**: Çoxlu təhsil (+/- ilə artırma/azaltma) — hər biri: səviyyə, müəssisə, ixtisas, qəbul/bitmə tarixi
+- **Müqavilə (genişləndirildi)**: Müqavilənin bağlanma tarixi, İşə başlama tarixi, Bitmə tarixi + Müddətsiz, Sınaq müddəti, Xatırlatma (1 ay qalmış), Vəzifə dəyişikliyi (Bəli/Xeyr), Əməyin ödənilməsi (Vaxtamuzd/İşəmuzd), 3 fayl yükləmə (Vəzifə təlimatları, Əmək müqaviləsi, Vəzifə dəyişikliyi)
+- **Əmək haqqı**: Gross, Net, Əlavə, Mükafatlar
+- **Sənədlər**: Məhkumluq skanı, Sağlamlıq arayışı, Sertifikatlar (çoxlu), Digər sənədlər (çoxlu)
 
 ### 3. Maliyyə ✅
 ### 4. Satış ✅ (Kanban)
@@ -38,16 +34,7 @@ Marsol Group üçün MMS (Management System) hazırlamaq. PDF texniki tapşırı
 - Backend: FastAPI + PyMongo (async) + JWT
 - Frontend: React 18 + Tailwind + Shadcn UI
 - Database: MongoDB
-- Fayl yükləmə: /api/upload, /app/backend/uploads/
-
-## API Endpoints
-- /api/auth/*, /api/dashboard/stats
-- /api/companies, /api/companies/{id} — dict-based
-- /api/employees, /api/employees/{id} — dict-based, auto employee_code
-- /api/options/all — sectors, sub_sectors, positions, activities, regions, education_levels, reference_sources, packages
-- /api/settings/* — 9 CRUD collection
-- /api/upload — fayl yükləmə
-- /api/finance/*, /api/sales/*, /api/messages/*, /api/notifications, /api/tasks, /api/meetings, /api/obligations
+- Fayl yükləmə: /api/upload
 
 ## Backlog
 
