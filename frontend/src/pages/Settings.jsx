@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Settings as SettingsIcon, Package, FolderKanban, Users, Columns3,
   Plus, Pencil, Trash2, Loader2, Shield, Eye, UserCog, User,
-  ChevronDown, Search, X, Building2, Layers, Briefcase, Activity
+  ChevronDown, Search, X, Building2, Layers, Briefcase, Activity, Building
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -54,6 +54,7 @@ export default function Settings() {
   const [positions, setPositions] = useState([]);
   const [activities, setActivities] = useState([]);
   const [regions, setRegions] = useState([]);
+  const [marsolCompanies, setMarsolCompanies] = useState([]);
 
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0 });
@@ -65,6 +66,7 @@ export default function Settings() {
   const [positionForm, setPositionForm] = useState({ name: '' });
   const [activityForm, setActivityForm] = useState({ name: '' });
   const [regionForm, setRegionForm] = useState({ name: '' });
+  const [marsolCompanyForm, setMarsolCompanyForm] = useState({ name: '' });
 
   // Edit states
   const [editingPackage, setEditingPackage] = useState(null);
@@ -88,7 +90,7 @@ export default function Settings() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes] = await Promise.all([
+      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes, mcRes] = await Promise.all([
         axios.get(`${API}/settings/packages`, { headers }),
         axios.get(`${API}/settings/projects`, { headers }),
         axios.get(`${API}/settings/custom-fields`, { headers }),
@@ -98,6 +100,7 @@ export default function Settings() {
         axios.get(`${API}/settings/positions`, { headers }),
         axios.get(`${API}/settings/activities`, { headers }),
         axios.get(`${API}/settings/regions`, { headers }),
+        axios.get(`${API}/settings/marsol-companies`, { headers }),
       ]);
       setPackages(pkgRes.data);
       setProjects(prjRes.data);
@@ -108,6 +111,7 @@ export default function Settings() {
       setPositions(posRes.data);
       setActivities(actRes.data);
       setRegions(regRes.data);
+      setMarsolCompanies(mcRes.data);
     } catch (err) {
       console.error('Error fetching settings:', err);
     } finally {
@@ -281,6 +285,26 @@ export default function Settings() {
     } catch { toast.error('Xəta baş verdi'); }
   };
 
+  // ========= MARSOL COMPANIES CRUD =========
+  const handleMarsolCompanySubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API}/settings/marsol-companies`, marsolCompanyForm, { headers });
+      toast.success('Müəssisə əlavə edildi');
+      setMarsolCompanyForm({ name: '' });
+      fetchData();
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  const handleDeleteMarsolCompany = async (id) => {
+    if (!window.confirm('Bu müəssisəni silmək istədiyinizə əminsiniz?')) return;
+    try {
+      await axios.delete(`${API}/settings/marsol-companies/${id}`, { headers });
+      toast.success('Müəssisə silindi');
+      fetchData();
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
   // ========= CUSTOM FIELD CRUD =========
   const openFieldModal = (field = null) => {
     if (field) {
@@ -406,6 +430,7 @@ export default function Settings() {
           <TabsTrigger value="positions" className="text-xs sm:text-sm" data-testid="tab-positions"><Briefcase className="w-4 h-4 mr-1 hidden sm:inline" />Vəzifələr</TabsTrigger>
           <TabsTrigger value="activities" className="text-xs sm:text-sm" data-testid="tab-activities"><Activity className="w-4 h-4 mr-1 hidden sm:inline" />Fəaliyyətlər</TabsTrigger>
           <TabsTrigger value="regions" className="text-xs sm:text-sm" data-testid="tab-regions"><Building2 className="w-4 h-4 mr-1 hidden sm:inline" />Regionlar</TabsTrigger>
+          <TabsTrigger value="marsol-companies" className="text-xs sm:text-sm" data-testid="tab-marsol-companies"><Building className="w-4 h-4 mr-1 hidden sm:inline" />Müəssisələr</TabsTrigger>
           <TabsTrigger value="custom-fields" className="text-xs sm:text-sm" data-testid="tab-custom-fields"><Columns3 className="w-4 h-4 mr-1 hidden sm:inline" />Xüsusi sahələr</TabsTrigger>
           <TabsTrigger value="users" className="text-xs sm:text-sm" data-testid="tab-users"><Users className="w-4 h-4 mr-1 hidden sm:inline" />İstifadəçilər</TabsTrigger>
         </TabsList>
@@ -680,6 +705,35 @@ export default function Settings() {
                 </div>
               ))}
               {regions.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Region yoxdur</p>}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ========= MARSOL COMPANIES TAB ========= */}
+        <TabsContent value="marsol-companies">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold" style={{ color: '#3D4F6F' }}>Marsol Group Müəssisələri</h2>
+            </div>
+            <form onSubmit={handleMarsolCompanySubmit} className="flex flex-col sm:flex-row gap-3 mb-6 p-4 bg-slate-50 rounded-lg" data-testid="marsol-company-form">
+              <div className="flex-1">
+                <Label className="text-xs mb-1">Müəssisə adı *</Label>
+                <Input value={marsolCompanyForm.name} onChange={(e) => setMarsolCompanyForm({ ...marsolCompanyForm, name: e.target.value })} placeholder="Müəssisə adı" className="text-sm" required data-testid="marsol-company-name-input" />
+              </div>
+              <div className="flex gap-2 items-end">
+                <Button type="submit" size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="marsol-company-submit-btn">Əlavə et</Button>
+              </div>
+            </form>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {marsolCompanies.map(mc => (
+                <div key={mc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors" data-testid={`marsol-company-item-${mc.id}`}>
+                  <p className="font-medium text-sm text-[#3D4F6F]">{mc.name}</p>
+                  <Button variant="ghost" size="sm" onClick={() => handleDeleteMarsolCompany(mc.id)}>
+                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                  </Button>
+                </div>
+              ))}
+              {marsolCompanies.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Müəssisə yoxdur</p>}
             </div>
           </div>
         </TabsContent>

@@ -761,6 +761,7 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
     positions_db = await db.positions.find({}, {"_id": 0}).to_list(200)
     activities_db = await db.activities.find({}, {"_id": 0}).to_list(200)
     regions_db = await db.regions.find({}, {"_id": 0}).to_list(200)
+    marsol_companies_db = await db.marsol_companies.find({}, {"_id": 0}).to_list(100)
     
     # Use database values if exist, otherwise use defaults
     packages = [{"name": p["name"], "price": p.get("price", 0)} for p in packages_db] if packages_db else [{"name": "Premium", "price": 5000}, {"name": "Business", "price": 3000}, {"name": "Business Plus", "price": 4000}]
@@ -776,6 +777,7 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
     positions = [p["name"] for p in positions_db] if positions_db else ["Direktor", "Təsisçi", "Baş direktor", "İcraçı direktor", "Kommersiya direktoru", "Maliyyə direktoru"]
     activities = [a["name"] for a in activities_db] if activities_db else ["Networking", "Təlim", "Sərgi", "Forum", "Mentorluq", "İş birliyi"]
     regions = [r["name"] for r in regions_db] if regions_db else ["Bakı", "Sumqayıt", "Gəncə", "Lənkəran", "Mingəçevir", "Şəki", "Şirvan", "Naxçıvan", "Abşeron", "Digər"]
+    marsol_companies = [m["name"] for m in marsol_companies_db] if marsol_companies_db else ["Marsol Group", "Marsol Events", "Marsol Media", "Marsol Academy"]
     
     return {
         "sectors": sectors,
@@ -802,6 +804,7 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
         "positions": positions,
         "activities": activities,
         "regions": regions,
+        "marsol_companies": marsol_companies,
         "education_levels": ["Orta təhsil", "Sub bakalavr", "Bakalavr", "Magistratura", "Doktorantura"],
     }
 
@@ -1005,6 +1008,27 @@ async def create_region(data: dict, current_user: dict = Depends(get_current_use
 async def delete_region(region_id: str, current_user: dict = Depends(get_current_user)):
     await db.regions.delete_one({"id": region_id})
     return {"message": "Region silindi"}
+
+# ==================== MARSOL COMPANIES (MÜƏSSİSƏLƏR) ====================
+
+@api_router.get("/settings/marsol-companies")
+async def get_marsol_companies(current_user: dict = Depends(get_current_user)):
+    items = await db.marsol_companies.find({}, {"_id": 0}).to_list(100)
+    if not items:
+        return [{"id": str(i), "name": n} for i, n in enumerate(["Marsol Group", "Marsol Events", "Marsol Media", "Marsol Academy"])]
+    return items
+
+@api_router.post("/settings/marsol-companies")
+async def create_marsol_company(data: dict, current_user: dict = Depends(get_current_user)):
+    doc = {"id": str(uuid.uuid4()), "name": data.get("name"), "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.marsol_companies.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.delete("/settings/marsol-companies/{item_id}")
+async def delete_marsol_company(item_id: str, current_user: dict = Depends(get_current_user)):
+    await db.marsol_companies.delete_one({"id": item_id})
+    return {"message": "Müəssisə silindi"}
 
 # ==================== SECTORS MANAGEMENT ====================
 

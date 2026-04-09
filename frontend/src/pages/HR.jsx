@@ -3,7 +3,7 @@ import axios from 'axios';
 import { 
   Plus, Download, Search, Filter, X, Loader2, User, Phone, Mail, 
   MoreVertical, Eye, ChevronLeft, Calendar, Briefcase, GraduationCap,
-  MapPin, CreditCard, Clock, ChevronDown, Pencil, Trash2, Upload, MinusCircle, PlusCircle, FileText, Image
+  MapPin, CreditCard, Clock, ChevronDown, Pencil, Trash2, Upload, MinusCircle, PlusCircle, FileText, Image, Building
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -85,6 +85,7 @@ const EmployeeDetail = ({ employee, onBack, onEdit }) => {
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="personal" className="text-xs sm:text-sm">Şəxsi</TabsTrigger>
           <TabsTrigger value="education" className="text-xs sm:text-sm">Təhsil</TabsTrigger>
+          <TabsTrigger value="experience" className="text-xs sm:text-sm">İş təcrübəsi</TabsTrigger>
           <TabsTrigger value="contact" className="text-xs sm:text-sm">Əlaqə</TabsTrigger>
           <TabsTrigger value="contract" className="text-xs sm:text-sm">Müqavilə</TabsTrigger>
           <TabsTrigger value="salary" className="text-xs sm:text-sm">Əmək haqqı</TabsTrigger>
@@ -139,6 +140,26 @@ const EmployeeDetail = ({ employee, onBack, onEdit }) => {
           )}
         </TabsContent>
 
+        <TabsContent value="experience" className="space-y-4">
+          {employee.work_experiences?.length > 0 ? employee.work_experiences.map((we, i) => (
+            <div key={i} className="p-4 bg-slate-50 rounded-xl">
+              <div className="flex items-center gap-2 mb-3">
+                <Briefcase className="w-4 h-4 text-[#3D4F6F]" />
+                <h4 className="font-semibold text-sm text-[#3D4F6F]">{we.company_name || `İş yeri ${i+1}`}</h4>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <InfoCard icon={Briefcase} label="Müəssisənin adı" value={we.company_name} />
+                <InfoCard icon={Briefcase} label="Vəzifəsi" value={we.position} />
+                <InfoCard icon={Calendar} label="İşə başlama tarixi" value={we.start_date} />
+                <InfoCard icon={Calendar} label="Xitam verilmə tarixi" value={we.end_date} />
+                <InfoCard icon={User} label="Çıxma səbəbi" value={we.leave_reason} />
+              </div>
+            </div>
+          )) : (
+            <p className="text-center text-slate-400 py-8">Əvvəlki iş təcrübəsi qeyd edilməyib</p>
+          )}
+        </TabsContent>
+
         <TabsContent value="contact" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <InfoCard icon={MapPin} label="Qeydiyyat ünvanı" value={employee.registration_address} />
@@ -162,6 +183,7 @@ const EmployeeDetail = ({ employee, onBack, onEdit }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <InfoCard icon={Briefcase} label="Şöbə" value={employee.department} />
             <InfoCard icon={Briefcase} label="Vəzifə" value={employee.position} />
+            <InfoCard icon={Building} label="Marsol müəssisəsi" value={employee.marsol_company} />
             <InfoCard icon={Calendar} label="Müqavilənin bağlanma tarixi" value={employee.contract_signing_date || employee.contract_start_date} />
             <InfoCard icon={Calendar} label="İşə başlama tarixi" value={employee.work_start_date} />
             <InfoCard icon={Calendar} label="Müqavilənin bitmə tarixi" value={employee.contract_indefinite ? 'Müddətsiz' : employee.contract_end_date} />
@@ -171,8 +193,23 @@ const EmployeeDetail = ({ employee, onBack, onEdit }) => {
             <InfoCard icon={Clock} label="İş qrafiki" value={employee.work_schedule} />
             <InfoCard icon={Calendar} label="Əsas məzuniyyət" value={`${employee.main_vacation_days || 21} gün`} />
             <InfoCard icon={Calendar} label="Əlavə məzuniyyət" value={`${employee.additional_vacation_days || 0} gün`} />
-            <InfoCard icon={Clock} label="Xatırlatma" value={employee.contract_reminder ? 'Aktiv' : 'Deaktiv'} />
+            <InfoCard icon={Clock} label="Xatırlatma" value={employee.reminders?.length > 0 ? `${employee.reminders.length} xatırlatma` : 'Yoxdur'} />
           </div>
+          {employee.reminders?.length > 0 && (
+            <div className="p-4 bg-amber-50 rounded-xl mt-4">
+              <h4 className="font-semibold text-sm text-amber-800 mb-2">Xatırlatmalar</h4>
+              <div className="space-y-2">
+                {employee.reminders.map((rem, i) => (
+                  <div key={i} className="flex items-center gap-3 bg-white rounded-lg p-2 text-sm">
+                    <Badge className="bg-amber-100 text-amber-700">{i+1}</Badge>
+                    <span>{rem.date || '-'}</span>
+                    <span className="text-slate-500">{rem.time || '-'}</span>
+                    <span className="text-slate-600 flex-1">{rem.note || '-'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {(employee.position_instructions_file || employee.employment_contract_file || employee.position_change_file) && (
             <div className="border-t pt-4 mt-4">
               <h4 className="font-semibold text-sm text-slate-700 mb-3">Müqavilə sənədləri</h4>
@@ -229,11 +266,16 @@ const EmployeeDetail = ({ employee, onBack, onEdit }) => {
             <div>
               <h4 className="font-semibold text-sm text-amber-800 mb-2">Sertifikatlar</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {employee.certificate_scans.map((cert, i) => (
-                  <a key={i} href={cert.startsWith('http') ? cert : `${process.env.REACT_APP_BACKEND_URL}${cert}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-amber-50 rounded-xl hover:bg-amber-100">
-                    <GraduationCap className="w-5 h-5 text-amber-500" /><span className="text-sm">Sertifikat {i+1}</span>
-                  </a>
-                ))}
+                {employee.certificate_scans.map((cert, i) => {
+                  const certUrl = typeof cert === 'string' ? cert : cert.url;
+                  const certName = typeof cert === 'string' ? `Sertifikat ${i+1}` : cert.name;
+                  const fullUrl = certUrl.startsWith('http') ? certUrl : `${process.env.REACT_APP_BACKEND_URL}${certUrl}`;
+                  return (
+                    <a key={i} href={fullUrl} download className="flex items-center gap-3 p-3 bg-amber-50 rounded-xl hover:bg-amber-100">
+                      <GraduationCap className="w-5 h-5 text-amber-500 shrink-0" /><span className="text-sm truncate">{certName}</span>
+                    </a>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -241,11 +283,16 @@ const EmployeeDetail = ({ employee, onBack, onEdit }) => {
             <div>
               <h4 className="font-semibold text-sm text-slate-700 mb-2">Digər sənədlər</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {employee.document_scans.map((doc, i) => (
-                  <a key={i} href={doc.startsWith('http') ? doc : `${process.env.REACT_APP_BACKEND_URL}${doc}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100">
-                    <FileText className="w-5 h-5 text-blue-500" /><span className="text-sm">Sənəd {i+1}</span>
-                  </a>
-                ))}
+                {employee.document_scans.map((doc, i) => {
+                  const docUrl = typeof doc === 'string' ? doc : doc.url;
+                  const docName = typeof doc === 'string' ? `Sənəd ${i+1}` : doc.name;
+                  const fullUrl = docUrl.startsWith('http') ? docUrl : `${process.env.REACT_APP_BACKEND_URL}${docUrl}`;
+                  return (
+                    <a key={i} href={fullUrl} download className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100">
+                      <FileText className="w-5 h-5 text-blue-500 shrink-0" /><span className="text-sm truncate">{docName}</span>
+                    </a>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -303,6 +350,7 @@ export default function HR() {
   const [activeTab, setActiveTab] = useState('personal');
   const [filters, setFilters] = useState({ department: '', status: '' });
   const [uploading, setUploading] = useState(false);
+  const [options, setOptions] = useState({});
 
   const departments = ['Satış', 'Marketing', 'HR', 'Maliyyə', 'Layihə', 'İT', 'İdarəetmə'];
   const statuses = ['Aktiv', 'Qeyri-aktiv', 'Sınaq müddətində'];
@@ -311,18 +359,22 @@ export default function HR() {
   const maritalStatuses = ['Evli', 'Subay', 'Boşanmış'];
 
   const emptyEducation = { education_level: '', education_institution: '', specialty: '', admission_date: '', graduation_date: '' };
+  const emptyWorkExperience = { company_name: '', start_date: '', end_date: '', leave_reason: '', position: '' };
+  const emptyReminder = { date: '', time: '09:00', note: '' };
 
   const initialFormData = {
     photo_url: '', first_name: '', last_name: '', father_name: '', birth_date: '', gender: '',
     id_card_number: '', fin_code: '',
     educations: [{ ...emptyEducation }],
+    work_experiences: [],
     marital_status: '', children_count: 0, children_birth_dates: [],
     registration_address: '', actual_address: '',
     company_phone: '', personal_phone: '', personal_email: '', corporate_email: '',
     emergency_contact_name: '', emergency_contact_relation: '', emergency_contact_phone: '',
-    department: '', position: '', contract_signing_date: '', work_start_date: '',
+    department: '', position: '', marsol_company: '', contract_signing_date: '', work_start_date: '',
     contract_end_date: '', contract_indefinite: false, probation_end_date: '',
-    contract_reminder: true, position_change: false,
+    contract_reminder: true, reminders: [{ date: '', time: '09:00', note: 'Müqavilə bitməsinə 1 ay qalmış' }],
+    position_change: false,
     salary_supplement: 0, bonuses: '', payment_system: '',
     position_instructions_file: '', employment_contract_file: '', position_change_file: '',
     main_vacation_days: 21, additional_vacation_days: 0,
@@ -357,17 +409,27 @@ export default function HR() {
   const handleMultiFileUpload = async (e, field = 'document_scans') => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-    const urls = [];
+    const items = [];
     for (const file of files) {
       const url = await uploadFile(file);
-      if (url) urls.push(url);
+      if (url) items.push({ url, name: file.name });
     }
-    setFormData(prev => ({ ...prev, [field]: [...(prev[field] || []), ...urls] }));
+    setFormData(prev => ({ ...prev, [field]: [...(prev[field] || []), ...items] }));
   };
 
   const addEducation = () => setFormData(prev => ({ ...prev, educations: [...(prev.educations || []), { ...emptyEducation }] }));
   const removeEducation = (idx) => { if ((formData.educations || []).length <= 1) return; setFormData(prev => ({ ...prev, educations: prev.educations.filter((_, i) => i !== idx) })); };
   const updateEducation = (idx, field, value) => { const eds = [...(formData.educations || [])]; eds[idx] = { ...eds[idx], [field]: value }; setFormData({ ...formData, educations: eds }); };
+
+  // Work experience helpers
+  const addWorkExperience = () => setFormData(prev => ({ ...prev, work_experiences: [...(prev.work_experiences || []), { ...emptyWorkExperience }] }));
+  const removeWorkExperience = (idx) => setFormData(prev => ({ ...prev, work_experiences: prev.work_experiences.filter((_, i) => i !== idx) }));
+  const updateWorkExperience = (idx, field, value) => { const wes = [...(formData.work_experiences || [])]; wes[idx] = { ...wes[idx], [field]: value }; setFormData({ ...formData, work_experiences: wes }); };
+
+  // Reminder helpers
+  const addReminder = () => setFormData(prev => ({ ...prev, reminders: [...(prev.reminders || []), { ...emptyReminder }] }));
+  const removeReminder = (idx) => setFormData(prev => ({ ...prev, reminders: prev.reminders.filter((_, i) => i !== idx) }));
+  const updateReminder = (idx, field, value) => { const rs = [...(formData.reminders || [])]; rs[idx] = { ...rs[idx], [field]: value }; setFormData({ ...formData, reminders: rs }); };
 
   const updateChildrenCount = (delta) => {
     const newCount = Math.max(0, (formData.children_count || 0) + delta);
@@ -393,6 +455,16 @@ export default function HR() {
   }, [filters]);
 
   useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
+
+  useEffect(() => {
+    const fetchOpts = async () => {
+      try {
+        const res = await axios.get(`${API}/options/all`, { headers });
+        setOptions(res.data);
+      } catch (err) { console.error(err); }
+    };
+    fetchOpts();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -435,6 +507,11 @@ export default function HR() {
     if (!data.contract_signing_date && data.contract_start_date) data.contract_signing_date = data.contract_start_date;
     if (!data.certificate_scans) data.certificate_scans = [];
     if (!data.document_scans) data.document_scans = [];
+    if (!data.work_experiences) data.work_experiences = [];
+    if (!data.reminders) data.reminders = data.contract_reminder ? [{ date: '', time: '09:00', note: 'Müqavilə bitməsinə 1 ay qalmış' }] : [];
+    // Normalize old string-based document_scans to {url, name} objects
+    data.document_scans = (data.document_scans || []).map(d => typeof d === 'string' ? { url: d, name: d.split('/').pop() } : d);
+    data.certificate_scans = (data.certificate_scans || []).map(d => typeof d === 'string' ? { url: d, name: d.split('/').pop() } : d);
     setFormData(data);
     setActiveTab('personal');
     setShowModal(true);
@@ -595,6 +672,7 @@ export default function HR() {
                 <TabsList className="flex-wrap h-auto gap-1 mb-4">
                   <TabsTrigger value="personal" className="text-xs">Şəxsi</TabsTrigger>
                   <TabsTrigger value="education" className="text-xs">Təhsil</TabsTrigger>
+                  <TabsTrigger value="experience" className="text-xs">İş təcrübəsi</TabsTrigger>
                   <TabsTrigger value="contact" className="text-xs">Əlaqə</TabsTrigger>
                   <TabsTrigger value="contract" className="text-xs">Müqavilə</TabsTrigger>
                   <TabsTrigger value="salary" className="text-xs">Əmək haqqı</TabsTrigger>
@@ -712,6 +790,33 @@ export default function HR() {
                   </Button>
                 </TabsContent>
 
+                {/* İŞ TƏCRÜBƏSİ TAB */}
+                <TabsContent value="experience" className="space-y-4" data-testid="experience-tab">
+                  {(formData.work_experiences || []).map((we, wi) => (
+                    <div key={wi} className="p-4 bg-slate-50 rounded-lg space-y-3 relative">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-sm text-[#3D4F6F]">İş yeri {wi + 1}</h4>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => removeWorkExperience(wi)} data-testid={`remove-experience-${wi}`}><X className="w-4 h-4 text-red-500" /></Button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div><Label className="text-xs">Müəssisənin adı</Label><Input value={we.company_name} onChange={(e) => updateWorkExperience(wi, 'company_name', e.target.value)} className="text-sm" placeholder="Şirkət adı" data-testid={`experience-company-${wi}`} /></div>
+                        <div><Label className="text-xs">Vəzifəsi</Label><Input value={we.position} onChange={(e) => updateWorkExperience(wi, 'position', e.target.value)} className="text-sm" placeholder="Vəzifə" /></div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div><Label className="text-xs">İşə başlama tarixi</Label><Input type="date" value={we.start_date} onChange={(e) => updateWorkExperience(wi, 'start_date', e.target.value)} className="text-sm" /></div>
+                        <div><Label className="text-xs">Xitam verilmə tarixi</Label><Input type="date" value={we.end_date} onChange={(e) => updateWorkExperience(wi, 'end_date', e.target.value)} className="text-sm" /></div>
+                        <div><Label className="text-xs">Çıxma səbəbi</Label><Input value={we.leave_reason} onChange={(e) => updateWorkExperience(wi, 'leave_reason', e.target.value)} className="text-sm" placeholder="Səbəb" /></div>
+                      </div>
+                    </div>
+                  ))}
+                  {(formData.work_experiences || []).length === 0 && (
+                    <div className="text-center py-8 text-slate-400 text-sm">Əvvəlki iş təcrübəsi yoxdur</div>
+                  )}
+                  <Button type="button" variant="outline" size="sm" onClick={addWorkExperience} className="w-full border-dashed" data-testid="add-experience-btn">
+                    <PlusCircle className="w-4 h-4 mr-2 text-green-500" /> İş yeri əlavə et
+                  </Button>
+                </TabsContent>
+
                 {/* ƏLAQƏ TAB */}
                 <TabsContent value="contact" className="space-y-4" data-testid="contact-tab">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -743,6 +848,13 @@ export default function HR() {
                     </div>
                     <div><Label className="text-xs">Vəzifə *</Label><Input value={formData.position} onChange={(e) => setFormData({...formData, position: e.target.value})} required className="text-sm" /></div>
                   </div>
+                  <div>
+                    <Label className="text-xs">Marsol müəssisəsi</Label>
+                    <Select value={formData.marsol_company} onValueChange={(v) => setFormData({...formData, marsol_company: v})}>
+                      <SelectTrigger className="text-sm" data-testid="marsol-company-select"><SelectValue placeholder="Müəssisə seçin" /></SelectTrigger>
+                      <SelectContent>{options?.marsol_companies?.map(mc => <SelectItem key={mc} value={mc}>{mc}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div><Label className="text-xs">Müqavilənin bağlanma tarixi</Label><Input type="date" value={formData.contract_signing_date} onChange={(e) => setFormData({...formData, contract_signing_date: e.target.value})} className="text-sm" data-testid="contract-signing-date" /></div>
                     <div><Label className="text-xs">İşə başlama tarixi</Label><Input type="date" value={formData.work_start_date} onChange={(e) => setFormData({...formData, work_start_date: e.target.value})} className="text-sm" data-testid="work-start-date" /></div>
@@ -759,14 +871,6 @@ export default function HR() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div><Label className="text-xs">Sınaq müddətinin bitmə tarixi</Label><Input type="date" value={formData.probation_end_date} onChange={(e) => setFormData({...formData, probation_end_date: e.target.value})} className="text-sm" /></div>
-                    <div className="flex items-end pb-1">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={formData.contract_reminder || false} onChange={(e) => setFormData({...formData, contract_reminder: e.target.checked})} className="rounded" data-testid="contract-reminder" />
-                        <span className="text-xs text-slate-600">Xatırlatma (bitməsinə 1 ay qalmış)</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <Label className="text-xs">Vəzifə dəyişikliyi</Label>
                       <Select value={formData.position_change ? 'Bəli' : 'Xeyr'} onValueChange={(v) => setFormData({...formData, position_change: v === 'Bəli'})}>
@@ -774,6 +878,27 @@ export default function HR() {
                         <SelectContent><SelectItem value="Bəli">Bəli</SelectItem><SelectItem value="Xeyr">Xeyr</SelectItem></SelectContent>
                       </Select>
                     </div>
+                  </div>
+                  {/* Xatırlatmalar */}
+                  <div className="p-3 bg-amber-50 rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-amber-800">Xatırlatmalar</Label>
+                      <Button type="button" variant="ghost" size="sm" onClick={addReminder} data-testid="add-reminder-btn">
+                        <PlusCircle className="w-4 h-4 text-amber-600 mr-1" /><span className="text-xs text-amber-700">Əlavə et</span>
+                      </Button>
+                    </div>
+                    {(formData.reminders || []).map((rem, ri) => (
+                      <div key={ri} className="flex items-center gap-2 bg-white rounded-lg p-2">
+                        <span className="text-xs font-bold text-amber-700 w-5">{ri+1}.</span>
+                        <Input type="date" value={rem.date} onChange={(e) => updateReminder(ri, 'date', e.target.value)} className="text-sm flex-1" />
+                        <Input type="time" value={rem.time} onChange={(e) => updateReminder(ri, 'time', e.target.value)} className="text-sm w-28" />
+                        <Input value={rem.note} onChange={(e) => updateReminder(ri, 'note', e.target.value)} placeholder="Qeyd" className="text-sm flex-1" />
+                        <Button type="button" variant="ghost" size="sm" onClick={() => removeReminder(ri)} className="h-8 w-8 p-0"><X className="w-3.5 h-3.5 text-red-500" /></Button>
+                      </div>
+                    ))}
+                    {(formData.reminders || []).length === 0 && <p className="text-xs text-amber-600 text-center py-2">Xatırlatma yoxdur</p>}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <Label className="text-xs">Əməyin ödənilməsi sistemi</Label>
                       <Select value={formData.payment_system} onValueChange={(v) => setFormData({...formData, payment_system: v})}>
@@ -860,13 +985,17 @@ export default function HR() {
                     <Label className="text-xs font-semibold text-amber-800">Sertifikatlar</Label>
                     {formData.certificate_scans?.length > 0 && (
                       <div className="space-y-1">
-                        {formData.certificate_scans.map((cert, i) => (
-                          <div key={i} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2">
-                            <GraduationCap className="w-4 h-4 text-amber-500" />
-                            <span className="text-xs truncate flex-1">Sertifikat {i+1}</span>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, certificate_scans: formData.certificate_scans.filter((_, j) => j !== i)})}><X className="w-3.5 h-3.5 text-red-500" /></Button>
-                          </div>
-                        ))}
+                        {formData.certificate_scans.map((cert, i) => {
+                          const certUrl = typeof cert === 'string' ? cert : cert.url;
+                          const certName = typeof cert === 'string' ? `Sertifikat ${i+1}` : cert.name;
+                          return (
+                            <div key={i} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2">
+                              <GraduationCap className="w-4 h-4 text-amber-500" />
+                              <a href={certUrl.startsWith('http') ? certUrl : `${process.env.REACT_APP_BACKEND_URL}${certUrl}`} download className="text-xs text-amber-700 hover:underline truncate flex-1">{certName}</a>
+                              <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, certificate_scans: formData.certificate_scans.filter((_, j) => j !== i)})}><X className="w-3.5 h-3.5 text-red-500" /></Button>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                     <label className="cursor-pointer">
@@ -881,13 +1010,17 @@ export default function HR() {
                     <Label className="text-xs font-semibold">Digər sənədlər</Label>
                     {formData.document_scans?.length > 0 && (
                       <div className="space-y-1">
-                        {formData.document_scans.map((doc, i) => (
-                          <div key={i} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2">
-                            <FileText className="w-4 h-4 text-blue-500" />
-                            <span className="text-xs truncate flex-1">Sənəd {i+1}</span>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, document_scans: formData.document_scans.filter((_, j) => j !== i)})}><X className="w-3.5 h-3.5 text-red-500" /></Button>
-                          </div>
-                        ))}
+                        {formData.document_scans.map((doc, i) => {
+                          const docUrl = typeof doc === 'string' ? doc : doc.url;
+                          const docName = typeof doc === 'string' ? `Sənəd ${i+1}` : doc.name;
+                          return (
+                            <div key={i} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2">
+                              <FileText className="w-4 h-4 text-blue-500" />
+                              <a href={docUrl.startsWith('http') ? docUrl : `${process.env.REACT_APP_BACKEND_URL}${docUrl}`} download className="text-xs text-blue-700 hover:underline truncate flex-1">{docName}</a>
+                              <Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, document_scans: formData.document_scans.filter((_, j) => j !== i)})}><X className="w-3.5 h-3.5 text-red-500" /></Button>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                     <label className="cursor-pointer">
