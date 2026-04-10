@@ -4,7 +4,8 @@ import {
   Plus, Search, Loader2, Calendar, MapPin, Users2, Clock,
   Pencil, Trash2, ChevronRight, Phone, PhoneOff, PhoneCall,
   CheckCircle2, XCircle, Sparkles, RefreshCw, X, Building2,
-  ArrowRightLeft, UserPlus, Eye
+  ArrowRightLeft, UserPlus, Eye, MessageCircle, Link, AlertTriangle,
+  ExternalLink, Send
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -20,10 +21,33 @@ const EVENT_TYPES = ['Breakfast', 'Ofis ziyarəti', 'Mafia', 'Sosial fəaliyyət
 const EVENT_STATUSES = ['Planlaşdırılır', 'Aktiv', 'Tamamlandı', 'Ləğv edildi'];
 
 const emptyEvent = {
-  name: '', event_type: '', date: '', time: '', venue: '',
+  name: '', event_type: '', date: '', time: '', venue: '', location_link: '',
   participant_limit: 20, host_company_id: '', host_company_name: '',
   status: 'Planlaşdırılır', notes: ''
 };
+
+function formatWhatsAppLink(phone, event, ownerName) {
+  if (!phone) return null;
+  let cleaned = phone.replace(/[\s\-\(\)]/g, '');
+  if (cleaned.startsWith('0')) cleaned = '994' + cleaned.substring(1);
+  if (!cleaned.startsWith('+') && !cleaned.startsWith('994')) cleaned = '994' + cleaned;
+  cleaned = cleaned.replace('+', '');
+
+  const eventType = event.event_type === 'Breakfast' ? 'işgüzar səhər yeməyinə' :
+    event.event_type === 'Ofis ziyarəti' ? 'ofis ziyarətinə' :
+    event.event_type === 'Mafia' ? 'Mafia oyununa' :
+    event.event_type === 'B2B görüş' ? 'B2B görüşə' :
+    event.event_type === 'Təlim' ? 'təlimə' :
+    event.event_type === 'Sosial fəaliyyət' ? 'sosial fəaliyyətə' : 'fəaliyyətə';
+
+  let msg = `Hörmətli ${ownerName}, sizi ${event.date} tarixində`;
+  if (event.time) msg += ` saat ${event.time}-da`;
+  msg += ` ${event.venue || 'Marsol Group'}-da baş tutacaq ${eventType} dəvət edirik.`;
+  if (event.location_link) msg += `\n\nMəkan: ${event.location_link}`;
+  msg += `\n\nMarsol Group`;
+
+  return `https://wa.me/${cleaned}?text=${encodeURIComponent(msg)}`;
+}
 
 export default function Organization() {
   const [events, setEvents] = useState([]);
@@ -31,6 +55,7 @@ export default function Organization() {
   const [loading, setLoading] = useState(true);
   const [showEventModal, setShowEventModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyEvent);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -41,6 +66,9 @@ export default function Organization() {
   const [invLoading, setInvLoading] = useState(false);
   const [searchCompany, setSearchCompany] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [whatsAppTarget, setWhatsAppTarget] = useState(null);
+  const [customPhone, setCustomPhone] = useState('');
+  const [sectorWarning, setSectorWarning] = useState(null);
 
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -78,8 +106,9 @@ export default function Organization() {
     e.preventDefault();
     try {
       if (editing) {
-        await axios.put(`${API}/events/${editing.id}`, form, { headers });
+        const updated = await axios.put(`${API}/events/${editing.id}`, form, { headers });
         toast.success('Fəaliyyət yeniləndi');
+        if (selectedEvent?.id === editing.id) setSelectedEvent(updated.data);
       } else {
         await axios.post(`${API}/events`, form, { headers });
         toast.success('Fəaliyyət yaradıldı');
@@ -114,7 +143,7 @@ export default function Organization() {
         { count: suggestCount }, { headers });
       setSuggestions(res.data.suggestions);
       setShowSuggestions(true);
-      toast.success(`${res.data.suggestions.length} şirkət təklif olundu`);
+      toast.success(`${res.data.suggestions.length} şirkət təklif olundu (sektor toqquşması nəzərə alındı)`);
     } catch { toast.error('Xəta baş verdi'); }
     finally { setInvLoading(false); }
   };
@@ -152,14 +181,28 @@ export default function Organization() {
     setSuggestions(prev => prev.filter(s => s.company_id !== companyId));
   };
 
-  const handleManualAdd = async () => {
-    setShowInviteModal(true);
+  const checkSectorConflict = async (companyId) => {
+    if (!selectedEvent) return null;
+    try {
+      const res = await axios.post(`${API}/events/${selectedEvent.id}/check-sector-conflict`,
+        { company_id: companyId }, { headers });
+      return res.data;
+    } catch { return null; }
   };
 
   const addManualCompany = async (companyId) => {
     if (!selectedEvent) return;
+    const conflict = await checkSectorConflict(companyId);
+    if (conflict?.conflict) {
+      setSectorWarning({ companyId, ...conflict });
+      return;
+    }
+    await doAddCompany(companyId);
+  };
+
+  const doAddCompany = async (companyId) => {
+    const company = companies.find(c => c.id === companyId);
     try {
-      const company = companies.find(c => c.id === companyId);
       await axios.post(`${API}/invitations`, {
         event_id: selectedEvent.id,
         event_name: selectedEvent.name,
@@ -171,7 +214,26 @@ export default function Organization() {
       toast.success('Dəvət əlavə edildi');
       fetchInvitations(selectedEvent.id);
       setShowInviteModal(false);
+      setSectorWarning(null);
     } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  const openWhatsApp = (inv) => {
+    const company = companies.find(c => c.id === inv.company_id);
+    setWhatsAppTarget({ inv, company });
+    setCustomPhone('');
+    setShowWhatsAppModal(true);
+  };
+
+  const sendWhatsApp = (phone) => {
+    if (!whatsAppTarget || !selectedEvent) return;
+    const link = formatWhatsAppLink(phone, selectedEvent, whatsAppTarget.inv.company_name);
+    if (link) {
+      window.open(link, '_blank');
+      setShowWhatsAppModal(false);
+    } else {
+      toast.error('Telefon nömrəsi yoxdur');
+    }
   };
 
   const filteredEvents = events.filter(e => {
@@ -246,6 +308,11 @@ export default function Organization() {
                         {event.venue && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{event.venue}</span>}
                         <span className="flex items-center gap-1"><Users2 className="w-3 h-3" />Limit: {event.participant_limit}</span>
                       </div>
+                      {event.location_link && (
+                        <a href={event.location_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 mt-1 text-xs text-blue-500 hover:text-blue-700" onClick={(e) => e.stopPropagation()}>
+                          <ExternalLink className="w-3 h-3" />Xəritə
+                        </a>
+                      )}
                     </div>
                     <div className="flex gap-1 ml-2">
                       <button onClick={(e) => { e.stopPropagation(); openEventModal(event); }} className="p-1 hover:bg-slate-100 rounded"><Pencil className="w-3.5 h-3.5 text-slate-400" /></button>
@@ -280,6 +347,11 @@ export default function Organization() {
                     {selectedEvent.host_company_name && (
                       <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Building2 className="w-3 h-3" />Ev sahibi: <strong>{selectedEvent.host_company_name}</strong></p>
                     )}
+                    {selectedEvent.location_link && (
+                      <a href={selectedEvent.location_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 mt-1 text-xs text-blue-500 hover:text-blue-700">
+                        <ExternalLink className="w-3 h-3" />Google Maps
+                      </a>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold text-[#3D4F6F]">{invitations.length}<span className="text-sm font-normal text-slate-400">/{selectedEvent.participant_limit}</span></p>
@@ -309,7 +381,7 @@ export default function Organization() {
                     <Sparkles className="w-3.5 h-3.5 mr-1" />Avto təklif
                   </Button>
                 </div>
-                <Button size="sm" variant="outline" onClick={handleManualAdd} className="h-8" data-testid="manual-add-btn">
+                <Button size="sm" variant="outline" onClick={() => { setShowInviteModal(true); setSearchCompany(''); }} className="h-8" data-testid="manual-add-btn">
                   <UserPlus className="w-3.5 h-3.5 mr-1" />Manual əlavə et
                 </Button>
               </div>
@@ -320,6 +392,7 @@ export default function Organization() {
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold text-amber-800 text-sm flex items-center gap-2">
                       <Sparkles className="w-4 h-4" />Təklif olunan şirkətlər ({suggestions.length})
+                      <span className="text-xs font-normal text-amber-600">(sektor toqquşması nəzərə alınıb)</span>
                     </h3>
                     <div className="flex gap-2">
                       <Button
@@ -344,6 +417,7 @@ export default function Organization() {
                             <p className="text-sm font-medium text-[#3D4F6F]">{s.company_name}</p>
                             <p className="text-xs text-slate-500">
                               {s.package} · Qalan: <strong className="text-red-600">{s.remaining_quota}</strong>/{s.total_quota}
+                              {s.sector && <span className="text-slate-400 ml-1">· {s.sector}</span>}
                               {s.days_remaining < 90 && <span className="text-red-500 ml-1">({s.days_remaining} gün qalıb)</span>}
                             </p>
                           </div>
@@ -393,7 +467,19 @@ export default function Organization() {
                         </div>
                         <div className="flex items-center gap-2">
                           {getCallBadge(inv)}
-                          {inv.call_status === 'Gözləyir' && (
+
+                          {/* WhatsApp button */}
+                          <button
+                            onClick={() => openWhatsApp(inv)}
+                            className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-600 transition-colors"
+                            title="WhatsApp ilə dəvət göndər"
+                            data-testid={`whatsapp-${inv.id}`}
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Call status buttons */}
+                          {(inv.call_status === 'Gözləyir' || inv.call_status === 'Cavab vermədi') && (
                             <div className="flex gap-1">
                               <button
                                 onClick={() => handleCallStatus(inv.id, 'Cavab verdi', 'Qatılır')}
@@ -421,24 +507,7 @@ export default function Organization() {
                               </button>
                             </div>
                           )}
-                          {inv.call_status === 'Cavab vermədi' && (
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => handleCallStatus(inv.id, 'Cavab verdi', 'Qatılır')}
-                                className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-600 transition-colors"
-                                title="Yenidən zəng — Qatılır"
-                              >
-                                <PhoneCall className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleCallStatus(inv.id, 'Cavab verdi', 'Qatılmır')}
-                                className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 transition-colors"
-                                title="Yenidən zəng — Qatılmır"
-                              >
-                                <PhoneOff className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          )}
+
                           <button onClick={() => handleRemoveInvitation(inv.id)} className="p-1 hover:bg-red-50 rounded">
                             <Trash2 className="w-3.5 h-3.5 text-red-300 hover:text-red-500" />
                           </button>
@@ -504,6 +573,16 @@ export default function Organization() {
                 <Input type="number" value={form.participant_limit} onChange={(e) => setForm({ ...form, participant_limit: parseInt(e.target.value) || 0 })} className="text-sm" min={1} data-testid="event-limit-input" />
               </div>
             </div>
+            <div>
+              <Label className="text-xs flex items-center gap-1"><Link className="w-3 h-3" />Google Maps linki</Label>
+              <Input
+                value={form.location_link}
+                onChange={(e) => setForm({ ...form, location_link: e.target.value })}
+                placeholder="https://maps.google.com/..."
+                className="text-sm"
+                data-testid="event-location-link"
+              />
+            </div>
             {form.event_type === 'Ofis ziyarəti' && (
               <div>
                 <Label className="text-xs">Ev sahibi şirkət (ofis sahibi)</Label>
@@ -557,7 +636,11 @@ export default function Organization() {
                 >
                   <div>
                     <p className="text-sm font-medium text-[#3D4F6F]">{c.brand_name}</p>
-                    <p className="text-xs text-slate-500">{c.owner_name} · {c.package}</p>
+                    <p className="text-xs text-slate-500">
+                      {c.owner_name} · {c.package}
+                      {c.sector && <span className="text-slate-400"> · {c.sector}</span>}
+                      {c.sub_sector && <span className="text-slate-400"> · {c.sub_sector}</span>}
+                    </p>
                   </div>
                   <Plus className="w-4 h-4 text-[#9ACD32]" />
                 </button>
@@ -565,6 +648,119 @@ export default function Organization() {
               {availableCompanies.length === 0 && <p className="text-center text-slate-400 text-sm py-4">Şirkət tapılmadı</p>}
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sector Conflict Warning Modal */}
+      <Dialog open={!!sectorWarning} onOpenChange={(open) => { if (!open) setSectorWarning(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600"><AlertTriangle className="w-5 h-5" />Sektor toqquşması</DialogTitle>
+          </DialogHeader>
+          {sectorWarning && (
+            <div className="space-y-4">
+              <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                <p className="text-sm text-amber-800">
+                  Bu şirkətin <strong>{sectorWarning.conflict_value}</strong> {sectorWarning.conflict_type}u artıq siyahıda mövcuddur:
+                </p>
+                <p className="text-sm font-semibold text-amber-900 mt-1">{sectorWarning.conflicting_company}</p>
+              </div>
+              <p className="text-xs text-slate-500">Yenə də əlavə etmək istəyirsiniz?</p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setSectorWarning(null)}>Ləğv et</Button>
+                <Button
+                  size="sm"
+                  className="bg-amber-500 hover:bg-amber-600 text-white"
+                  onClick={() => doAddCompany(sectorWarning.companyId)}
+                  data-testid="confirm-sector-conflict"
+                >
+                  Bəli, əlavə et
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* WhatsApp Modal */}
+      <Dialog open={showWhatsAppModal} onOpenChange={setShowWhatsAppModal}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2" style={{ color: '#3D4F6F' }}>
+              <MessageCircle className="w-5 h-5 text-green-600" />WhatsApp Dəvət
+            </DialogTitle>
+          </DialogHeader>
+          {whatsAppTarget && (
+            <div className="space-y-4">
+              <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                <p className="text-sm font-medium text-[#3D4F6F]">{whatsAppTarget.inv.company_name}</p>
+                <p className="text-xs text-slate-500">{whatsAppTarget.company?.owner_name}</p>
+              </div>
+
+              {/* Owner phone */}
+              {whatsAppTarget.company?.owner_phone && (
+                <button
+                  onClick={() => sendWhatsApp(whatsAppTarget.company.owner_phone)}
+                  className="w-full flex items-center justify-between p-3 rounded-lg border border-green-200 bg-green-50 hover:bg-green-100 transition-colors"
+                  data-testid="whatsapp-owner-phone"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-green-800">Sahibkar nömrəsi</p>
+                    <p className="text-xs text-green-600">{whatsAppTarget.company.owner_phone}</p>
+                  </div>
+                  <Send className="w-4 h-4 text-green-600" />
+                </button>
+              )}
+
+              {/* Company phone */}
+              {whatsAppTarget.company?.company_phone && whatsAppTarget.company.company_phone !== whatsAppTarget.company.owner_phone && (
+                <button
+                  onClick={() => sendWhatsApp(whatsAppTarget.company.company_phone)}
+                  className="w-full flex items-center justify-between p-3 rounded-lg border border-green-200 bg-green-50 hover:bg-green-100 transition-colors"
+                  data-testid="whatsapp-company-phone"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-green-800">Şirkət nömrəsi</p>
+                    <p className="text-xs text-green-600">{whatsAppTarget.company.company_phone}</p>
+                  </div>
+                  <Send className="w-4 h-4 text-green-600" />
+                </button>
+              )}
+
+              {/* Custom phone */}
+              <div>
+                <Label className="text-xs text-slate-500">Başqa nömrəyə göndər</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    placeholder="+994 50 123 4567"
+                    value={customPhone}
+                    onChange={(e) => setCustomPhone(e.target.value)}
+                    className="text-sm flex-1"
+                    data-testid="whatsapp-custom-phone"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => sendWhatsApp(customPhone)}
+                    disabled={!customPhone.trim()}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                    data-testid="whatsapp-send-custom"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Preview */}
+              {selectedEvent && (
+                <div className="bg-green-50/50 rounded-lg p-3 border border-green-100">
+                  <p className="text-[10px] text-green-700 font-medium mb-1">Mesaj önizləməsi:</p>
+                  <p className="text-xs text-green-800 whitespace-pre-wrap">
+                    {`Hörmətli ${whatsAppTarget.inv.company_name}, sizi ${selectedEvent.date} tarixində${selectedEvent.time ? ` saat ${selectedEvent.time}-da` : ''} ${selectedEvent.venue || 'Marsol Group'}-da baş tutacaq ${selectedEvent.event_type === 'Breakfast' ? 'işgüzar səhər yeməyinə' : selectedEvent.event_type === 'Ofis ziyarəti' ? 'ofis ziyarətinə' : 'fəaliyyətə'} dəvət edirik.${selectedEvent.location_link ? `\n\nMəkan: ${selectedEvent.location_link}` : ''}\n\nMarsol Group`}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

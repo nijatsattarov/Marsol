@@ -813,7 +813,7 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
 # Get companies for select dropdown (simplified)
 @api_router.get("/options/companies")
 async def get_companies_for_select(current_user: dict = Depends(get_current_user)):
-    companies = await db.companies.find({}, {"_id": 0, "id": 1, "brand_name": 1, "owner_name": 1, "package": 1, "joined_project": 1}).to_list(1000)
+    companies = await db.companies.find({}, {"_id": 0, "id": 1, "brand_name": 1, "owner_name": 1, "package": 1, "joined_project": 1, "sector": 1, "sub_sector": 1, "owner_phone": 1, "company_phone": 1, "status": 1}).to_list(1000)
     return companies
 
 # ==================== PACKAGES MANAGEMENT ====================
@@ -1332,6 +1332,7 @@ async def create_event(data: dict, current_user: dict = Depends(get_current_user
         "date": data.get("date", ""),
         "time": data.get("time", ""),
         "venue": data.get("venue", ""),
+        "location_link": data.get("location_link", ""),
         "participant_limit": data.get("participant_limit", 0),
         "host_company_id": data.get("host_company_id", ""),
         "host_company_name": data.get("host_company_name", ""),
@@ -1506,6 +1507,8 @@ async def _get_company_obligation(company: dict) -> dict:
         "company_id": company_id,
         "company_name": company.get("brand_name", ""),
         "owner_name": company.get("owner_name", ""),
+        "owner_phone": company.get("owner_phone", ""),
+        "company_phone": company.get("company_phone", ""),
         "package": package,
         "total_quota": total_quota,
         "used_quota": used_quota,
@@ -1588,9 +1591,53 @@ async def auto_suggest_companies(event_id: str, data: dict, current_user: dict =
         obl = await _get_company_obligation(c)
         if obl["remaining_quota"] <= 0:
             continue
+        obl["sector"] = c.get("sector", "")
+        obl["sub_sector"] = c.get("sub_sector", "")
         candidates.append(obl)
     candidates.sort(key=lambda x: x["priority_score"], reverse=True)
-    return {"suggestions": candidates[:count], "total_candidates": len(candidates)}
+    # Sector conflict filter: only 1 company per sub_sector (or sector if no sub_sector)
+    selected = []
+    used_sub_sectors = set()
+    for c in candidates:
+        sub = c.get("sub_sector") or ""
+        sector = c.get("sector") or ""
+        conflict_key = sub.strip().lower() if sub.strip() else sector.strip().lower()
+        if conflict_key and conflict_key in used_sub_sectors:
+            continue
+        selected.append(c)
+        if conflict_key:
+            used_sub_sectors.add(conflict_key)
+        if len(selected) >= count:
+            break
+    return {"suggestions": selected, "total_candidates": len(candidates)}
+
+@api_router.post("/events/{event_id}/check-sector-conflict")
+async def check_sector_conflict(event_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    company_id = data.get("company_id", "")
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    if not company:
+        return {"conflict": False}
+    company_sub = (company.get("sub_sector") or "").strip().lower()
+    company_sector = (company.get("sector") or "").strip().lower()
+    check_key = company_sub if company_sub else company_sector
+    if not check_key:
+        return {"conflict": False}
+    invited = await db.invitations.find({"event_id": event_id}, {"_id": 0, "company_id": 1}).to_list(500)
+    for inv in invited:
+        inv_company = await db.companies.find_one({"id": inv["company_id"]}, {"_id": 0, "sector": 1, "sub_sector": 1, "brand_name": 1})
+        if not inv_company:
+            continue
+        inv_sub = (inv_company.get("sub_sector") or "").strip().lower()
+        inv_sector = (inv_company.get("sector") or "").strip().lower()
+        inv_key = inv_sub if inv_sub else inv_sector
+        if inv_key == check_key:
+            return {
+                "conflict": True,
+                "conflicting_company": inv_company.get("brand_name", ""),
+                "conflict_type": "alt sektor" if company_sub else "sektor",
+                "conflict_value": company.get("sub_sector") or company.get("sector", "")
+            }
+    return {"conflict": False}
 
 # ==================== NOTIFICATIONS (BİLDİRİŞLƏR) ====================
 
