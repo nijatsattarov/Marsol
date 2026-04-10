@@ -1,50 +1,51 @@
-# Marsol Group İdarəetmə Sistemi - PRD
+# Marsol Group İdarəetmə Sistemi (MMS) — PRD
 
-## Əsas Modullar
+## Haqqında
+Marsol Group — 500+ üzvü olan B2B netvörkinq şirkətidir. Sahibkarları görüşlərdə bir araya gətirir.
 
-### 1. Şirkət Məlumatları ✅
-- 6 tab forma, çoxlu sahibkar/müqavilə, müqaviləyə uyğun ödəniş
-- Referans mənbəsi Şirkət/Şəxs/Media/Digər, Region/Vəzifə Select
+## Paketlər & Kvotalar
+| Paket | Dəvət sayı (illik) |
+|-------|-------------------|
+| Premium | 12 |
+| Business | 15 |
+| Business+ | 25 |
+| Sponsor | 40 |
 
-### 2. İnsan Resurları ✅ (YENİLƏNDİ - 2026-04-09)
-- **7 tab forma**: Şəxsi, Təhsil, İş təcrübəsi, Əlaqə, Müqavilə, Əmək haqqı, Sənədlər
-- **İş təcrübəsi** (yeni tab): Çoxlu əvvəlki iş yeri (+/- ilə) — müəssisə adı, vəzifə, başlama/xitam tarixi, çıxma səbəbi
-- **Müqavilə**: Marsol müəssisəsi Select (Tənzimləmələrdən), Çoxlu xatırlatmalar (tarix+saat+qeyd), Vəzifə dəyişikliyi, Ödəniş sistemi, 3 fayl yükləmə
-- **Sənədlər**: Fayl adları görünür, download link, sertifikatlar bölməsi
+## Texnoloji Stek
+- **Frontend**: React 18, Tailwind CSS, Shadcn UI, Axios
+- **Backend**: FastAPI, PyMongo (Motor), JWT Auth
+- **Database**: MongoDB
 
-### 3. Satış ✅
-- Lead pipeline/kanban idarəetmə
-- **Alt kateqoriyalar (2026-04-09)**:
-  - Şirkət bazası (ComingSoon)
-  - Üzvlər ✅ (mövcud Members modulu)
-  - Öhdəliklər ✅ (mövcud Obligations modulu)
-  - Öhdəlik tarixçəsi (ComingSoon)
-  - Üzvlük forumu (ComingSoon)
-  - Təkliflər (ComingSoon)
-  - Dəvətlər (ComingSoon)
+## Modul Statusları
 
-### 4. Maliyyə ✅
-### 5. Görüşlər ✅
-### 6. Tapşırıqlar ✅
-### 7. Mesajlar ✅
+### Hazır Modullar
+| # | Modul | Status |
+|---|-------|--------|
+| 1 | Şirkət Məlumatları | Tam ✅ |
+| 2 | İnsan Resursları (7 tab) | Tam ✅ |
+| 3 | Satış (pipeline) | Tam ✅ |
+| 4 | Maliyyə | Tam ✅ |
+| 5 | Görüşlər | Tam ✅ |
+| 6 | Tapşırıqlar | Tam ✅ |
+| 7 | Mesajlar | Tam ✅ |
+| 8 | Tənzimləmələr (10 tab) | Tam ✅ |
+| 9 | Bildirişlər | Tam ✅ |
+| 10 | **Təşkilatçılıq** | Tam ✅ (2026-04-10) |
+| 11 | **Öhdəliklər (kvota dashboard)** | Tam ✅ (2026-04-10) |
+| 12 | **Öhdəlik Tarixçəsi** | Tam ✅ (2026-04-10) |
+| 13 | **Dəvətlər** | Tam ✅ (2026-04-10) |
+| 14 | Üzvlər | Tam ✅ |
 
-### Yeni Modullar (2026-04-09) - Placeholder
-- Marketinq (ComingSoon)
-- Layihələr (ComingSoon)
-- Təşkilatçılıq (ComingSoon)
-- Hesabatlar (ComingSoon)
-- İclas (ComingSoon)
-- Fayllar (ComingSoon)
-- Qeydlər (ComingSoon)
+### Placeholder Modullar (ComingSoon)
+- Şirkət bazası, Üzvlük forumu, Təkliflər
+- Marketinq, Layihələr, Hesabatlar, İclas, Fayllar, Qeydlər
 
-### Tənzimləmələr ✅
-- **10 tab**: Paketlər, Layihələr, Sektorlar, Alt Sektorlar, Vəzifələr, Fəaliyyətlər, Regionlar, Müəssisələr, Xüsusi sahələr, İstifadəçilər
-
-### Menyu Strukturu ✅ (2026-04-09)
+## Menyu Strukturu
 1. İdarə Paneli
 2. Şirkət Məlumatları
 3. İnsan Resursları
-4. Satış (genişlənən, 7 alt kateqoriya)
+4. **Satış** (genişlənən, 7 alt kateqoriya):
+   - Şirkət bazası, Üzvlər, Öhdəliklər, Öhdəlik tarixçəsi, Üzvlük forumu, Təkliflər, Dəvətlər
 5. Marketinq
 6. Layihələr
 7. Təşkilatçılıq
@@ -57,19 +58,33 @@
 14. Fayllar
 15. Qeydlər
 ---
-- Bildirişlər
-- Tənzimləmələr
+- Bildirişlər / Tənzimləmələr
+
+## Əsas İş Axını (2026-04-10)
+1. **Təşkilatçılıq**: Fəaliyyət yarat (növ, tarix, məkan, limit, ev sahibi)
+2. **Avto-təklif**: Say daxil et → sistem prioritetə görə şirkət təklif edir
+3. **Dəvət**: Siyahını redaktə et, şirkətləri əvəz et, toplu dəvət et
+4. **Zəng**: Gözləyir → Cavab verdi (Qatılır/Qatılmır) / Cavab vermədi
+5. **Öhdəlik**: Cavab verildikdə -1 kvota düşür (qatılmasa da)
+6. **Dashboard**: Prioritet sistemi — az dəvət olunanlar, yaxın bitmə tarixli olanlar vurğulanır
+
+## API Endpoint-lər
+- `/api/events` — CRUD
+- `/api/invitations` — CRUD, bulk create
+- `/api/invitations/{id}/call` — zəng statusu
+- `/api/events/{id}/auto-suggest` — avto-təklif
+- `/api/obligations/dashboard` — kvota icmalı
+- `/api/obligations/company/{id}` — şirkət detalları
 
 ## Backlog
+
 ### P0
-- [ ] Tab-Spesifik Xüsusi Sahələr (Custom Fields) - testing pending
+- [ ] Xüsusi sahələr (Custom Fields) tab-spesifik — testing pending
 
 ### P1
 - [ ] Davamiyyət modulu
 - [ ] Barter əməliyyatları
-- [ ] Excel import
 
 ### P2
-- [ ] PDF hesabatlar, RBAC
-- [ ] Satış alt kateqoriyalarının tam funksionallığı (Şirkət bazası, Öhdəlik tarixçəsi, Üzvlük forumu, Təkliflər, Dəvətlər)
-- [ ] Marketinq, Layihələr, Təşkilatçılıq, Hesabatlar, İclas, Fayllar, Qeydlər modullarının tam funksionallığı
+- [ ] Excel import, PDF hesabatlar, RBAC
+- [ ] Placeholder modulların tam qurulması
