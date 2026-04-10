@@ -806,6 +806,8 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
         "regions": regions,
         "marsol_companies": marsol_companies,
         "education_levels": ["Orta təhsil", "Sub bakalavr", "Bakalavr", "Magistratura", "Doktorantura"],
+        "event_types": EVENT_TYPES,
+        "package_quotas": PACKAGE_QUOTAS,
     }
 
 # Get companies for select dropdown (simplified)
@@ -822,9 +824,10 @@ async def get_packages(current_user: dict = Depends(get_current_user)):
     if not packages:
         # Return default packages
         return [
-            {"id": "1", "name": "Premium", "description": "Premium üzvlük paketi", "price": 5000},
-            {"id": "2", "name": "Business", "description": "Business üzvlük paketi", "price": 3000},
-            {"id": "3", "name": "Business Plus", "description": "Business Plus üzvlük paketi", "price": 4000}
+            {"id": "1", "name": "Premium", "description": "Premium üzvlük paketi", "price": 5000, "invitation_count": 12},
+            {"id": "2", "name": "Business", "description": "Business üzvlük paketi", "price": 3000, "invitation_count": 15},
+            {"id": "3", "name": "Business Plus", "description": "Business Plus üzvlük paketi", "price": 4000, "invitation_count": 25},
+            {"id": "4", "name": "Sponsor", "description": "Sponsor paketi", "price": 8000, "invitation_count": 40}
         ]
     return packages
 
@@ -1295,69 +1298,299 @@ async def send_message(conversation_id: str, data: dict, current_user: dict = De
     )
     return msg_doc
 
-# ==================== OBLIGATIONS (ÖHDƏLİKLƏR) ====================
+# ==================== PACKAGE QUOTA CONFIG ====================
 
-@api_router.get("/obligations")
-async def get_obligations(status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+PACKAGE_QUOTAS = {
+    "Premium": 12,
+    "Business": 15,
+    "Business Plus": 25,
+    "Business+": 25,
+    "Sponsor": 40,
+}
+
+EVENT_TYPES = ["Breakfast", "Ofis ziyarəti", "Mafia", "Sosial fəaliyyət", "Təlim", "B2B görüş"]
+
+# ==================== EVENTS (FƏALİYYƏTLƏR/GÖRÜŞLƏR) ====================
+
+@api_router.get("/events")
+async def get_events(event_type: Optional[str] = None, status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     query = {}
+    if event_type and event_type != "all":
+        query["event_type"] = event_type
     if status and status != "all":
         query["status"] = status
-    obligations = await db.obligations.find(query, {"_id": 0}).sort("deadline", 1).to_list(1000)
-    return obligations
+    events = await db.events.find(query, {"_id": 0}).sort("date", -1).to_list(1000)
+    return events
 
-@api_router.post("/obligations")
-async def create_obligation(data: dict, current_user: dict = Depends(get_current_user)):
-    obl_id = str(uuid.uuid4())
-    obl_doc = {
-        "id": obl_id,
-        "title": data.get("title", ""),
-        "description": data.get("description", ""),
-        "company_id": data.get("company_id", ""),
-        "company_name": data.get("company_name", ""),
-        "type": data.get("type", "Xidmət"),
-        "responsible_person": data.get("responsible_person", ""),
-        "deadline": data.get("deadline", ""),
-        "status": data.get("status", "Gözləyir"),
-        "priority": data.get("priority", "Orta"),
+@api_router.post("/events")
+async def create_event(data: dict, current_user: dict = Depends(get_current_user)):
+    event_id = str(uuid.uuid4())
+    event_doc = {
+        "id": event_id,
+        "name": data.get("name", ""),
+        "event_type": data.get("event_type", ""),
+        "date": data.get("date", ""),
+        "time": data.get("time", ""),
+        "venue": data.get("venue", ""),
+        "participant_limit": data.get("participant_limit", 0),
+        "host_company_id": data.get("host_company_id", ""),
+        "host_company_name": data.get("host_company_name", ""),
+        "status": data.get("status", "Planlaşdırılır"),
         "notes": data.get("notes", ""),
-        "completion_date": data.get("completion_date", ""),
         "created_by": current_user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
-    await db.obligations.insert_one(obl_doc)
-    obl_doc.pop("_id", None)
-    return obl_doc
+    await db.events.insert_one(event_doc)
+    event_doc.pop("_id", None)
+    return event_doc
 
-@api_router.put("/obligations/{obl_id}")
-async def update_obligation(obl_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+@api_router.get("/events/{event_id}")
+async def get_event(event_id: str, current_user: dict = Depends(get_current_user)):
+    event = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Fəaliyyət tapılmadı")
+    return event
+
+@api_router.put("/events/{event_id}")
+async def update_event(event_id: str, data: dict, current_user: dict = Depends(get_current_user)):
     update_data = {k: v for k, v in data.items() if v is not None}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    result = await db.obligations.update_one({"id": obl_id}, {"$set": update_data})
+    result = await db.events.update_one({"id": event_id}, {"$set": update_data})
     if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Öhdəlik tapılmadı")
-    obl = await db.obligations.find_one({"id": obl_id}, {"_id": 0})
+        raise HTTPException(status_code=404, detail="Fəaliyyət tapılmadı")
+    event = await db.events.find_one({"id": event_id}, {"_id": 0})
+    return event
+
+@api_router.delete("/events/{event_id}")
+async def delete_event(event_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.events.delete_one({"id": event_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Fəaliyyət tapılmadı")
+    await db.invitations.delete_many({"event_id": event_id})
+    return {"message": "Fəaliyyət silindi"}
+
+@api_router.get("/events/types/list")
+async def get_event_types(current_user: dict = Depends(get_current_user)):
+    return EVENT_TYPES
+
+# ==================== INVITATIONS (DƏVƏTLƏR) ====================
+
+@api_router.get("/invitations")
+async def get_invitations(event_id: Optional[str] = None, company_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    query = {}
+    if event_id:
+        query["event_id"] = event_id
+    if company_id:
+        query["company_id"] = company_id
+    invitations = await db.invitations.find(query, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    return invitations
+
+@api_router.post("/invitations")
+async def create_invitation(data: dict, current_user: dict = Depends(get_current_user)):
+    inv_id = str(uuid.uuid4())
+    inv_doc = {
+        "id": inv_id,
+        "event_id": data.get("event_id", ""),
+        "event_name": data.get("event_name", ""),
+        "event_type": data.get("event_type", ""),
+        "event_date": data.get("event_date", ""),
+        "company_id": data.get("company_id", ""),
+        "company_name": data.get("company_name", ""),
+        "call_status": "Gözləyir",
+        "participation_status": "",
+        "obligation_deducted": False,
+        "called_by": "",
+        "called_at": "",
+        "notes": data.get("notes", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.invitations.insert_one(inv_doc)
+    inv_doc.pop("_id", None)
+    return inv_doc
+
+@api_router.post("/invitations/bulk")
+async def create_bulk_invitations(data: dict, current_user: dict = Depends(get_current_user)):
+    event_id = data.get("event_id", "")
+    event = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Fəaliyyət tapılmadı")
+    company_ids = data.get("company_ids", [])
+    created = []
+    for cid in company_ids:
+        existing = await db.invitations.find_one({"event_id": event_id, "company_id": cid})
+        if existing:
+            continue
+        company = await db.companies.find_one({"id": cid}, {"_id": 0, "brand_name": 1})
+        inv_id = str(uuid.uuid4())
+        inv_doc = {
+            "id": inv_id,
+            "event_id": event_id,
+            "event_name": event.get("name", ""),
+            "event_type": event.get("event_type", ""),
+            "event_date": event.get("date", ""),
+            "company_id": cid,
+            "company_name": company.get("brand_name", "") if company else "",
+            "call_status": "Gözləyir",
+            "participation_status": "",
+            "obligation_deducted": False,
+            "called_by": "",
+            "called_at": "",
+            "notes": "",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.invitations.insert_one(inv_doc)
+        inv_doc.pop("_id", None)
+        created.append(inv_doc)
+    return {"created": len(created), "invitations": created}
+
+@api_router.put("/invitations/{inv_id}/call")
+async def update_invitation_call(inv_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    call_status = data.get("call_status", "")
+    participation_status = data.get("participation_status", "")
+    update = {
+        "call_status": call_status,
+        "called_by": current_user.get("name", ""),
+        "called_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if call_status == "Cavab verdi":
+        update["participation_status"] = participation_status
+        update["obligation_deducted"] = True
+    elif call_status == "Cavab vermədi":
+        update["participation_status"] = ""
+        update["obligation_deducted"] = False
+    result = await db.invitations.update_one({"id": inv_id}, {"$set": update})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Dəvət tapılmadı")
+    inv = await db.invitations.find_one({"id": inv_id}, {"_id": 0})
+    return inv
+
+@api_router.delete("/invitations/{inv_id}")
+async def delete_invitation(inv_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.invitations.delete_one({"id": inv_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Dəvət tapılmadı")
+    return {"message": "Dəvət silindi"}
+
+# ==================== OBLIGATIONS (ÖHDƏLİKLƏR) ====================
+
+async def _get_company_obligation(company: dict) -> dict:
+    package = company.get("package", "")
+    total_quota = PACKAGE_QUOTAS.get(package, 0)
+    company_id = company.get("id", "")
+    start_date = company.get("contract_start_date", "")
+    end_date = company.get("contract_end_date", "")
+    now = datetime.now(timezone.utc)
+    days_remaining = 365
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            days_remaining = max((end_dt - now.replace(tzinfo=None)).days, 0)
+        except (ValueError, TypeError):
+            pass
+    used_quota = await db.invitations.count_documents({
+        "company_id": company_id,
+        "obligation_deducted": True
+    })
+    remaining = max(total_quota - used_quota, 0)
+    priority_score = 0
+    if days_remaining > 0 and remaining > 0:
+        priority_score = remaining * (365 / max(days_remaining, 1))
+    elif days_remaining == 0 and remaining > 0:
+        priority_score = remaining * 1000
+    total_invited = await db.invitations.count_documents({"company_id": company_id})
+    total_attended = await db.invitations.count_documents({"company_id": company_id, "participation_status": "Qatılır"})
+    total_declined = await db.invitations.count_documents({"company_id": company_id, "participation_status": "Qatılmır"})
+    total_no_answer = await db.invitations.count_documents({"company_id": company_id, "call_status": "Cavab vermədi"})
+    return {
+        "company_id": company_id,
+        "company_name": company.get("brand_name", ""),
+        "owner_name": company.get("owner_name", ""),
+        "package": package,
+        "total_quota": total_quota,
+        "used_quota": used_quota,
+        "remaining_quota": remaining,
+        "contract_start_date": start_date,
+        "contract_end_date": end_date,
+        "days_remaining": days_remaining,
+        "priority_score": round(priority_score, 2),
+        "total_invited": total_invited,
+        "total_attended": total_attended,
+        "total_declined": total_declined,
+        "total_no_answer": total_no_answer,
+        "status": company.get("status", "Aktiv"),
+    }
+
+@api_router.get("/obligations/dashboard")
+async def get_obligations_dashboard(current_user: dict = Depends(get_current_user)):
+    companies = await db.companies.find({"status": "Aktiv"}, {"_id": 0}).to_list(2000)
+    obligations = []
+    for c in companies:
+        obl = await _get_company_obligation(c)
+        obligations.append(obl)
+    obligations.sort(key=lambda x: x["priority_score"], reverse=True)
+    total = len(obligations)
+    not_invited = sum(1 for o in obligations if o["total_invited"] == 0)
+    under_invited = sum(1 for o in obligations if 0 < o["total_invited"] < o["total_quota"] and o["remaining_quota"] > 0)
+    fully_served = sum(1 for o in obligations if o["remaining_quota"] == 0)
+    urgent = sum(1 for o in obligations if o["priority_score"] > 50)
+    return {
+        "obligations": obligations,
+        "stats": {
+            "total": total,
+            "not_invited": not_invited,
+            "under_invited": under_invited,
+            "fully_served": fully_served,
+            "urgent": urgent,
+        }
+    }
+
+@api_router.get("/obligations/company/{company_id}")
+async def get_company_obligation(company_id: str, current_user: dict = Depends(get_current_user)):
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
+    obl = await _get_company_obligation(company)
+    invitations = await db.invitations.find({"company_id": company_id}, {"_id": 0}).sort("event_date", -1).to_list(500)
+    type_breakdown = {}
+    for inv in invitations:
+        et = inv.get("event_type", "Digər")
+        if et not in type_breakdown:
+            type_breakdown[et] = {"invited": 0, "attended": 0, "declined": 0, "no_answer": 0}
+        type_breakdown[et]["invited"] += 1
+        if inv.get("participation_status") == "Qatılır":
+            type_breakdown[et]["attended"] += 1
+        elif inv.get("participation_status") == "Qatılmır":
+            type_breakdown[et]["declined"] += 1
+        if inv.get("call_status") == "Cavab vermədi":
+            type_breakdown[et]["no_answer"] += 1
+    obl["invitations"] = invitations
+    obl["type_breakdown"] = type_breakdown
     return obl
 
-@api_router.delete("/obligations/{obl_id}")
-async def delete_obligation(obl_id: str, current_user: dict = Depends(get_current_user)):
-    result = await db.obligations.delete_one({"id": obl_id})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Öhdəlik tapılmadı")
-    return {"message": "Öhdəlik silindi"}
+# ==================== AUTO-SUGGEST (AVTO-TƏKLİF) ====================
 
-@api_router.get("/obligations/stats")
-async def get_obligation_stats(current_user: dict = Depends(get_current_user)):
-    total = await db.obligations.count_documents({})
-    pending = await db.obligations.count_documents({"status": "Gözləyir"})
-    in_progress = await db.obligations.count_documents({"status": "İcrada"})
-    completed = await db.obligations.count_documents({"status": "Tamamlandı"})
-    overdue_count = 0
-    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    active_obls = await db.obligations.find({"status": {"$in": ["Gözləyir", "İcrada"]}, "deadline": {"$ne": ""}}, {"_id": 0, "deadline": 1}).to_list(1000)
-    for o in active_obls:
-        if o.get("deadline") and o["deadline"] < now_str:
-            overdue_count += 1
-    return {"total": total, "pending": pending, "in_progress": in_progress, "completed": completed, "overdue": overdue_count}
+@api_router.post("/events/{event_id}/auto-suggest")
+async def auto_suggest_companies(event_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    event = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Fəaliyyət tapılmadı")
+    count = data.get("count", event.get("participant_limit", 20))
+    exclude_ids = data.get("exclude_ids", [])
+    already_invited = await db.invitations.find({"event_id": event_id}, {"_id": 0, "company_id": 1}).to_list(5000)
+    already_invited_ids = {inv["company_id"] for inv in already_invited}
+    companies = await db.companies.find({"status": "Aktiv"}, {"_id": 0}).to_list(2000)
+    candidates = []
+    for c in companies:
+        cid = c.get("id", "")
+        if cid in already_invited_ids or cid in exclude_ids:
+            continue
+        obl = await _get_company_obligation(c)
+        if obl["remaining_quota"] <= 0:
+            continue
+        candidates.append(obl)
+    candidates.sort(key=lambda x: x["priority_score"], reverse=True)
+    return {"suggestions": candidates[:count], "total_candidates": len(candidates)}
 
 # ==================== NOTIFICATIONS (BİLDİRİŞLƏR) ====================
 

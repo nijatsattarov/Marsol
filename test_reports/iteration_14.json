@@ -1,0 +1,129 @@
+{
+  "summary": "Iteration 14 - Organization, Obligations, and Invitations Module Testing: All backend APIs (25/25 tests passed - 100%) and frontend features verified working. Organization page with event CRUD, auto-suggest, invitation management all functional. Obligations dashboard with stats, filtering, company detail modal working. Obligation History page with company cards and detail modal working. Invitations page with filtering and status display working. Sidebar Sales submenu has all 7 items.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Dialog modals",
+        "issues": ["Console warning: DialogContent requires DialogTitle for accessibility - minor accessibility improvement needed"]
+      }
+    ]
+  },
+
+  "passed_tests": [
+    "Backend: Login authentication (200 OK)",
+    "Backend: Events CRUD - create, read, update, delete",
+    "Backend: Event types list returns all 6 types",
+    "Backend: Office visit event with host company",
+    "Backend: Auto-suggest returns prioritized companies by priority_score",
+    "Backend: Auto-suggest excludes already invited companies",
+    "Backend: Invitations CRUD - create single, bulk create, delete",
+    "Backend: Call status update - Qatılır (accepted)",
+    "Backend: Call status update - Qatılmır (declined)",
+    "Backend: Call status update - Cavab vermədi (no answer)",
+    "Backend: Obligations dashboard with stats",
+    "Backend: Obligations sorted by priority score",
+    "Backend: Company obligation detail with type breakdown",
+    "Backend: Obligation deducted when call answered (accept/decline)",
+    "Backend: Obligation NOT deducted when no answer",
+    "Backend: Companies options endpoint",
+    "Frontend: Organization page loads with event list",
+    "Frontend: Add Event button opens form modal",
+    "Frontend: Event form has all required fields (name, type, date, time, venue, limit)",
+    "Frontend: Selecting event shows invitation panel on right",
+    "Frontend: Auto-suggest button and count input visible",
+    "Frontend: Manual add button visible",
+    "Frontend: Invitations list shows companies with status badges",
+    "Frontend: Invitation stats (qatılır, rədd, cavabsız, gözləyir) displayed",
+    "Frontend: Obligations page loads with stats cards",
+    "Frontend: Stats cards: Cəmi üzvlər, Heç dəvət olunmayıb, Az dəvət olunub, Tamamlanıb, Təcili",
+    "Frontend: Obligations table with company, package, quota, progress, urgency",
+    "Frontend: Search and filter dropdowns work",
+    "Frontend: View detail button opens company obligation modal",
+    "Frontend: Company detail modal shows quota, stats, type breakdown, invitation history",
+    "Frontend: Obligation History page loads with company cards",
+    "Frontend: Company cards show invite/attend/decline/no-answer stats",
+    "Frontend: View history button opens detail modal with timeline",
+    "Frontend: Invitations page loads with stats and table",
+    "Frontend: Invitations table shows company, event, type, date, status, caller",
+    "Frontend: Sidebar Sales submenu has all 7 items"
+  ],
+
+  "failed_tests": [],
+
+  "test_report_links": [
+    "/app/backend/tests/test_iteration14_organization_obligations.py",
+    "/app/test_reports/pytest/pytest_results_iter14.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "Minor: DialogContent accessibility warning - consider adding DialogTitle or aria-describedby for screen readers"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_iteration14_organization_obligations.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (25/25 tests passed)",
+    "frontend": "100% (all features verified)"
+  },
+
+  "test_credentials": {
+    "email": "settings@marsol.az",
+    "password": "marsol123",
+    "role": "admin"
+  },
+
+  "seed_data_creation": "Test events created and cleaned up during backend tests",
+
+  "retest_needed": false,
+
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Iteration 14 verified Organization module (Təşkilatçılıq) with events CRUD, auto-suggest algorithm, invitation management with call status tracking. Obligations dashboard shows company quota stats with priority scoring. Obligation deduction logic: deducted only when call_status='Cavab verdi' (answered), not for 'Cavab vermədi' (no answer). Event types: Breakfast, Ofis ziyarəti, Mafia, Sosial fəaliyyət, Təlim, B2B görüş. Call statuses: Gözləyir (waiting), Cavab verdi (answered) with Qatılır/Qatılmır, Cavab vermədi (no answer). Package quotas: Premium(12), Business(15), Business+(25), Sponsor(40).",
+
+  "features_verified": {
+    "organization_page": {
+      "status": "WORKING",
+      "details": "Event list, create/edit/delete events, event type filter, 2-column layout with invitation panel"
+    },
+    "event_form_modal": {
+      "status": "WORKING",
+      "details": "All fields present: name, type, status, date, time, venue, participant limit, notes. Office visit shows host company select."
+    },
+    "auto_suggest": {
+      "status": "WORKING",
+      "details": "Count input, auto-suggest button, suggestions panel with company details, invite all button, remove individual suggestions"
+    },
+    "invitation_management": {
+      "status": "WORKING",
+      "details": "Invitation list with status badges, call status buttons (green/red/amber), invitation count updates"
+    },
+    "obligations_dashboard": {
+      "status": "WORKING",
+      "details": "Stats cards, filterable table, progress bars, urgency badges, view detail modal with type breakdown"
+    },
+    "obligation_history": {
+      "status": "WORKING",
+      "details": "Company cards with stats, detail modal with activity type breakdown and invitation timeline"
+    },
+    "invitations_page": {
+      "status": "WORKING",
+      "details": "Stats cards, filterable table, event/status filters, call status display"
+    },
+    "sidebar_sales_submenu": {
+      "status": "WORKING",
+      "details": "All 7 items present: Şirkət bazası, Üzvlər, Öhdəliklər, Öhdəlik tarixçəsi, Üzvlük forumu, Təkliflər, Dəvətlər"
+    }
+  }
+}

@@ -1,5 +1,572 @@
-import ComingSoon from './ComingSoon';
+import { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
+import {
+  Plus, Search, Loader2, Calendar, MapPin, Users2, Clock,
+  Pencil, Trash2, ChevronRight, Phone, PhoneOff, PhoneCall,
+  CheckCircle2, XCircle, Sparkles, RefreshCw, X, Building2,
+  ArrowRightLeft, UserPlus, Eye
+} from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { Label } from '../components/ui/label';
+import { Badge } from '../components/ui/badge';
+import { Toaster, toast } from 'sonner';
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+const EVENT_TYPES = ['Breakfast', 'Ofis ziyarəti', 'Mafia', 'Sosial fəaliyyət', 'Təlim', 'B2B görüş'];
+const EVENT_STATUSES = ['Planlaşdırılır', 'Aktiv', 'Tamamlandı', 'Ləğv edildi'];
+
+const emptyEvent = {
+  name: '', event_type: '', date: '', time: '', venue: '',
+  participant_limit: 20, host_company_id: '', host_company_name: '',
+  status: 'Planlaşdırılır', notes: ''
+};
 
 export default function Organization() {
-  return <ComingSoon title="Təşkilatçılıq" />;
+  const [events, setEvents] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState(emptyEvent);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [invitations, setInvitations] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestCount, setSuggestCount] = useState(20);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [invLoading, setInvLoading] = useState(false);
+  const [searchCompany, setSearchCompany] = useState('');
+  const [filterType, setFilterType] = useState('all');
+
+  const token = localStorage.getItem('token');
+  const headers = { Authorization: `Bearer ${token}` };
+
+  const fetchEvents = useCallback(async () => {
+    try {
+      const [evRes, cmpRes] = await Promise.all([
+        axios.get(`${API}/events`, { headers }),
+        axios.get(`${API}/options/companies`, { headers }),
+      ]);
+      setEvents(evRes.data);
+      setCompanies(cmpRes.data);
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchEvents(); }, [fetchEvents]);
+
+  const fetchInvitations = async (eventId) => {
+    try {
+      setInvLoading(true);
+      const res = await axios.get(`${API}/invitations?event_id=${eventId}`, { headers });
+      setInvitations(res.data);
+    } catch (err) { console.error(err); }
+    finally { setInvLoading(false); }
+  };
+
+  const openEventModal = (event = null) => {
+    if (event) { setEditing(event); setForm({ ...event }); }
+    else { setEditing(null); setForm(emptyEvent); }
+    setShowEventModal(true);
+  };
+
+  const handleEventSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editing) {
+        await axios.put(`${API}/events/${editing.id}`, form, { headers });
+        toast.success('Fəaliyyət yeniləndi');
+      } else {
+        await axios.post(`${API}/events`, form, { headers });
+        toast.success('Fəaliyyət yaradıldı');
+      }
+      setShowEventModal(false);
+      fetchEvents();
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  const handleDeleteEvent = async (id) => {
+    if (!window.confirm('Bu fəaliyyəti silmək istədiyinizə əminsiniz?')) return;
+    try {
+      await axios.delete(`${API}/events/${id}`, { headers });
+      toast.success('Fəaliyyət silindi');
+      if (selectedEvent?.id === id) { setSelectedEvent(null); setInvitations([]); }
+      fetchEvents();
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  const selectEvent = (event) => {
+    setSelectedEvent(event);
+    fetchInvitations(event.id);
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
+
+  const handleAutoSuggest = async () => {
+    if (!selectedEvent) return;
+    try {
+      setInvLoading(true);
+      const res = await axios.post(`${API}/events/${selectedEvent.id}/auto-suggest`,
+        { count: suggestCount }, { headers });
+      setSuggestions(res.data.suggestions);
+      setShowSuggestions(true);
+      toast.success(`${res.data.suggestions.length} şirkət təklif olundu`);
+    } catch { toast.error('Xəta baş verdi'); }
+    finally { setInvLoading(false); }
+  };
+
+  const handleBulkInvite = async (companyIds) => {
+    if (!selectedEvent) return;
+    try {
+      const res = await axios.post(`${API}/invitations/bulk`,
+        { event_id: selectedEvent.id, company_ids: companyIds }, { headers });
+      toast.success(`${res.data.created} dəvət yaradıldı`);
+      fetchInvitations(selectedEvent.id);
+      setShowSuggestions(false);
+      setSuggestions([]);
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  const handleCallStatus = async (invId, callStatus, participationStatus = '') => {
+    try {
+      await axios.put(`${API}/invitations/${invId}/call`,
+        { call_status: callStatus, participation_status: participationStatus }, { headers });
+      toast.success('Status yeniləndi');
+      fetchInvitations(selectedEvent.id);
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  const handleRemoveInvitation = async (invId) => {
+    try {
+      await axios.delete(`${API}/invitations/${invId}`, { headers });
+      toast.success('Dəvət silindi');
+      fetchInvitations(selectedEvent.id);
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  const removeSuggestion = (companyId) => {
+    setSuggestions(prev => prev.filter(s => s.company_id !== companyId));
+  };
+
+  const handleManualAdd = async () => {
+    setShowInviteModal(true);
+  };
+
+  const addManualCompany = async (companyId) => {
+    if (!selectedEvent) return;
+    try {
+      const company = companies.find(c => c.id === companyId);
+      await axios.post(`${API}/invitations`, {
+        event_id: selectedEvent.id,
+        event_name: selectedEvent.name,
+        event_type: selectedEvent.event_type,
+        event_date: selectedEvent.date,
+        company_id: companyId,
+        company_name: company?.brand_name || ''
+      }, { headers });
+      toast.success('Dəvət əlavə edildi');
+      fetchInvitations(selectedEvent.id);
+      setShowInviteModal(false);
+    } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  const filteredEvents = events.filter(e => {
+    if (filterType !== 'all' && e.event_type !== filterType) return false;
+    return true;
+  });
+
+  const invitedCompanyIds = new Set(invitations.map(i => i.company_id));
+  const availableCompanies = companies.filter(c =>
+    !invitedCompanyIds.has(c.id) &&
+    (searchCompany ? c.brand_name?.toLowerCase().includes(searchCompany.toLowerCase()) : true)
+  );
+
+  const getCallBadge = (inv) => {
+    if (inv.call_status === 'Cavab verdi' && inv.participation_status === 'Qatılır')
+      return <Badge className="bg-green-100 text-green-700 text-xs">Qatılır</Badge>;
+    if (inv.call_status === 'Cavab verdi' && inv.participation_status === 'Qatılmır')
+      return <Badge className="bg-red-100 text-red-700 text-xs">Qatılmır</Badge>;
+    if (inv.call_status === 'Cavab vermədi')
+      return <Badge className="bg-amber-100 text-amber-700 text-xs">Cavab vermədi</Badge>;
+    return <Badge className="bg-slate-100 text-slate-600 text-xs">Gözləyir</Badge>;
+  };
+
+  if (loading) return <div className="flex items-center justify-center h-[60vh]"><Loader2 className="w-8 h-8 animate-spin" style={{ color: '#3D4F6F' }} /></div>;
+
+  return (
+    <div className="p-4 sm:p-6 lg:p-8" data-testid="organization-page">
+      <Toaster position="top-right" richColors />
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Təşkilatçılıq</h1>
+          <p className="text-slate-500 text-sm mt-1">Həftəlik fəaliyyət planlaması və dəvət idarəetməsi</p>
+        </div>
+        <Button onClick={() => openEventModal()} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="add-event-btn">
+          <Plus className="w-4 h-4 mr-1" />Yeni Fəaliyyət
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Events List */}
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-[#3D4F6F]">Fəaliyyətlər</h2>
+              <Select value={filterType} onValueChange={setFilterType}>
+                <SelectTrigger className="w-[140px] text-xs h-8"><SelectValue placeholder="Hamısı" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Hamısı</SelectItem>
+                  {EVENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 max-h-[65vh] overflow-y-auto" data-testid="events-list">
+              {filteredEvents.length === 0 && <p className="text-center text-slate-400 text-sm py-8">Fəaliyyət yoxdur</p>}
+              {filteredEvents.map(event => (
+                <div
+                  key={event.id}
+                  className={`p-3 rounded-lg border cursor-pointer transition-all ${selectedEvent?.id === event.id ? 'border-[#9ACD32] bg-[#9ACD32]/5' : 'border-slate-100 hover:border-slate-200'}`}
+                  onClick={() => selectEvent(event)}
+                  data-testid={`event-card-${event.id}`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm text-[#3D4F6F] truncate">{event.name}</p>
+                      <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                        <Badge className="text-[10px] bg-[#3D4F6F]/10 text-[#3D4F6F]">{event.event_type}</Badge>
+                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{event.date}</span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
+                        {event.venue && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{event.venue}</span>}
+                        <span className="flex items-center gap-1"><Users2 className="w-3 h-3" />Limit: {event.participant_limit}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-1 ml-2">
+                      <button onClick={(e) => { e.stopPropagation(); openEventModal(event); }} className="p-1 hover:bg-slate-100 rounded"><Pencil className="w-3.5 h-3.5 text-slate-400" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event.id); }} className="p-1 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Invitations Panel */}
+        <div className="lg:col-span-2">
+          {!selectedEvent ? (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-12 text-center">
+              <Calendar className="w-12 h-12 mx-auto mb-4 text-slate-300" />
+              <p className="text-slate-400">Sol tərəfdən fəaliyyət seçin</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Event Header */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-[#3D4F6F]">{selectedEvent.name}</h2>
+                    <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
+                      <Badge className="bg-[#3D4F6F]/10 text-[#3D4F6F]">{selectedEvent.event_type}</Badge>
+                      <span>{selectedEvent.date} {selectedEvent.time}</span>
+                      {selectedEvent.venue && <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{selectedEvent.venue}</span>}
+                    </div>
+                    {selectedEvent.host_company_name && (
+                      <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Building2 className="w-3 h-3" />Ev sahibi: <strong>{selectedEvent.host_company_name}</strong></p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-[#3D4F6F]">{invitations.length}<span className="text-sm font-normal text-slate-400">/{selectedEvent.participant_limit}</span></p>
+                    <p className="text-xs text-slate-400">Dəvət olunub</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Bar */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 flex flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    value={suggestCount}
+                    onChange={(e) => setSuggestCount(parseInt(e.target.value) || 0)}
+                    className="w-20 h-8 text-sm"
+                    min={1}
+                    data-testid="suggest-count-input"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleAutoSuggest}
+                    disabled={invLoading}
+                    className="bg-[#3D4F6F] hover:bg-[#2A364C] text-white h-8"
+                    data-testid="auto-suggest-btn"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 mr-1" />Avto təklif
+                  </Button>
+                </div>
+                <Button size="sm" variant="outline" onClick={handleManualAdd} className="h-8" data-testid="manual-add-btn">
+                  <UserPlus className="w-3.5 h-3.5 mr-1" />Manual əlavə et
+                </Button>
+              </div>
+
+              {/* Suggestions Panel */}
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="bg-amber-50 rounded-xl border border-amber-200 p-4" data-testid="suggestions-panel">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-amber-800 text-sm flex items-center gap-2">
+                      <Sparkles className="w-4 h-4" />Təklif olunan şirkətlər ({suggestions.length})
+                    </h3>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => handleBulkInvite(suggestions.map(s => s.company_id))}
+                        className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] h-7 text-xs"
+                        data-testid="invite-all-btn"
+                      >
+                        <CheckCircle2 className="w-3 h-3 mr-1" />Hamısını dəvət et
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => { setShowSuggestions(false); setSuggestions([]); }} className="h-7 text-xs">
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+                    {suggestions.map((s, idx) => (
+                      <div key={s.company_id} className="flex items-center justify-between bg-white p-2 rounded-lg border border-amber-100">
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-amber-600 font-mono w-6">#{idx + 1}</span>
+                          <div>
+                            <p className="text-sm font-medium text-[#3D4F6F]">{s.company_name}</p>
+                            <p className="text-xs text-slate-500">
+                              {s.package} · Qalan: <strong className="text-red-600">{s.remaining_quota}</strong>/{s.total_quota}
+                              {s.days_remaining < 90 && <span className="text-red-500 ml-1">({s.days_remaining} gün qalıb)</span>}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => handleBulkInvite([s.company_id])} className="h-7 text-xs text-green-600 hover:text-green-700">
+                            <CheckCircle2 className="w-3 h-3" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => removeSuggestion(s.company_id)} className="h-7 text-xs text-red-500 hover:text-red-600">
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Invitations List */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="p-3 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="font-semibold text-sm text-[#3D4F6F]">Dəvət siyahısı ({invitations.length})</h3>
+                  <div className="flex gap-2 text-xs text-slate-500">
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500" />{invitations.filter(i => i.participation_status === 'Qatılır').length} qatılır</span>
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500" />{invitations.filter(i => i.participation_status === 'Qatılmır').length} rədd</span>
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500" />{invitations.filter(i => i.call_status === 'Cavab vermədi').length} cavabsız</span>
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-slate-300" />{invitations.filter(i => i.call_status === 'Gözləyir').length} gözləyir</span>
+                  </div>
+                </div>
+                {invLoading ? (
+                  <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-[#3D4F6F]" /></div>
+                ) : invitations.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 text-sm">Hələ dəvət yoxdur. "Avto təklif" istifadə edin.</div>
+                ) : (
+                  <div className="divide-y divide-slate-50 max-h-[400px] overflow-y-auto" data-testid="invitations-list">
+                    {invitations.map((inv, idx) => (
+                      <div key={inv.id} className="flex items-center justify-between px-3 py-2.5 hover:bg-slate-50/50" data-testid={`invitation-row-${inv.id}`}>
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <span className="text-xs text-slate-400 font-mono w-6">{idx + 1}</span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-[#3D4F6F] truncate">{inv.company_name}</p>
+                            <p className="text-xs text-slate-400">
+                              {inv.called_by && `Zəng: ${inv.called_by}`}
+                              {inv.called_at && ` · ${new Date(inv.called_at).toLocaleDateString('az-AZ')}`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {getCallBadge(inv)}
+                          {inv.call_status === 'Gözləyir' && (
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => handleCallStatus(inv.id, 'Cavab verdi', 'Qatılır')}
+                                className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-600 transition-colors"
+                                title="Qatılır"
+                                data-testid={`call-accept-${inv.id}`}
+                              >
+                                <PhoneCall className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleCallStatus(inv.id, 'Cavab verdi', 'Qatılmır')}
+                                className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 transition-colors"
+                                title="Qatılmır"
+                                data-testid={`call-decline-${inv.id}`}
+                              >
+                                <PhoneOff className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleCallStatus(inv.id, 'Cavab vermədi')}
+                                className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600 transition-colors"
+                                title="Cavab vermədi"
+                                data-testid={`call-noanswer-${inv.id}`}
+                              >
+                                <Phone className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                          {inv.call_status === 'Cavab vermədi' && (
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => handleCallStatus(inv.id, 'Cavab verdi', 'Qatılır')}
+                                className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-600 transition-colors"
+                                title="Yenidən zəng — Qatılır"
+                              >
+                                <PhoneCall className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleCallStatus(inv.id, 'Cavab verdi', 'Qatılmır')}
+                                className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 transition-colors"
+                                title="Yenidən zəng — Qatılmır"
+                              >
+                                <PhoneOff className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                          <button onClick={() => handleRemoveInvitation(inv.id)} className="p-1 hover:bg-red-50 rounded">
+                            <Trash2 className="w-3.5 h-3.5 text-red-300 hover:text-red-500" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Event Form Modal */}
+      <Dialog open={showEventModal} onOpenChange={setShowEventModal}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle style={{ color: '#3D4F6F' }}>{editing ? 'Fəaliyyəti redaktə et' : 'Yeni Fəaliyyət'}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEventSubmit} className="space-y-4" data-testid="event-form">
+            <div>
+              <Label className="text-xs">Fəaliyyət adı *</Label>
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className="text-sm" data-testid="event-name-input" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Növ *</Label>
+                <Select value={form.event_type} onValueChange={(v) => setForm({ ...form, event_type: v })}>
+                  <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                  <SelectContent>
+                    {EVENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Status</Label>
+                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+                  <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {EVENT_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Tarix *</Label>
+                <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required className="text-sm" data-testid="event-date-input" />
+              </div>
+              <div>
+                <Label className="text-xs">Saat</Label>
+                <Input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} className="text-sm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Məkan</Label>
+                <Input value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} className="text-sm" />
+              </div>
+              <div>
+                <Label className="text-xs">İştirakçı limiti *</Label>
+                <Input type="number" value={form.participant_limit} onChange={(e) => setForm({ ...form, participant_limit: parseInt(e.target.value) || 0 })} className="text-sm" min={1} data-testid="event-limit-input" />
+              </div>
+            </div>
+            {form.event_type === 'Ofis ziyarəti' && (
+              <div>
+                <Label className="text-xs">Ev sahibi şirkət (ofis sahibi)</Label>
+                <Select value={form.host_company_id} onValueChange={(v) => {
+                  const c = companies.find(x => x.id === v);
+                  setForm({ ...form, host_company_id: v, host_company_name: c?.brand_name || '' });
+                }}>
+                  <SelectTrigger className="text-sm"><SelectValue placeholder="Şirkət seçin" /></SelectTrigger>
+                  <SelectContent>
+                    {companies.map(c => <SelectItem key={c.id} value={c.id}>{c.brand_name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div>
+              <Label className="text-xs">Qeyd</Label>
+              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="w-full min-h-[60px] p-2 text-sm border rounded-lg resize-none" />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setShowEventModal(false)}>Ləğv et</Button>
+              <Button type="submit" className="bg-[#3D4F6F] hover:bg-[#2A364C] text-white" data-testid="event-submit-btn">{editing ? 'Yadda saxla' : 'Yarat'}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Add Modal */}
+      <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
+        <DialogContent className="max-w-md max-h-[70vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle style={{ color: '#3D4F6F' }}>Şirkət əlavə et</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                placeholder="Şirkət axtar..."
+                value={searchCompany}
+                onChange={(e) => setSearchCompany(e.target.value)}
+                className="pl-10 text-sm"
+                data-testid="search-company-input"
+              />
+            </div>
+            <div className="space-y-1 max-h-[400px] overflow-y-auto">
+              {availableCompanies.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => addManualCompany(c.id)}
+                  className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-50 border border-slate-100 transition-colors text-left"
+                  data-testid={`add-company-${c.id}`}
+                >
+                  <div>
+                    <p className="text-sm font-medium text-[#3D4F6F]">{c.brand_name}</p>
+                    <p className="text-xs text-slate-500">{c.owner_name} · {c.package}</p>
+                  </div>
+                  <Plus className="w-4 h-4 text-[#9ACD32]" />
+                </button>
+              ))}
+              {availableCompanies.length === 0 && <p className="text-center text-slate-400 text-sm py-4">Şirkət tapılmadı</p>}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }
