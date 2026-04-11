@@ -331,6 +331,30 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     tasks_count = await db.tasks.count_documents({})
     meetings_count = await db.meetings.count_documents({})
     
+    # Events stats
+    events_count = await db.events.count_documents({})
+    invitations_count = await db.invitations.count_documents({})
+    events_type_pipeline = [
+        {"$group": {"_id": "$event_type", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    events_by_type = await db.events.aggregate(events_type_pipeline).to_list(20)
+    
+    # Invitations stats
+    inv_attended = await db.invitations.count_documents({"participation_status": "Qatılır"})
+    inv_declined = await db.invitations.count_documents({"participation_status": "Qatılmır"})
+    inv_no_answer = await db.invitations.count_documents({"call_status": "Cavab vermədi"})
+    inv_pending = await db.invitations.count_documents({"call_status": "Gözləyir"})
+    
+    # Invitations by event type
+    inv_type_pipeline = [
+        {"$group": {"_id": "$event_type", "total": {"$sum": 1},
+                     "attended": {"$sum": {"$cond": [{"$eq": ["$participation_status", "Qatılır"]}, 1, 0]}},
+                     "declined": {"$sum": {"$cond": [{"$eq": ["$participation_status", "Qatılmır"]}, 1, 0]}}}},
+        {"$sort": {"total": -1}}
+    ]
+    inv_by_type = await db.invitations.aggregate(inv_type_pipeline).to_list(20)
+    
     # Get companies by package
     premium_count = await db.companies.count_documents({"package": "Premium"})
     business_count = await db.companies.count_documents({"package": "Business"})
@@ -386,6 +410,18 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         },
         "meetings": {
             "total": meetings_count
+        },
+        "events": {
+            "total": events_count,
+            "by_type": [{"name": e["_id"] or "Digər", "count": e["count"]} for e in events_by_type],
+        },
+        "invitations": {
+            "total": invitations_count,
+            "attended": inv_attended,
+            "declined": inv_declined,
+            "no_answer": inv_no_answer,
+            "pending": inv_pending,
+            "by_type": [{"name": i["_id"] or "Digər", "total": i["total"], "attended": i["attended"], "declined": i["declined"]} for i in inv_by_type],
         },
         "sectors": {
             "total": len(sectors_data),
@@ -807,7 +843,7 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
         "marsol_companies": marsol_companies,
         "education_levels": ["Orta təhsil", "Sub bakalavr", "Bakalavr", "Magistratura", "Doktorantura"],
         "event_types": EVENT_TYPES,
-        "package_quotas": PACKAGE_QUOTAS,
+        "package_quotas": await get_package_quotas(),
     }
 
 # Get companies for select dropdown (simplified)
@@ -839,6 +875,7 @@ async def create_package(package_data: dict, current_user: dict = Depends(get_cu
         "name": package_data.get("name"),
         "description": package_data.get("description", ""),
         "price": package_data.get("price", 0),
+        "invitation_count": package_data.get("invitation_count", 0),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.packages.insert_one(package_doc)
@@ -1300,13 +1337,26 @@ async def send_message(conversation_id: str, data: dict, current_user: dict = De
 
 # ==================== PACKAGE QUOTA CONFIG ====================
 
-PACKAGE_QUOTAS = {
+DEFAULT_PACKAGE_QUOTAS = {
     "Premium": 12,
     "Business": 15,
     "Business Plus": 25,
     "Business+": 25,
     "Sponsor": 40,
 }
+
+async def get_package_quotas():
+    packages = await db.packages.find({}, {"_id": 0, "name": 1, "invitation_count": 1}).to_list(100)
+    if packages:
+        quotas = {}
+        for p in packages:
+            name = p.get("name", "")
+            count = p.get("invitation_count", 0)
+            if name and count:
+                quotas[name] = count
+        if quotas:
+            return quotas
+    return DEFAULT_PACKAGE_QUOTAS
 
 EVENT_TYPES = ["Breakfast", "Ofis ziyarəti", "Mafia", "Sosial fəaliyyət", "Təlim", "B2B görüş"]
 
@@ -1477,7 +1527,8 @@ async def delete_invitation(inv_id: str, current_user: dict = Depends(get_curren
 
 async def _get_company_obligation(company: dict) -> dict:
     package = company.get("package", "")
-    total_quota = PACKAGE_QUOTAS.get(package, 0)
+    quotas = await get_package_quotas()
+    total_quota = quotas.get(package, 0)
     company_id = company.get("id", "")
     start_date = company.get("contract_start_date", "")
     end_date = company.get("contract_end_date", "")

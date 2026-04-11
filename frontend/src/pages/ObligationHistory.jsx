@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Loader2, Search, Calendar, Building2, Eye,
   Phone, PhoneCall, PhoneOff, CheckCircle2, XCircle,
-  Filter, ChevronRight
+  Filter, BarChart3
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -13,11 +13,18 @@ import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const EVENT_TYPES = ['Breakfast', 'Ofis ziyarəti', 'Mafia', 'Sosial fəaliyyət', 'Təlim', 'B2B görüş'];
 
 export default function ObligationHistory() {
   const [data, setData] = useState({ obligations: [], stats: {} });
+  const [events, setEvents] = useState([]);
+  const [allInvitations, setAllInvitations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterEventType, setFilterEventType] = useState('all');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [companyDetail, setCompanyDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -27,8 +34,14 @@ export default function ObligationHistory() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/obligations/dashboard`, { headers });
-      setData(res.data);
+      const [oblRes, evRes, invRes] = await Promise.all([
+        axios.get(`${API}/obligations/dashboard`, { headers }),
+        axios.get(`${API}/events`, { headers }),
+        axios.get(`${API}/invitations`, { headers }),
+      ]);
+      setData(oblRes.data);
+      setEvents(evRes.data);
+      setAllInvitations(invRes.data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, []);
@@ -45,13 +58,41 @@ export default function ObligationHistory() {
     finally { setDetailLoading(false); }
   };
 
+  // Event type stats from all invitations
+  const eventTypeStats = EVENT_TYPES.map(type => {
+    let invs = allInvitations.filter(i => i.event_type === type);
+    if (filterDateFrom) invs = invs.filter(i => i.event_date >= filterDateFrom);
+    if (filterDateTo) invs = invs.filter(i => i.event_date <= filterDateTo);
+    const total = invs.length;
+    const attended = invs.filter(i => i.participation_status === 'Qatılır').length;
+    const declined = invs.filter(i => i.participation_status === 'Qatılmır').length;
+    const noAnswer = invs.filter(i => i.call_status === 'Cavab vermədi').length;
+    const evCount = events.filter(e => e.event_type === type).length;
+    return { type, eventCount: evCount, total, attended, declined, noAnswer };
+  }).filter(s => s.eventCount > 0 || s.total > 0);
+
+  // Filtered companies (those with invitations)
   const filtered = data.obligations.filter(o => {
     if (searchTerm) {
       const t = searchTerm.toLowerCase();
-      return o.company_name?.toLowerCase().includes(t) || o.owner_name?.toLowerCase().includes(t);
+      if (!o.company_name?.toLowerCase().includes(t) && !o.owner_name?.toLowerCase().includes(t)) return false;
     }
     return true;
   }).filter(o => o.total_invited > 0);
+
+  // Filtered invitations for the table
+  let filteredInvitations = allInvitations;
+  if (filterEventType !== 'all') filteredInvitations = filteredInvitations.filter(i => i.event_type === filterEventType);
+  if (filterDateFrom) filteredInvitations = filteredInvitations.filter(i => i.event_date >= filterDateFrom);
+  if (filterDateTo) filteredInvitations = filteredInvitations.filter(i => i.event_date <= filterDateTo);
+  if (filterStatus === 'attended') filteredInvitations = filteredInvitations.filter(i => i.participation_status === 'Qatılır');
+  if (filterStatus === 'declined') filteredInvitations = filteredInvitations.filter(i => i.participation_status === 'Qatılmır');
+  if (filterStatus === 'no_answer') filteredInvitations = filteredInvitations.filter(i => i.call_status === 'Cavab vermədi');
+  if (filterStatus === 'pending') filteredInvitations = filteredInvitations.filter(i => i.call_status === 'Gözləyir');
+  if (searchTerm) {
+    const t = searchTerm.toLowerCase();
+    filteredInvitations = filteredInvitations.filter(i => i.company_name?.toLowerCase().includes(t) || i.event_name?.toLowerCase().includes(t));
+  }
 
   if (loading) return <div className="flex items-center justify-center h-[60vh]"><Loader2 className="w-8 h-8 animate-spin" style={{ color: '#3D4F6F' }} /></div>;
 
@@ -61,14 +102,133 @@ export default function ObligationHistory() {
 
       <div className="mb-6">
         <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Öhdəlik Tarixçəsi</h1>
-        <p className="text-slate-500 text-sm mt-1">Şirkətlərin dəvət və qatılma tarixçəsi</p>
+        <p className="text-slate-500 text-sm mt-1">Fəaliyyət növləri üzrə detallı hesabat və tarixçə</p>
       </div>
 
-      <div className="relative mb-4 max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <Input placeholder="Şirkət axtar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 text-sm" data-testid="history-search" />
+      {/* Event Type Stats Summary */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-6" data-testid="event-type-summary">
+        <h2 className="font-semibold text-[#3D4F6F] mb-3 flex items-center gap-2">
+          <BarChart3 className="w-4 h-4" />Fəaliyyət növləri üzrə hesabat
+        </h2>
+        {eventTypeStats.length === 0 ? (
+          <p className="text-slate-400 text-sm text-center py-4">Hələ fəaliyyət yoxdur</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {eventTypeStats.map(s => (
+              <div key={s.type} className="bg-slate-50 rounded-lg p-3 border border-slate-100" data-testid={`stat-${s.type}`}>
+                <p className="text-xs font-semibold text-[#3D4F6F] mb-2">{s.type}</p>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Görüş sayı:</span>
+                    <span className="font-bold text-[#3D4F6F]">{s.eventCount}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Dəvət:</span>
+                    <span className="font-bold text-[#3D4F6F]">{s.total}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-green-600">Qatıldı:</span>
+                    <span className="font-bold text-green-600">{s.attended}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-red-500">Rədd:</span>
+                    <span className="font-bold text-red-500">{s.declined}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-amber-500">Cavabsız:</span>
+                    <span className="font-bold text-amber-600">{s.noAnswer}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
+      {/* Filters */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 mb-4">
+        <div className="flex flex-wrap gap-3">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input placeholder="Şirkət və ya fəaliyyət axtar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 text-sm" data-testid="history-search" />
+          </div>
+          <Select value={filterEventType} onValueChange={setFilterEventType}>
+            <SelectTrigger className="w-[150px] text-sm h-9"><SelectValue placeholder="Fəaliyyət növü" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Bütün növlər</SelectItem>
+              {EVENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-[140px] text-sm h-9"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Hamısı</SelectItem>
+              <SelectItem value="attended">Qatıldı</SelectItem>
+              <SelectItem value="declined">Rədd etdi</SelectItem>
+              <SelectItem value="no_answer">Cavab vermədi</SelectItem>
+              <SelectItem value="pending">Gözləyir</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} className="w-[140px] text-sm h-9" placeholder="Başlanğıc" data-testid="date-from" />
+          <Input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} className="w-[140px] text-sm h-9" placeholder="Son" data-testid="date-to" />
+        </div>
+      </div>
+
+      {/* Detailed Invitations Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+        <div className="p-3 border-b border-slate-100">
+          <h3 className="font-semibold text-sm text-[#3D4F6F]">Dəvət tarixçəsi ({filteredInvitations.length} nəticə)</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full" data-testid="history-table">
+            <thead>
+              <tr className="bg-slate-50 border-b">
+                <th className="text-left px-3 py-2.5 text-xs font-semibold text-[#3D4F6F]">#</th>
+                <th className="text-left px-3 py-2.5 text-xs font-semibold text-[#3D4F6F]">Şirkət</th>
+                <th className="text-left px-3 py-2.5 text-xs font-semibold text-[#3D4F6F]">Fəaliyyət</th>
+                <th className="text-left px-3 py-2.5 text-xs font-semibold text-[#3D4F6F]">Növ</th>
+                <th className="text-left px-3 py-2.5 text-xs font-semibold text-[#3D4F6F]">Tarix</th>
+                <th className="text-left px-3 py-2.5 text-xs font-semibold text-[#3D4F6F]">Status</th>
+                <th className="text-left px-3 py-2.5 text-xs font-semibold text-[#3D4F6F]">Zəng edən</th>
+                <th className="text-right px-3 py-2.5 text-xs font-semibold text-[#3D4F6F]"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredInvitations.length === 0 ? (
+                <tr><td colSpan={8} className="text-center py-8 text-slate-400 text-sm">Nəticə tapılmadı</td></tr>
+              ) : (
+                filteredInvitations.slice(0, 100).map((inv, idx) => (
+                  <tr key={inv.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                    <td className="px-3 py-2 text-xs text-slate-400">{idx + 1}</td>
+                    <td className="px-3 py-2 text-sm font-medium text-[#3D4F6F]">{inv.company_name}</td>
+                    <td className="px-3 py-2 text-xs text-slate-600">{inv.event_name}</td>
+                    <td className="px-3 py-2"><Badge className="bg-[#3D4F6F]/10 text-[#3D4F6F] text-xs">{inv.event_type}</Badge></td>
+                    <td className="px-3 py-2 text-xs text-slate-600">{inv.event_date}</td>
+                    <td className="px-3 py-2">
+                      {inv.participation_status === 'Qatılır' && <Badge className="bg-green-100 text-green-700 text-xs">Qatıldı</Badge>}
+                      {inv.participation_status === 'Qatılmır' && <Badge className="bg-red-100 text-red-700 text-xs">Rədd</Badge>}
+                      {inv.call_status === 'Cavab vermədi' && <Badge className="bg-amber-100 text-amber-700 text-xs">Cavabsız</Badge>}
+                      {inv.call_status === 'Gözləyir' && <Badge className="bg-slate-100 text-slate-500 text-xs">Gözləyir</Badge>}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-500">{inv.called_by || '-'}</td>
+                    <td className="px-3 py-2 text-right">
+                      <Button variant="ghost" size="sm" onClick={() => openDetail(inv.company_id)} className="h-6">
+                        <Eye className="w-3 h-3 text-slate-500" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {filteredInvitations.length > 100 && (
+          <div className="p-2 text-center text-xs text-slate-400 bg-slate-50 border-t">İlk 100 nəticə göstərilir (cəmi: {filteredInvitations.length})</div>
+        )}
+      </div>
+
+      {/* Company Cards */}
+      <h3 className="font-semibold text-[#3D4F6F] mb-3">Şirkət üzrə icmal</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.length === 0 && <p className="col-span-full text-center text-slate-400 py-8">Tarixçəsi olan şirkət yoxdur</p>}
         {filtered.map(obl => (

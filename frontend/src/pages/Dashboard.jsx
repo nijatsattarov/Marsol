@@ -230,6 +230,68 @@ export default function Dashboard() {
 
       {/* Charts Row 2 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* Events Stats */}
+        <ChartCard title="Fəaliyyət statistikası">
+          <div className="space-y-3">
+            <div className="flex justify-between items-center p-3 rounded-xl" style={{ backgroundColor: '#3D4F6F0A' }}>
+              <div>
+                <p className="text-xs text-slate-500">Cəmi fəaliyyət</p>
+                <p className="text-2xl font-bold" style={{ color: '#3D4F6F' }}>{stats.events?.total || 0}</p>
+              </div>
+              <Calendar className="w-6 h-6" style={{ color: '#3D4F6F' }} />
+            </div>
+            {(stats.events?.by_type || []).length > 0 ? (
+              <div className="space-y-2">
+                {stats.events.by_type.map((et, i) => (
+                  <div key={et.name} className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50">
+                    <span className="text-sm text-slate-600">{et.name}</span>
+                    <span className="text-sm font-bold" style={{ color: '#3D4F6F' }}>{et.count}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-slate-400 text-sm py-3">Hələ fəaliyyət yoxdur</p>
+            )}
+          </div>
+        </ChartCard>
+
+        {/* Invitation Stats */}
+        <ChartCard title="Dəvət statistikası">
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="text-center p-2.5 rounded-xl bg-slate-50">
+                <p className="text-xl font-bold" style={{ color: '#3D4F6F' }}>{stats.invitations?.total || 0}</p>
+                <p className="text-[10px] text-slate-500">Cəmi dəvət</p>
+              </div>
+              <div className="text-center p-2.5 rounded-xl bg-green-50">
+                <p className="text-xl font-bold text-green-600">{stats.invitations?.attended || 0}</p>
+                <p className="text-[10px] text-green-600">Qatıldı</p>
+              </div>
+              <div className="text-center p-2.5 rounded-xl bg-red-50">
+                <p className="text-xl font-bold text-red-600">{stats.invitations?.declined || 0}</p>
+                <p className="text-[10px] text-red-500">Rədd etdi</p>
+              </div>
+              <div className="text-center p-2.5 rounded-xl bg-amber-50">
+                <p className="text-xl font-bold text-amber-600">{stats.invitations?.no_answer || 0}</p>
+                <p className="text-[10px] text-amber-500">Cavab vermədi</p>
+              </div>
+            </div>
+            {(stats.invitations?.by_type || []).length > 0 && (
+              <div className="w-full overflow-x-auto">
+                <ResponsiveContainer width="100%" height={120} minWidth={200}>
+                  <BarChart data={stats.invitations.by_type} margin={{ left: 0, right: 5 }}>
+                    <XAxis dataKey="name" tick={{ fontSize: 9 }} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10 }} width={25} />
+                    <Tooltip />
+                    <Bar dataKey="total" fill="#3D4F6F" name="Dəvət" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="attended" fill="#9ACD32" name="Qatıldı" radius={[2, 2, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </ChartCard>
+
         {/* Tasks Summary */}
         <ChartCard title="Tapşırıqlar icmalı">
           <div className="space-y-4">

@@ -85,7 +85,7 @@ export default function Settings() {
   const [marsolCompanies, setMarsolCompanies] = useState([]);
 
   // Forms
-  const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0 });
+  const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0, invitation_count: 0 });
   const [projectForm, setProjectForm] = useState({ name: '', description: '' });
   const [fieldForm, setFieldForm] = useState({ module: '', sub_tab: '', field_name: '', field_label: '', field_type: 'text', options: '', required: false });
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'user', department: '', phone: '', status: 'Aktiv' });
@@ -161,7 +161,7 @@ export default function Settings() {
         toast.success('Paket əlavə edildi');
       }
       setEditingPackage(null);
-      setPackageForm({ name: '', description: '', price: 0 });
+      setPackageForm({ name: '', description: '', price: 0, invitation_count: 0 });
       fetchData();
     } catch { toast.error('Xəta baş verdi'); }
   };
@@ -483,6 +483,10 @@ export default function Settings() {
                 <Label className="text-xs mb-1">Qiymət (AZN)</Label>
                 <Input type="number" value={packageForm.price} onChange={(e) => setPackageForm({ ...packageForm, price: parseFloat(e.target.value) || 0 })} className="text-sm" data-testid="package-price-input" />
               </div>
+              <div>
+                <Label className="text-xs mb-1">Dəvət sayı</Label>
+                <Input type="number" value={packageForm.invitation_count} onChange={(e) => setPackageForm({ ...packageForm, invitation_count: parseInt(e.target.value) || 0 })} className="text-sm" data-testid="package-invitation-count-input" />
+              </div>
               <div className="flex gap-2 items-end">
                 <Button type="submit" size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="package-submit-btn">
                   {editingPackage ? 'Yenilə' : 'Əlavə et'}
@@ -501,7 +505,8 @@ export default function Settings() {
                   </div>
                   <div className="flex items-center gap-3">
                     <Badge className="bg-[#3D4F6F] text-white text-xs">{pkg.price?.toLocaleString()} AZN</Badge>
-                    <Button variant="ghost" size="sm" onClick={() => { setEditingPackage(pkg); setPackageForm({ name: pkg.name, description: pkg.description || '', price: pkg.price || 0 }); }} data-testid={`package-edit-${pkg.id}`}>
+                    {pkg.invitation_count > 0 && <Badge className="bg-[#9ACD32] text-[#3D4F6F] text-xs">{pkg.invitation_count} dəvət</Badge>}
+                    <Button variant="ghost" size="sm" onClick={() => { setEditingPackage(pkg); setPackageForm({ name: pkg.name, description: pkg.description || '', price: pkg.price || 0, invitation_count: pkg.invitation_count || 0 }); }} data-testid={`package-edit-${pkg.id}`}>
                       <Pencil className="w-4 h-4 text-slate-500" />
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => handleDeletePackage(pkg.id)} data-testid={`package-delete-${pkg.id}`}>
