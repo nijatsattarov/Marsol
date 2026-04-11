@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Search, Loader2, TrendingUp, TrendingDown, Filter,
   Wallet, CreditCard, Pencil, Trash2, ChevronDown,
-  ArrowDownRight, MessageSquare, X, Save, Check
+  ArrowDownRight, MessageSquare, X, Save, Check, Download
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -14,6 +14,7 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Toaster, toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -178,6 +179,67 @@ export default function Finance() {
 
   const selectedCategory = expenseCategories.find(c => c.name === expenseForm.category);
 
+  const exportFinanceToExcel = () => {
+    const wb = XLSX.utils.book_new();
+    // Sheet 1 - Gəlirlər (Şirkət ödənişləri)
+    const incomeData = filteredCompanies.map((c, i) => ({
+      '№': i + 1,
+      'Şirkət': c.brand_name || '',
+      'Sahibkar': c.owner_name || '',
+      'Paket': c.package || '',
+      'Kurator': c.marsol_representative || '',
+      'Ümumi məbləğ': c.total_amount || 0,
+      'Ödənilib': c.paid_amount || 0,
+      'Borc': c.debt_amount || 0,
+      'Son ödəniş tarixi': c.last_payment_date || '',
+      'Status': c.status || '',
+      'Qeyd': c.finance_note || '',
+    }));
+    const ws1 = XLSX.utils.json_to_sheet(incomeData);
+    ws1['!cols'] = [
+      { wch: 5 }, { wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 18 },
+      { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 25 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Gəlirlər');
+
+    // Sheet 2 - Xərclər
+    const expenseData = expenses.map((e, i) => ({
+      '№': i + 1,
+      'Xərc adı': e.expense_name || '',
+      'Kateqoriya': e.category || '',
+      'Alt kateqoriya': e.sub_category || '',
+      'Məbləğ': e.amount || 0,
+      'Valyuta': e.currency || 'AZN',
+      'Tarix': e.date || '',
+      'Layihə': e.project || '',
+      'Şöbə': e.department || '',
+      'Məsul şəxs': e.responsible_person || '',
+      'Ödəniş növü': e.payment_type || '',
+      'Status': e.status || '',
+    }));
+    const ws2 = XLSX.utils.json_to_sheet(expenseData);
+    ws2['!cols'] = [
+      { wch: 5 }, { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 12 },
+      { wch: 8 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 14 }, { wch: 10 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Xərclər');
+
+    // Sheet 3 - İcmal
+    const summaryData = [
+      { 'Göstərici': 'Ümumi gəlir', 'Məbləğ (AZN)': totalIncome },
+      { 'Göstərici': 'Ödənilib', 'Məbləğ (AZN)': totalPaid },
+      { 'Göstərici': 'Debitor borc', 'Məbləğ (AZN)': totalDebt },
+      { 'Göstərici': 'Ümumi xərclər', 'Məbləğ (AZN)': totalExpenses },
+      { 'Göstərici': 'Xalis mənfəət', 'Məbləğ (AZN)': netProfit },
+    ];
+    const ws3 = XLSX.utils.json_to_sheet(summaryData);
+    ws3['!cols'] = [{ wch: 20 }, { wch: 18 }];
+    XLSX.utils.book_append_sheet(wb, ws3, 'İcmal');
+
+    XLSX.writeFile(wb, `maliyye_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success('Excel faylı yükləndi');
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
@@ -197,6 +259,9 @@ export default function Finance() {
           <p className="text-slate-500 text-sm mt-1">Gəlir və xərclərin idarə edilməsi</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={exportFinanceToExcel} className="text-xs sm:text-sm" data-testid="export-finance-btn">
+            <Download className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Excel Export</span>
+          </Button>
           <Button onClick={() => { resetExpenseForm(); setEditingExpense(null); setShowExpenseModal(true); }} size="sm" className="bg-red-500 hover:bg-red-600 text-white text-xs sm:text-sm" data-testid="add-expense-btn">
             <ArrowDownRight className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Xərc əlavə et</span><span className="sm:hidden">Xərc</span>
           </Button>
