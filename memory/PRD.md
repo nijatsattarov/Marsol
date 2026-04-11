@@ -12,53 +12,33 @@ Marsol Group — 500+ üzvü olan B2B netvörkinq şirkətidir. Sahibkarları g�
 | Sponsor | 40 |
 
 ## Texnoloji Stek
-- **Frontend**: React 18, Tailwind CSS, Shadcn UI, Axios, Recharts
+- **Frontend**: React 18, Tailwind CSS, Shadcn UI, Axios, Recharts, SheetJS (xlsx)
 - **Backend**: FastAPI, PyMongo (Motor), JWT Auth
 - **Database**: MongoDB
 
-## Modul Statusları
-
-### Hazır Modullar
+## Hazır Modullar
 | # | Modul | Status |
 |---|-------|--------|
-| 1 | İdarə Paneli (+ fəaliyyət/dəvət statistikası) | Tam ✅ |
-| 2 | Şirkət Məlumatları | Tam ✅ |
-| 3 | İnsan Resursları (7 tab) | Tam ✅ |
-| 4 | Satış (pipeline) | Tam ✅ |
-| 5 | Təşkilatçılıq (event planning + auto-suggest + sektor filtr) | Tam ✅ |
-| 6 | Öhdəliklər (kvota dashboard, dinamik paketdən oxuyur) | Tam ✅ |
-| 7 | Öhdəlik Tarixçəsi (filtrlərlə: növ, tarix, status) | Tam ✅ |
-| 8 | Dəvətlər (zəng takibi + WhatsApp wa.me) | Tam ✅ |
-| 9 | Üzvlər | Tam ✅ |
-| 10 | Maliyyə | Tam ✅ |
-| 11 | Görüşlər | Tam ✅ |
-| 12 | Tapşırıqlar | Tam ✅ |
-| 13 | Mesajlar | Tam ✅ |
-| 14 | Tənzimləmələr (10 tab + paketdə dəvət sayı) | Tam ✅ |
-| 15 | Bildirişlər | Tam ✅ |
+| 1 | İdarə Paneli (fəaliyyət/dəvət statistikası) | ✅ |
+| 2 | Şirkət Məlumatları (XLSX export) | ✅ |
+| 3 | İnsan Resursları (7 tab) | ✅ |
+| 4 | Satış (pipeline) | ✅ |
+| 5 | Təşkilatçılıq (event + auto-suggest + sektor filtr + WhatsApp + Maps) | ✅ |
+| 6 | Öhdəliklər (kvota dashboard + XLSX export) | ✅ |
+| 7 | Öhdəlik Tarixçəsi (filtrlərlə) | ✅ |
+| 8 | Dəvətlər (zəng takibi + WhatsApp) | ✅ |
+| 9 | Üzvlər | ✅ |
+| 10 | Maliyyə | ✅ |
+| 11 | Görüşlər | ✅ |
+| 12 | Tapşırıqlar | ✅ |
+| 13 | Mesajlar | ✅ |
+| 14 | Tənzimləmələr (paketdə dəvət sayı) | ✅ |
+| 15 | Bildirişlər | ✅ |
 
 ### Placeholder Modullar (ComingSoon)
-- Şirkət bazası, Üzvlük forumu, Təkliflər
-- Marketinq, Layihələr, Hesabatlar, İclas, Fayllar, Qeydlər
-
-## Əsas İş Axını
-1. **Təşkilatçılıq**: Fəaliyyət yarat (növ, tarix, məkan, limit, Google Maps link, ev sahibi)
-2. **Avto-təklif**: Say daxil et → sistem prioritetə görə şirkət təklif edir (sektor toqquşması nəzərə alınır)
-3. **Dəvət**: Siyahı redaktəsi, manual əlavə (sektor xəbərdarlığı), toplu dəvət
-4. **WhatsApp**: wa.me linki ilə dəvət göndər (sahibkar nömrəsi, şirkət nömrəsi, xüsusi nömrə)
-5. **Zəng**: Gözləyir → Cavab verdi (Qatılır/Qatılmır) / Cavab vermədi
-6. **Öhdəlik**: Cavab verildikdə -1 kvota düşür (kvota paketdən dinamik oxunur)
-7. **Dashboard**: Fəaliyyət + dəvət statistikası (növ üzrə breakdown, bar chart)
-
-## API Endpoint-lər
-- `/api/events` — CRUD + `/api/events/{id}/auto-suggest` + `/api/events/{id}/check-sector-conflict`
-- `/api/invitations` — CRUD, bulk, `/api/invitations/{id}/call`
-- `/api/obligations/dashboard`, `/api/obligations/company/{id}`
-- `/api/dashboard/stats` — events + invitations breakdown
-- `/api/settings/packages` — invitation_count ilə
+Şirkət bazası, Üzvlük forumu, Təkliflər, Marketinq, Layihələr, Hesabatlar, İclas, Fayllar, Qeydlər
 
 ## Backlog
-
 ### P0
 - [ ] Xüsusi sahələr (Custom Fields) tab-spesifik — testing pending
 
@@ -67,5 +47,5 @@ Marsol Group — 500+ üzvü olan B2B netvörkinq şirkətidir. Sahibkarları g�
 - [ ] Barter əməliyyatları
 
 ### P2
-- [ ] Excel import, PDF hesabatlar, RBAC
+- [ ] PDF hesabatlar, RBAC
 - [ ] Placeholder modulların funksionallığı
