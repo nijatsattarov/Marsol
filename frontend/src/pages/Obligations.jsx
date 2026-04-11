@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Loader2, Search, AlertTriangle, CheckCircle2, Clock,
   Building2, Filter, X, ChevronDown, Eye, ArrowUpDown,
-  TrendingUp, Users2, Phone, PhoneOff
+  TrendingUp, Users2, Phone, PhoneOff, Download
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { Badge } from '../components/ui/badge';
 import { Label } from '../components/ui/label';
 import { Toaster, toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -103,13 +104,58 @@ export default function Obligations() {
 
   const stats = data.stats;
 
+  const exportToExcel = () => {
+    const urgencyLabel = (obl) => {
+      const level = getUrgencyLevel(obl);
+      if (level === 'critical') return 'Kritik';
+      if (level === 'high') return 'Yüksək';
+      if (level === 'medium') return 'Orta';
+      if (level === 'done') return 'Tamamlanıb';
+      return 'Normal';
+    };
+    const excelData = filtered.map((obl, i) => ({
+      '№': i + 1,
+      'Şirkət': obl.company_name || '',
+      'Sahibkar': obl.owner_name || '',
+      'Paket': obl.package || '',
+      'Ümumi kvota': obl.total_quota,
+      'İstifadə olunan': obl.used_quota,
+      'Qalan kvota': obl.remaining_quota,
+      'Cəmi dəvət': obl.total_invited,
+      'Qatıldı': obl.total_attended,
+      'Rədd etdi': obl.total_declined,
+      'Cavab vermədi': obl.total_no_answer,
+      'Müqavilə başlama': obl.contract_start_date || '',
+      'Müqavilə bitmə': obl.contract_end_date || '',
+      'Qalan gün': obl.days_remaining,
+      'Prioritet bal': obl.priority_score,
+      'Vəziyyət': urgencyLabel(obl),
+    }));
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 25 }, { wch: 20 }, { wch: 12 },
+      { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
+      { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
+      { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Öhdəliklər');
+    XLSX.writeFile(wb, `ohdelikler_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success('Excel faylı yükləndi');
+  };
+
   return (
     <div className="p-4 sm:p-6 lg:p-8" data-testid="obligations-page">
       <Toaster position="top-right" richColors />
 
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Öhdəliklər</h1>
-        <p className="text-slate-500 text-sm mt-1">Şirkətlərin dəvət kvotası icmalı və izlənməsi</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Öhdəliklər</h1>
+          <p className="text-slate-500 text-sm mt-1">Şirkətlərin dəvət kvotası icmalı və izlənməsi</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={exportToExcel} data-testid="export-obligations-btn">
+          <Download className="w-4 h-4 mr-1" />Excel Export
+        </Button>
       </div>
 
       {/* Stats */}

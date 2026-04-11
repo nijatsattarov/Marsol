@@ -1,0 +1,80 @@
+{
+  "summary": "Iteration 17 - Testing Excel Export functionality for Obligations and Companies pages. All features working correctly. Obligations page has new Excel Export button, Companies page now exports .xlsx instead of .csv.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+
+  "passed_tests": [
+    "Obligations page loads at /sales/obligations with data-testid='obligations-page'",
+    "Obligations Excel Export button found with data-testid='export-obligations-btn'",
+    "Obligations Excel Export button text is 'Excel Export'",
+    "Obligations Excel Export downloads .xlsx file (ohdelikler_2026-04-11.xlsx)",
+    "Obligations Excel Export shows toast 'Excel faylı yükləndi'",
+    "Obligations table loads with 8 rows of data",
+    "Obligations Package filter works (8 → 4 rows for Business)",
+    "Obligations Urgency filter works (8 → 1 row for Təcili)",
+    "Obligations Search filter works (8 → 1 row for 'Gültəkin')",
+    "Companies page loads at /companies with data-testid='companies-page'",
+    "Companies Excel Export button found (text: 'Excel')",
+    "Companies Excel Export downloads .xlsx file (sirketler_2026-04-11.xlsx) - NOT CSV",
+    "Companies table loads with 8 rows of data"
+  ],
+
+  "failed_tests": [],
+
+  "test_report_links": [
+    "/app/test_reports/iteration_17.json"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [],
+
+  "updated_files": [],
+
+  "success_rate": {
+    "backend": "N/A (frontend only testing)",
+    "frontend": "100% (all 13 tests passed)"
+  },
+
+  "test_credentials": {
+    "email": "settings@marsol.az",
+    "password": "marsol123",
+    "role": "admin"
+  },
+
+  "seed_data_creation": "No seed data created - used existing data (8 companies, 8 obligations)",
+
+  "retest_needed": false,
+
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Iteration 17 verified Excel export functionality: 1) Obligations page at /sales/obligations has 'Excel Export' button (data-testid='export-obligations-btn') that downloads .xlsx file with columns: №, Şirkət, Sahibkar, Paket, Ümumi kvota, İstifadə olunan, Qalan kvota, Cəmi dəvət, Qatıldı, Rədd etdi, Cavab vermədi, Müqavilə başlama, Müqavilə bitmə, Qalan gün, Prioritet bal, Vəziyyət. 2) Companies page Excel export now generates .xlsx (not .csv) with proper column widths. File includes: №, Şirkət adı, Hüquqi ad, Sektor, Alt sektor, Paket, Sahibkar, Sahibkar telefon, Şirkət telefon, E-poçt, Kurator, Region, Ümumi borc, Status, Müqavilə başlama, Müqavilə bitmə. 3) xlsx library (SheetJS v0.18.5) is used via 'import * as XLSX from xlsx'. Both exports use XLSX.utils.json_to_sheet() with custom column widths (ws['!cols']).",
+
+  "features_verified": {
+    "obligations_excel_export": {
+      "status": "WORKING",
+      "details": "Excel Export button with data-testid='export-obligations-btn' downloads ohdelikler_YYYY-MM-DD.xlsx with 16 columns including quota, invitation, and status data"
+    },
+    "companies_excel_export": {
+      "status": "WORKING",
+      "details": "Excel button downloads sirketler_YYYY-MM-DD.xlsx (not CSV) with 16 columns and proper column widths for readability"
+    },
+    "obligations_filters": {
+      "status": "WORKING",
+      "details": "Package filter (Bütün paketlər/Premium/Business/Business Plus/Sponsor), Urgency filter (Hamısı/Təcili/Dəvət olunmayıb/Tamamlanıb), and Search filter all work correctly"
+    },
+    "obligations_table": {
+      "status": "WORKING",
+      "details": "Table displays with columns: #, Şirkət, Paket, Kvota, İrəliləyiş, Dəvət, Qatılma, Müddət, Vəziyyət, and action button"
+    }
+  }
+}

@@ -13,6 +13,7 @@ import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { Toaster, toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -261,11 +262,34 @@ export default function Companies() {
   };
 
   const exportToExcel = () => {
-    const csv = [['ID', 'Şirkət', 'Sektor', 'Paket', 'Sahibkar', 'Telefon', 'Kurator', 'Borc', 'Status'].join(','),
-      ...filteredCompanies.map((c, i) => [i + 1, `"${c.brand_name}"`, `"${c.sector}"`, `"${c.package}"`, `"${c.owner_name || ''}"`, `"${c.company_phone || ''}"`, `"${c.marsol_representative || ''}"`, c.debt_amount || 0, `"${c.status}"`].join(','))
-    ].join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `sirketler_${new Date().toISOString().split('T')[0]}.csv`; link.click();
+    const data = filteredCompanies.map((c, i) => ({
+      '№': i + 1,
+      'Şirkət adı': c.brand_name || '',
+      'Hüquqi ad': c.legal_name || '',
+      'Sektor': c.sector || '',
+      'Alt sektor': c.sub_sector || '',
+      'Paket': c.package || '',
+      'Sahibkar': c.owner_name || '',
+      'Sahibkar telefon': c.owner_phone || '',
+      'Şirkət telefon': c.company_phone || '',
+      'E-poçt': c.company_email || '',
+      'Kurator': c.marsol_representative || '',
+      'Region': c.region || '',
+      'Ümumi borc': c.debt_amount || 0,
+      'Status': c.status || '',
+      'Müqavilə başlama': c.contract_start_date || '',
+      'Müqavilə bitmə': c.contract_end_date || '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 25 }, { wch: 25 }, { wch: 15 }, { wch: 15 },
+      { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 25 },
+      { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Şirkətlər');
+    XLSX.writeFile(wb, `sirketler_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const filteredCompanies = companies.filter(c => c.brand_name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.owner_name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.sector?.toLowerCase().includes(searchTerm.toLowerCase()));
