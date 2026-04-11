@@ -3,7 +3,7 @@
 ## Haqqında
 Marsol Group — 500+ üzvü olan B2B netvörkinq şirkətidir. Sahibkarları görüşlərdə bir araya gətirir.
 
-## Paketlər & Kvotalar
+## Paketlər & Kvotalar (Dinamik — Tənzimləmələrdən idarə olunur)
 | Paket | Dəvət sayı (illik) |
 |-------|-------------------|
 | Premium | 12 |
@@ -12,7 +12,7 @@ Marsol Group — 500+ üzvü olan B2B netvörkinq şirkətidir. Sahibkarları g�
 | Sponsor | 40 |
 
 ## Texnoloji Stek
-- **Frontend**: React 18, Tailwind CSS, Shadcn UI, Axios
+- **Frontend**: React 18, Tailwind CSS, Shadcn UI, Axios, Recharts
 - **Backend**: FastAPI, PyMongo (Motor), JWT Auth
 - **Database**: MongoDB
 
@@ -21,60 +21,41 @@ Marsol Group — 500+ üzvü olan B2B netvörkinq şirkətidir. Sahibkarları g�
 ### Hazır Modullar
 | # | Modul | Status |
 |---|-------|--------|
-| 1 | Şirkət Məlumatları | Tam ✅ |
-| 2 | İnsan Resursları (7 tab) | Tam ✅ |
-| 3 | Satış (pipeline) | Tam ✅ |
-| 4 | Maliyyə | Tam ✅ |
-| 5 | Görüşlər | Tam ✅ |
-| 6 | Tapşırıqlar | Tam ✅ |
-| 7 | Mesajlar | Tam ✅ |
-| 8 | Tənzimləmələr (10 tab) | Tam ✅ |
-| 9 | Bildirişlər | Tam ✅ |
-| 10 | **Təşkilatçılıq** | Tam ✅ (2026-04-10) |
-| 11 | **Öhdəliklər (kvota dashboard)** | Tam ✅ (2026-04-10) |
-| 12 | **Öhdəlik Tarixçəsi** | Tam ✅ (2026-04-10) |
-| 13 | **Dəvətlər** | Tam ✅ (2026-04-10) |
-| 14 | Üzvlər | Tam ✅ |
+| 1 | İdarə Paneli (+ fəaliyyət/dəvət statistikası) | Tam ✅ |
+| 2 | Şirkət Məlumatları | Tam ✅ |
+| 3 | İnsan Resursları (7 tab) | Tam ✅ |
+| 4 | Satış (pipeline) | Tam ✅ |
+| 5 | Təşkilatçılıq (event planning + auto-suggest + sektor filtr) | Tam ✅ |
+| 6 | Öhdəliklər (kvota dashboard, dinamik paketdən oxuyur) | Tam ✅ |
+| 7 | Öhdəlik Tarixçəsi (filtrlərlə: növ, tarix, status) | Tam ✅ |
+| 8 | Dəvətlər (zəng takibi + WhatsApp wa.me) | Tam ✅ |
+| 9 | Üzvlər | Tam ✅ |
+| 10 | Maliyyə | Tam ✅ |
+| 11 | Görüşlər | Tam ✅ |
+| 12 | Tapşırıqlar | Tam ✅ |
+| 13 | Mesajlar | Tam ✅ |
+| 14 | Tənzimləmələr (10 tab + paketdə dəvət sayı) | Tam ✅ |
+| 15 | Bildirişlər | Tam ✅ |
 
 ### Placeholder Modullar (ComingSoon)
 - Şirkət bazası, Üzvlük forumu, Təkliflər
 - Marketinq, Layihələr, Hesabatlar, İclas, Fayllar, Qeydlər
 
-## Menyu Strukturu
-1. İdarə Paneli
-2. Şirkət Məlumatları
-3. İnsan Resursları
-4. **Satış** (genişlənən, 7 alt kateqoriya):
-   - Şirkət bazası, Üzvlər, Öhdəliklər, Öhdəlik tarixçəsi, Üzvlük forumu, Təkliflər, Dəvətlər
-5. Marketinq
-6. Layihələr
-7. Təşkilatçılıq
-8. Maliyyə
-9. Hesabatlar
-10. Görüşlər
-11. İclas
-12. Tapşırıqlar
-13. Mesajlar
-14. Fayllar
-15. Qeydlər
----
-- Bildirişlər / Tənzimləmələr
-
-## Əsas İş Axını (2026-04-10)
-1. **Təşkilatçılıq**: Fəaliyyət yarat (növ, tarix, məkan, limit, ev sahibi)
-2. **Avto-təklif**: Say daxil et → sistem prioritetə görə şirkət təklif edir
-3. **Dəvət**: Siyahını redaktə et, şirkətləri əvəz et, toplu dəvət et
-4. **Zəng**: Gözləyir → Cavab verdi (Qatılır/Qatılmır) / Cavab vermədi
-5. **Öhdəlik**: Cavab verildikdə -1 kvota düşür (qatılmasa da)
-6. **Dashboard**: Prioritet sistemi — az dəvət olunanlar, yaxın bitmə tarixli olanlar vurğulanır
+## Əsas İş Axını
+1. **Təşkilatçılıq**: Fəaliyyət yarat (növ, tarix, məkan, limit, Google Maps link, ev sahibi)
+2. **Avto-təklif**: Say daxil et → sistem prioritetə görə şirkət təklif edir (sektor toqquşması nəzərə alınır)
+3. **Dəvət**: Siyahı redaktəsi, manual əlavə (sektor xəbərdarlığı), toplu dəvət
+4. **WhatsApp**: wa.me linki ilə dəvət göndər (sahibkar nömrəsi, şirkət nömrəsi, xüsusi nömrə)
+5. **Zəng**: Gözləyir → Cavab verdi (Qatılır/Qatılmır) / Cavab vermədi
+6. **Öhdəlik**: Cavab verildikdə -1 kvota düşür (kvota paketdən dinamik oxunur)
+7. **Dashboard**: Fəaliyyət + dəvət statistikası (növ üzrə breakdown, bar chart)
 
 ## API Endpoint-lər
-- `/api/events` — CRUD
-- `/api/invitations` — CRUD, bulk create
-- `/api/invitations/{id}/call` — zəng statusu
-- `/api/events/{id}/auto-suggest` — avto-təklif
-- `/api/obligations/dashboard` — kvota icmalı
-- `/api/obligations/company/{id}` — şirkət detalları
+- `/api/events` — CRUD + `/api/events/{id}/auto-suggest` + `/api/events/{id}/check-sector-conflict`
+- `/api/invitations` — CRUD, bulk, `/api/invitations/{id}/call`
+- `/api/obligations/dashboard`, `/api/obligations/company/{id}`
+- `/api/dashboard/stats` — events + invitations breakdown
+- `/api/settings/packages` — invitation_count ilə
 
 ## Backlog
 
@@ -87,4 +68,4 @@ Marsol Group — 500+ üzvü olan B2B netvörkinq şirkətidir. Sahibkarları g�
 
 ### P2
 - [ ] Excel import, PDF hesabatlar, RBAC
-- [ ] Placeholder modulların tam qurulması
+- [ ] Placeholder modulların funksionallığı
