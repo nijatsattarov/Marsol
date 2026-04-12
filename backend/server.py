@@ -871,16 +871,18 @@ async def _sync_assembly_tasks(assembly_doc):
         for task in agenda.get("tasks", []):
             task_title = task.get("title", "")
             responsible = task.get("responsible_person", "")
-            if task_title and responsible:
+            assignee = task.get("assignee", "")
+            task_deadline = task.get("deadline", "") or deadline
+            if task_title and (responsible or assignee):
                 task_doc = {
                     "id": str(uuid.uuid4()),
                     "task_name": f"[{assembly_code}] {task_title}",
                     "department": department,
-                    "assignee": responsible,
+                    "assignee": assignee or responsible,
                     "responsible_person": responsible,
                     "priority": "Orta",
                     "start_date": today,
-                    "end_date": deadline,
+                    "end_date": task_deadline,
                     "related_object": f"{assembly_code} - {agenda_title}",
                     "phase": "",
                     "status": "Gözləyir",

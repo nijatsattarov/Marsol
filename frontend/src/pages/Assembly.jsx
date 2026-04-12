@@ -15,7 +15,7 @@ import * as XLSX from 'xlsx';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-const emptyAgenda = () => ({ title: '', tasks: [{ title: '', responsible_person: '' }] });
+const emptyAgenda = () => ({ title: '', tasks: [{ title: '', responsible_person: '', assignee: '', deadline: '' }] });
 
 const emptyForm = {
   department: '', purpose: '',
@@ -63,7 +63,7 @@ export default function Assembly() {
       setEditing(assembly);
       const agendas = (assembly.agendas || []).map(a => ({
         title: a.title || '',
-        tasks: (a.tasks || []).length ? a.tasks.map(t => ({ title: t.title || '', responsible_person: t.responsible_person || '' })) : [{ title: '', responsible_person: '' }]
+        tasks: (a.tasks || []).length ? a.tasks.map(t => ({ title: t.title || '', responsible_person: t.responsible_person || '', assignee: t.assignee || '', deadline: t.deadline || '' })) : [{ title: '', responsible_person: '', assignee: '', deadline: '' }]
       }));
       setForm({
         department: assembly.department || '',
@@ -87,7 +87,7 @@ export default function Assembly() {
       ...form,
       agendas: form.agendas.filter(a => a.title.trim()).map(a => ({
         title: a.title.trim(),
-        tasks: a.tasks.filter(t => t.title.trim()).map(t => ({ title: t.title.trim(), responsible_person: t.responsible_person }))
+        tasks: a.tasks.filter(t => t.title.trim()).map(t => ({ title: t.title.trim(), responsible_person: t.responsible_person, assignee: t.assignee, deadline: t.deadline }))
       })),
       discussion_topics: form.discussion_topics.filter(a => a.trim()),
       decisions: form.decisions.filter(a => a.trim()),
@@ -122,7 +122,7 @@ export default function Assembly() {
   });
   const addTask = (agendaIdx) => setForm(p => {
     const a = [...p.agendas];
-    a[agendaIdx] = { ...a[agendaIdx], tasks: [...a[agendaIdx].tasks, { title: '', responsible_person: '' }] };
+    a[agendaIdx] = { ...a[agendaIdx], tasks: [...a[agendaIdx].tasks, { title: '', responsible_person: '', assignee: '', deadline: '' }] };
     return { ...p, agendas: a };
   });
   const removeTask = (agendaIdx, taskIdx) => setForm(p => {
@@ -161,7 +161,7 @@ export default function Assembly() {
 
   // Count helpers
   const getTotalTasks = (a) => (a.agendas || []).reduce((sum, ag) => sum + (ag.tasks || []).length, 0);
-  const getResponsibles = (a) => [...new Set((a.agendas || []).flatMap(ag => (ag.tasks || []).map(t => t.responsible_person)).filter(Boolean))];
+  const getResponsibles = (a) => [...new Set((a.agendas || []).flatMap(ag => (ag.tasks || []).flatMap(t => [t.responsible_person, t.assignee])).filter(Boolean))];
 
   const exportToExcel = () => {
     if (filtered.length === 0) return toast.error('Export ucun melumat yoxdur');
@@ -177,6 +177,8 @@ export default function Assembly() {
             'Gundem': ag.title,
             'Tapshiriq': t.title,
             'Mesul Shexs': t.responsible_person,
+            'Emekdash': t.assignee || '',
+            'Tapshiriq son tarix': t.deadline || '',
             'Son tarix': a.deadline,
             'Novbeti iclas': a.next_assembly_date,
           });
@@ -194,7 +196,7 @@ export default function Assembly() {
     // Add decisions as second sheet
     const decRows = filtered.flatMap(a => (a.decisions || []).map(d => ({ 'Iclas ID': a.assembly_code, 'Qerar': d })));
     const ws1 = XLSX.utils.json_to_sheet(rows);
-    ws1['!cols'] = [{ wch: 10 }, { wch: 16 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 20 }, { wch: 12 }, { wch: 12 }];
+    ws1['!cols'] = [{ wch: 10 }, { wch: 16 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
     XLSX.utils.book_append_sheet(wb, ws1, 'Iclaslar');
     if (decRows.length) {
       const ws2 = XLSX.utils.json_to_sheet(decRows);
@@ -353,10 +355,16 @@ export default function Assembly() {
                             {ag.tasks.map((t, j) => (
                               <div key={j} className="flex items-center gap-2 text-xs">
                                 <ListChecks className="w-3 h-3 text-amber-500 flex-shrink-0" />
-                                <span className="text-slate-700">{t.title}</span>
+                                <span className="text-slate-700 flex-1">{t.title}</span>
+                                {t.deadline && <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{t.deadline}</span>}
+                                {t.assignee && (
+                                  <Badge className="bg-blue-50 text-blue-600 text-[10px]">
+                                    <Users2 className="w-2.5 h-2.5 mr-0.5 inline" />{t.assignee}
+                                  </Badge>
+                                )}
                                 {t.responsible_person && (
-                                  <Badge className="bg-purple-50 text-purple-600 text-[10px] ml-auto">
-                                    <Users2 className="w-2.5 h-2.5 mr-0.5 inline" />{t.responsible_person}
+                                  <Badge className="bg-purple-50 text-purple-600 text-[10px]">
+                                    {t.responsible_person}
                                   </Badge>
                                 )}
                               </div>
@@ -440,17 +448,37 @@ export default function Assembly() {
                       <button type="button" onClick={() => addTask(aIdx)} className="text-[10px] text-[#9ACD32] hover:underline font-medium" data-testid={`add-task-${aIdx}`}>+ Tapşırıq</button>
                     </div>
                     {agenda.tasks.map((task, tIdx) => (
-                      <div key={tIdx} className="flex items-center gap-1.5" data-testid={`task-${aIdx}-${tIdx}`}>
-                        <Input value={task.title} onChange={(e) => updateTask(aIdx, tIdx, 'title', e.target.value)} placeholder="Tapşırıq" className="text-sm h-7 flex-1" />
-                        <Select value={task.responsible_person} onValueChange={(v) => updateTask(aIdx, tIdx, 'responsible_person', v)}>
-                          <SelectTrigger className="text-sm h-7 w-[160px]" data-testid={`responsible-${aIdx}-${tIdx}`}><SelectValue placeholder="Məsul şəxs" /></SelectTrigger>
-                          <SelectContent>
-                            {employeeNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        {agenda.tasks.length > 1 && (
-                          <button type="button" onClick={() => removeTask(aIdx, tIdx)} className="p-1 hover:bg-red-100 rounded flex-shrink-0"><X className="w-3 h-3 text-red-500" /></button>
-                        )}
+                      <div key={tIdx} className="space-y-1.5 bg-slate-50/80 rounded-md p-2 border border-slate-100" data-testid={`task-${aIdx}-${tIdx}`}>
+                        <div className="flex items-center gap-1.5">
+                          <Input value={task.title} onChange={(e) => updateTask(aIdx, tIdx, 'title', e.target.value)} placeholder="Tapşırıq" className="text-sm h-7 flex-1" />
+                          {agenda.tasks.length > 1 && (
+                            <button type="button" onClick={() => removeTask(aIdx, tIdx)} className="p-1 hover:bg-red-100 rounded flex-shrink-0"><X className="w-3 h-3 text-red-500" /></button>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex-1">
+                            <span className="text-[10px] text-slate-400">Məsul şəxs</span>
+                            <Select value={task.responsible_person} onValueChange={(v) => updateTask(aIdx, tIdx, 'responsible_person', v)}>
+                              <SelectTrigger className="text-sm h-7" data-testid={`responsible-${aIdx}-${tIdx}`}><SelectValue placeholder="Məsul şəxs" /></SelectTrigger>
+                              <SelectContent>
+                                {employeeNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex-1">
+                            <span className="text-[10px] text-slate-400">Əməkdaş</span>
+                            <Select value={task.assignee} onValueChange={(v) => updateTask(aIdx, tIdx, 'assignee', v)}>
+                              <SelectTrigger className="text-sm h-7" data-testid={`assignee-${aIdx}-${tIdx}`}><SelectValue placeholder="Əməkdaş" /></SelectTrigger>
+                              <SelectContent>
+                                {employeeNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="w-[130px]">
+                            <span className="text-[10px] text-slate-400">Son tarix</span>
+                            <Input type="date" value={task.deadline} onChange={(e) => updateTask(aIdx, tIdx, 'deadline', e.target.value)} className="text-sm h-7" data-testid={`task-deadline-${aIdx}-${tIdx}`} />
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
