@@ -851,6 +851,7 @@ async def delete_meeting(meeting_id: str, current_user: dict = Depends(get_curre
     result = await db.meetings.delete_one({"id": meeting_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Görüş tapılmadı")
+    await db.notifications.delete_many({"meeting_id": meeting_id, "type": "reminder"})
     return {"message": "Görüş silindi"}
 
 # ==================== OPTIONS ====================
@@ -1848,6 +1849,36 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
                 })
         except (ValueError, TypeError):
             pass
+
+    # 3. Meeting reminders (görüş xatırlatmaları)
+    meeting_reminders = await db.notifications.find({"type": "reminder"}, {"_id": 0}).to_list(500)
+    for r in meeting_reminders:
+        severity = "low"
+        rem_date = r.get("reminder_date", "")
+        if rem_date:
+            try:
+                rd = datetime.strptime(rem_date, "%Y-%m-%d")
+                diff = (rd - now.replace(tzinfo=None)).days
+                if diff < 0:
+                    severity = "high"
+                elif diff <= 1:
+                    severity = "high"
+                elif diff <= 3:
+                    severity = "medium"
+            except (ValueError, TypeError):
+                pass
+        notifications.append({
+            "id": r.get("id", ""),
+            "type": "reminder",
+            "severity": severity,
+            "title": r.get("title", "Görüş xatırlatması"),
+            "message": r.get("message", ""),
+            "meeting_id": r.get("meeting_id", ""),
+            "reminder_date": rem_date,
+            "reminder_time": r.get("reminder_time", ""),
+            "is_read": r.get("is_read", False),
+            "date": rem_date or today
+        })
 
     # Sort by severity
     severity_order = {"high": 0, "medium": 1, "low": 2}
