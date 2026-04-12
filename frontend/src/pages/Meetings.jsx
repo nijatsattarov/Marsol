@@ -16,7 +16,7 @@ import { Toaster, toast } from 'sonner';
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const emptyForm = {
-  employee: '', date: '', time: '',
+  employee: '', meeting_setter: '', date: '', time: '',
   company: '', contact_person: '', project: '',
   meeting_type: '', meeting_mode: 'Offline', department: '',
   location: '', result: '', next_meeting: '', notes: '',
@@ -204,6 +204,7 @@ export default function Meetings() {
                     <td className="px-3 py-2.5 text-xs text-slate-400">{idx + 1}</td>
                     <td className="px-3 py-2.5">
                       <p className="text-sm font-medium text-[#3D4F6F]">{m.employee}</p>
+                      {m.meeting_setter && <p className="text-[10px] text-slate-400">Təyin edən: {m.meeting_setter}</p>}
                     </td>
                     <td className="px-3 py-2.5">
                       <Badge className="bg-[#3D4F6F]/10 text-[#3D4F6F] text-xs">{m.meeting_type}</Badge>
@@ -264,6 +265,12 @@ export default function Meetings() {
                 </Select>
               </div>
               <div>
+                <Label className="text-xs">Görüşü təyin edən</Label>
+                <Input value={form.meeting_setter} onChange={(e) => setForm({ ...form, meeting_setter: e.target.value })} className="text-sm" placeholder="Ad daxil edin" data-testid="meeting-setter-input" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
                 <Label className="text-xs">Layihə</Label>
                 <Select value={form.project} onValueChange={(v) => setForm({ ...form, project: v })}>
                   <SelectTrigger className="text-sm" data-testid="meeting-project-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
@@ -272,8 +279,6 @@ export default function Meetings() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Görüşün növü *</Label>
                 <Select value={form.meeting_type} onValueChange={(v) => setForm({ ...form, meeting_type: v })}>
