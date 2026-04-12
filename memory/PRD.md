@@ -31,7 +31,7 @@ Marsol Group — 500+ üzvü olan B2B netvörkinq şirkətidir. Sahibkarları g�
 | 10 | Maliyyə | ✅ |
 | 11 | Görüşlər | ✅ |
 | 12 | İclas (Gündəm→Tapşırıq→Məsul şəxs iç-içə, Task sinxronizasiya, Göz ikon, Excel export) | ✅ |
-| 13 | Tapşırıqlar | ✅ |
+| 13 | Tapşırıqlar (T-XXX ID, select əməkdaş/məsul, Əlaqəli obyekt, user-based filter) | ✅ |
 | 13 | Mesajlar | ✅ |
 | 14 | Tənzimləmələr (paketdə dəvət sayı) | ✅ |
 | 15 | Bildirişlər | ✅ |

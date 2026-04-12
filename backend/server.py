@@ -207,11 +207,13 @@ class ExpenseCreate(BaseModel):
 class TaskCreate(BaseModel):
     task_name: str
     department: Optional[str] = ""
-    assignee: str
-    responsible_person: str
+    assignee: Optional[str] = ""
+    responsible_person: Optional[str] = ""
     priority: str  # Yüksək, Orta, Aşağı
-    start_date: str
-    end_date: str
+    start_date: Optional[str] = ""
+    end_date: Optional[str] = ""
+    related_object_type: Optional[str] = ""
+    related_object_id: Optional[str] = ""
     related_object: Optional[str] = ""
     phase: Optional[str] = ""
     status: Optional[str] = "Gözləyir"
@@ -721,17 +723,27 @@ async def get_tasks(
     if priority and priority != "all":
         query["priority"] = priority
     if assignee and assignee != "all":
-        query["assignee"] = assignee
-    
-    tasks = await db.tasks.find(query, {"_id": 0}).to_list(1000)
+        query["assignee"] = {"$regex": assignee, "$options": "i"}
+    # Non-admin users see only their tasks
+    if current_user.get("role") != "admin":
+        user_name = current_user.get("name", "")
+        if user_name:
+            query["$or"] = [
+                {"assignee": {"$regex": user_name, "$options": "i"}},
+                {"responsible_person": {"$regex": user_name, "$options": "i"}}
+            ]
+    tasks = await db.tasks.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return tasks
 
 @api_router.post("/tasks")
 async def create_task(task_data: TaskCreate, current_user: dict = Depends(get_current_user)):
-    task_id = str(uuid.uuid4())
+    count = await db.tasks.count_documents({})
+    task_code = f"T-{str(count + 1).zfill(3)}"
     task_doc = {
-        "id": task_id,
+        "id": str(uuid.uuid4()),
+        "task_code": task_code,
         **task_data.model_dump(),
+        "created_by": current_user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.tasks.insert_one(task_doc)
@@ -877,8 +889,11 @@ async def _sync_assembly_tasks(assembly_doc):
             assignees = [task["assignee"]]
         task_deadline = task.get("deadline", "") or deadline
         if task_title and (responsibles or assignees):
+            count = await db.tasks.count_documents({})
+            task_code = f"T-{str(count + 1).zfill(3)}"
             task_doc = {
                 "id": str(uuid.uuid4()),
+                "task_code": task_code,
                 "task_name": f"[{assembly_code}] {task_title}",
                 "department": department,
                 "assignee": ", ".join(assignees) if assignees else ", ".join(responsibles),
@@ -886,6 +901,8 @@ async def _sync_assembly_tasks(assembly_doc):
                 "priority": "Orta",
                 "start_date": today,
                 "end_date": task_deadline,
+                "related_object_type": "İclas",
+                "related_object_id": assembly_code,
                 "related_object": related_label,
                 "phase": "",
                 "status": "Gözləyir",
