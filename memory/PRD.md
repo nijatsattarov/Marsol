@@ -40,6 +40,7 @@ Marsol Group — 500+ üzvü olan B2B netvörkinq şirkətidir. Sahibkarları g�
 
 ## Backlog
 ### P0
+- [x] Görüşlər modulu tam yenidən yazıldı (CRUD, Filtrlər, Xatırlatmalar, Bildirişlər) — ✅ Test keçdi (Iteration 18)
 - [ ] Xüsusi sahələr (Custom Fields) tab-spesifik — testing pending
 
 ### P1
