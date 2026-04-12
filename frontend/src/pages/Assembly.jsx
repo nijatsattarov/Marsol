@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import {
   Plus, Search, Loader2, Pencil, Trash2, X, Download,
-  Eye, Calendar, Users2, Target, ListChecks, ClipboardCheck
+  Eye, Users2, Target, ListChecks, ClipboardList
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -15,15 +15,50 @@ import * as XLSX from 'xlsx';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-const emptyAgenda = () => ({ title: '', tasks: [{ title: '', responsible_person: '', assignee: '', deadline: '' }] });
+const emptyTask = () => ({ title: '', responsible_persons: [], assignees: [], deadline: '' });
+const emptyAgenda = () => ({ title: '', tasks: [emptyTask()] });
 
 const emptyForm = {
   department: '', purpose: '',
   agendas: [emptyAgenda()],
+  general_tasks: [emptyTask()],
   discussion_topics: [''],
   deadline: '', next_assembly_date: '',
   decisions: ['']
 };
+
+// Multi-select tag component
+function PersonTags({ selected, options, onChange, placeholder, testId }) {
+  const [open, setOpen] = useState(false);
+  const available = options.filter(o => !selected.includes(o));
+  return (
+    <div className="relative">
+      <div className="flex flex-wrap gap-1 min-h-[28px] border rounded-md px-1.5 py-1 cursor-pointer bg-white" onClick={() => setOpen(!open)} data-testid={testId}>
+        {selected.length === 0 && <span className="text-xs text-slate-400 py-0.5">{placeholder}</span>}
+        {selected.map((p, i) => (
+          <span key={i} className="bg-slate-100 text-slate-700 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-0.5">
+            {p}
+            <button type="button" onClick={(e) => { e.stopPropagation(); onChange(selected.filter((_, j) => j !== i)); }} className="hover:text-red-500">
+              <X className="w-2.5 h-2.5" />
+            </button>
+          </span>
+        ))}
+      </div>
+      {open && available.length > 0 && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute z-50 top-full mt-1 left-0 w-full bg-white border rounded-md shadow-lg max-h-[140px] overflow-y-auto">
+            {available.map(n => (
+              <button key={n} type="button" className="w-full text-left text-xs px-2 py-1.5 hover:bg-slate-50" onClick={() => { onChange([...selected, n]); setOpen(false); }}>
+                {n}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function Assembly() {
   const [assemblies, setAssemblies] = useState([]);
@@ -58,17 +93,25 @@ export default function Assembly() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const parseTask = (t) => ({
+    title: t.title || '',
+    responsible_persons: t.responsible_persons || (t.responsible_person ? [t.responsible_person] : []),
+    assignees: t.assignees || (t.assignee ? [t.assignee] : []),
+    deadline: t.deadline || ''
+  });
+
   const openModal = (assembly = null) => {
     if (assembly) {
       setEditing(assembly);
       const agendas = (assembly.agendas || []).map(a => ({
         title: a.title || '',
-        tasks: (a.tasks || []).length ? a.tasks.map(t => ({ title: t.title || '', responsible_person: t.responsible_person || '', assignee: t.assignee || '', deadline: t.deadline || '' })) : [{ title: '', responsible_person: '', assignee: '', deadline: '' }]
+        tasks: (a.tasks || []).length ? a.tasks.map(parseTask) : [emptyTask()]
       }));
       setForm({
         department: assembly.department || '',
         purpose: assembly.purpose || '',
         agendas: agendas.length ? agendas : [emptyAgenda()],
+        general_tasks: (assembly.general_tasks || []).length ? assembly.general_tasks.map(parseTask) : [emptyTask()],
         discussion_topics: (assembly.discussion_topics || []).length ? assembly.discussion_topics : [''],
         deadline: assembly.deadline || '',
         next_assembly_date: assembly.next_assembly_date || '',
@@ -76,10 +119,12 @@ export default function Assembly() {
       });
     } else {
       setEditing(null);
-      setForm({ ...emptyForm, agendas: [emptyAgenda()], discussion_topics: [''], decisions: [''] });
+      setForm({ ...emptyForm, agendas: [emptyAgenda()], general_tasks: [emptyTask()], discussion_topics: [''], decisions: [''] });
     }
     setShowModal(true);
   };
+
+  const cleanTask = (t) => ({ title: t.title.trim(), responsible_persons: t.responsible_persons, assignees: t.assignees, deadline: t.deadline });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -87,8 +132,9 @@ export default function Assembly() {
       ...form,
       agendas: form.agendas.filter(a => a.title.trim()).map(a => ({
         title: a.title.trim(),
-        tasks: a.tasks.filter(t => t.title.trim()).map(t => ({ title: t.title.trim(), responsible_person: t.responsible_person, assignee: t.assignee, deadline: t.deadline }))
+        tasks: a.tasks.filter(t => t.title.trim()).map(cleanTask)
       })),
+      general_tasks: form.general_tasks.filter(t => t.title.trim()).map(cleanTask),
       discussion_topics: form.discussion_topics.filter(a => a.trim()),
       decisions: form.decisions.filter(a => a.trim()),
     };
@@ -120,9 +166,11 @@ export default function Assembly() {
   const updateAgendaTitle = (idx, val) => setForm(p => {
     const a = [...p.agendas]; a[idx] = { ...a[idx], title: val }; return { ...p, agendas: a };
   });
+
+  // Task helpers (for agenda tasks)
   const addTask = (agendaIdx) => setForm(p => {
     const a = [...p.agendas];
-    a[agendaIdx] = { ...a[agendaIdx], tasks: [...a[agendaIdx].tasks, { title: '', responsible_person: '', assignee: '', deadline: '' }] };
+    a[agendaIdx] = { ...a[agendaIdx], tasks: [...a[agendaIdx].tasks, emptyTask()] };
     return { ...p, agendas: a };
   });
   const removeTask = (agendaIdx, taskIdx) => setForm(p => {
@@ -138,6 +186,13 @@ export default function Assembly() {
     return { ...p, agendas: a };
   });
 
+  // General task helpers
+  const addGeneralTask = () => setForm(p => ({ ...p, general_tasks: [...p.general_tasks, emptyTask()] }));
+  const removeGeneralTask = (idx) => setForm(p => ({ ...p, general_tasks: p.general_tasks.filter((_, i) => i !== idx) }));
+  const updateGeneralTask = (idx, field, val) => setForm(p => {
+    const t = [...p.general_tasks]; t[idx] = { ...t[idx], [field]: val }; return { ...p, general_tasks: t };
+  });
+
   // Simple list helpers
   const addItem = (field) => setForm(p => ({ ...p, [field]: [...p[field], ''] }));
   const removeItem = (field, idx) => setForm(p => ({ ...p, [field]: p[field].filter((_, i) => i !== idx) }));
@@ -149,9 +204,12 @@ export default function Assembly() {
     if (filterDateTo && (a.created_at || '') > filterDateTo + 'T23:59:59') return false;
     if (searchTerm) {
       const t = searchTerm.toLowerCase();
-      const persons = (a.agendas || []).flatMap(ag => (ag.tasks || []).map(tk => tk.responsible_person || '')).join(' ').toLowerCase();
+      const allPersons = [
+        ...(a.agendas || []).flatMap(ag => (ag.tasks || []).flatMap(tk => [...(tk.responsible_persons || []), ...(tk.assignees || [])])),
+        ...(a.general_tasks || []).flatMap(tk => [...(tk.responsible_persons || []), ...(tk.assignees || [])])
+      ].join(' ').toLowerCase();
       if (!a.assembly_code?.toLowerCase().includes(t) && !a.purpose?.toLowerCase().includes(t) &&
-          !a.department?.toLowerCase().includes(t) && !persons.includes(t)) return false;
+          !a.department?.toLowerCase().includes(t) && !allPersons.includes(t)) return false;
     }
     return true;
   });
@@ -159,9 +217,10 @@ export default function Assembly() {
   const departments = options.departments || [];
   const employeeNames = [...new Set(employees.map(e => `${e.first_name || ''} ${e.last_name || ''}`.trim()).filter(Boolean))];
 
-  // Count helpers
-  const getTotalTasks = (a) => (a.agendas || []).reduce((sum, ag) => sum + (ag.tasks || []).length, 0);
-  const getResponsibles = (a) => [...new Set((a.agendas || []).flatMap(ag => (ag.tasks || []).flatMap(t => [t.responsible_person, t.assignee])).filter(Boolean))];
+  const getResponsibles = (a) => [...new Set([
+    ...(a.agendas || []).flatMap(ag => (ag.tasks || []).flatMap(t => [...(t.responsible_persons || []), ...(t.assignees || [])])),
+    ...(a.general_tasks || []).flatMap(t => [...(t.responsible_persons || []), ...(t.assignees || [])])
+  ].filter(Boolean))];
 
   const exportToExcel = () => {
     if (filtered.length === 0) return toast.error('Export ucun melumat yoxdur');
@@ -171,32 +230,27 @@ export default function Assembly() {
       (a.agendas || []).forEach(ag => {
         (ag.tasks || []).forEach(t => {
           rows.push({
-            'Iclas ID': a.assembly_code,
-            'Aparici Sobe': a.department,
-            'Meqsed': a.purpose,
-            'Gundem': ag.title,
-            'Tapshiriq': t.title,
-            'Mesul Shexs': t.responsible_person,
-            'Emekdash': t.assignee || '',
-            'Tapshiriq son tarix': t.deadline || '',
-            'Son tarix': a.deadline,
-            'Novbeti iclas': a.next_assembly_date,
+            'Iclas ID': a.assembly_code, 'Aparici Sobe': a.department, 'Meqsed': a.purpose,
+            'Gundem': ag.title, 'Tapshiriq': t.title,
+            'Mesul Shexsler': (t.responsible_persons || []).join(', '),
+            'Emekdashlar': (t.assignees || []).join(', '),
+            'Tapshiriq son tarix': t.deadline || '', 'Son tarix': a.deadline, 'Novbeti iclas': a.next_assembly_date,
           });
         });
-        if (!(ag.tasks || []).length) {
-          rows.push({
-            'Iclas ID': a.assembly_code, 'Aparici Sobe': a.department,
-            'Meqsed': a.purpose, 'Gundem': ag.title,
-            'Tapshiriq': '', 'Mesul Shexs': '',
-            'Son tarix': a.deadline, 'Novbeti iclas': a.next_assembly_date,
-          });
-        }
+      });
+      (a.general_tasks || []).forEach(t => {
+        rows.push({
+          'Iclas ID': a.assembly_code, 'Aparici Sobe': a.department, 'Meqsed': a.purpose,
+          'Gundem': 'Ümumi', 'Tapshiriq': t.title,
+          'Mesul Shexsler': (t.responsible_persons || []).join(', '),
+          'Emekdashlar': (t.assignees || []).join(', '),
+          'Tapshiriq son tarix': t.deadline || '', 'Son tarix': a.deadline, 'Novbeti iclas': a.next_assembly_date,
+        });
       });
     });
-    // Add decisions as second sheet
     const decRows = filtered.flatMap(a => (a.decisions || []).map(d => ({ 'Iclas ID': a.assembly_code, 'Qerar': d })));
     const ws1 = XLSX.utils.json_to_sheet(rows);
-    ws1['!cols'] = [{ wch: 10 }, { wch: 16 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+    ws1['!cols'] = [{ wch: 10 }, { wch: 16 }, { wch: 30 }, { wch: 25 }, { wch: 25 }, { wch: 25 }, { wch: 25 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
     XLSX.utils.book_append_sheet(wb, ws1, 'Iclaslar');
     if (decRows.length) {
       const ws2 = XLSX.utils.json_to_sheet(decRows);
@@ -217,12 +271,46 @@ export default function Assembly() {
         <div key={idx} className="flex items-center gap-1.5 mb-1.5">
           <Input value={item} onChange={(e) => updateItem(field, idx, e.target.value)} placeholder={placeholder} className="text-sm h-8" />
           {form[field].length > 1 && (
-            <button type="button" onClick={() => removeItem(field, idx)} className="p-1 hover:bg-red-100 rounded flex-shrink-0">
-              <X className="w-3 h-3 text-red-500" />
-            </button>
+            <button type="button" onClick={() => removeItem(field, idx)} className="p-1 hover:bg-red-100 rounded flex-shrink-0"><X className="w-3 h-3 text-red-500" /></button>
           )}
         </div>
       ))}
+    </div>
+  );
+
+  // Shared task row component
+  const TaskRow = ({ task, onUpdate, onRemove, canRemove, prefix }) => (
+    <div className="space-y-1.5 bg-slate-50/80 rounded-md p-2 border border-slate-100" data-testid={`${prefix}`}>
+      <div className="flex items-center gap-1.5">
+        <Input value={task.title} onChange={(e) => onUpdate('title', e.target.value)} placeholder="Tapşırıq" className="text-sm h-7 flex-1" />
+        <div className="w-[120px]">
+          <Input type="date" value={task.deadline} onChange={(e) => onUpdate('deadline', e.target.value)} className="text-sm h-7" />
+        </div>
+        {canRemove && (
+          <button type="button" onClick={onRemove} className="p-1 hover:bg-red-100 rounded flex-shrink-0"><X className="w-3 h-3 text-red-500" /></button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        <div>
+          <span className="text-[10px] text-slate-400">Məsul şəxslər</span>
+          <PersonTags selected={task.responsible_persons} options={employeeNames} onChange={(v) => onUpdate('responsible_persons', v)} placeholder="Məsul seçin" testId={`${prefix}-resp`} />
+        </div>
+        <div>
+          <span className="text-[10px] text-slate-400">Əməkdaşlar</span>
+          <PersonTags selected={task.assignees} options={employeeNames} onChange={(v) => onUpdate('assignees', v)} placeholder="Əməkdaş seçin" testId={`${prefix}-assign`} />
+        </div>
+      </div>
+    </div>
+  );
+
+  // Detail task row for expanded view
+  const DetailTaskRow = ({ t }) => (
+    <div className="flex flex-wrap items-center gap-2 text-xs py-1">
+      <ListChecks className="w-3 h-3 text-amber-500 flex-shrink-0" />
+      <span className="text-slate-700 font-medium">{t.title}</span>
+      {t.deadline && <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{t.deadline}</span>}
+      {(t.responsible_persons || []).map((p, i) => <Badge key={`r${i}`} className="bg-purple-50 text-purple-600 text-[10px]">{p}</Badge>)}
+      {(t.assignees || []).map((p, i) => <Badge key={`a${i}`} className="bg-blue-50 text-blue-600 text-[10px]">{p}</Badge>)}
     </div>
   );
 
@@ -232,7 +320,6 @@ export default function Assembly() {
     <div className="p-4 sm:p-6 lg:p-8" data-testid="assembly-page">
       <Toaster position="top-right" richColors />
 
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>İclaslar</h1>
@@ -262,8 +349,8 @@ export default function Assembly() {
               {departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} className="w-[140px] text-sm h-9" data-testid="filter-date-from" placeholder="Tarixdən" />
-          <Input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} className="w-[140px] text-sm h-9" data-testid="filter-date-to" placeholder="Tarixə" />
+          <Input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} className="w-[140px] text-sm h-9" data-testid="filter-date-from" />
+          <Input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} className="w-[140px] text-sm h-9" data-testid="filter-date-to" />
         </div>
       </div>
 
@@ -276,7 +363,7 @@ export default function Assembly() {
                 <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">İclas ID</th>
                 <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Aparıcı Şöbə</th>
                 <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Məqsəd</th>
-                <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Məsul Şəxslər</th>
+                <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Şəxslər</th>
                 <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Son tarix</th>
                 <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Növbəti iclas</th>
                 <th className="text-center px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Detallar</th>
@@ -286,49 +373,35 @@ export default function Assembly() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={8} className="text-center py-12 text-slate-400 text-sm">İclas tapılmadı</td></tr>
-              ) : (
-                filtered.map((a) => {
-                  const responsibles = getResponsibles(a);
-                  return (
-                    <tr key={a.id} className={`border-b border-slate-50 hover:bg-slate-50/50 ${expandedRow === a.id ? 'bg-slate-50/70' : ''}`} data-testid={`assembly-row-${a.id}`}>
-                      <td className="px-3 py-2.5">
-                        <Badge className="bg-[#3D4F6F] text-white text-xs font-mono">{a.assembly_code}</Badge>
-                      </td>
-                      <td className="px-3 py-2.5 text-sm text-slate-600">{a.department || '-'}</td>
-                      <td className="px-3 py-2.5 text-sm text-[#3D4F6F] font-medium max-w-[200px] truncate">{a.purpose || '-'}</td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex flex-wrap gap-1">
-                          {responsibles.slice(0, 2).map((p, i) => (
-                            <Badge key={i} className="bg-slate-100 text-slate-600 text-[10px]">{p}</Badge>
-                          ))}
-                          {responsibles.length > 2 && <Badge className="bg-slate-100 text-slate-400 text-[10px]">+{responsibles.length - 2}</Badge>}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-slate-600">{a.deadline || '-'}</td>
-                      <td className="px-3 py-2.5 text-xs text-slate-600">{a.next_assembly_date || '-'}</td>
-                      <td className="px-3 py-2.5 text-center">
-                        <button
-                          onClick={() => setExpandedRow(expandedRow === a.id ? null : a.id)}
-                          className={`p-1.5 rounded-lg transition-colors ${expandedRow === a.id ? 'bg-[#3D4F6F] text-white' : 'hover:bg-slate-100 text-slate-400'}`}
-                          data-testid={`view-detail-${a.id}`}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <div className="flex justify-end gap-1">
-                          <button onClick={() => openModal(a)} className="p-1.5 hover:bg-slate-100 rounded-lg" data-testid={`edit-assembly-${a.id}`}>
-                            <Pencil className="w-3.5 h-3.5 text-slate-400" />
-                          </button>
-                          <button onClick={() => handleDelete(a.id)} className="p-1.5 hover:bg-red-50 rounded-lg" data-testid={`delete-assembly-${a.id}`}>
-                            <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
+              ) : filtered.map((a) => {
+                const persons = getResponsibles(a);
+                return (
+                  <tr key={a.id} className={`border-b border-slate-50 hover:bg-slate-50/50 ${expandedRow === a.id ? 'bg-slate-50/70' : ''}`} data-testid={`assembly-row-${a.id}`}>
+                    <td className="px-3 py-2.5"><Badge className="bg-[#3D4F6F] text-white text-xs font-mono">{a.assembly_code}</Badge></td>
+                    <td className="px-3 py-2.5 text-sm text-slate-600">{a.department || '-'}</td>
+                    <td className="px-3 py-2.5 text-sm text-[#3D4F6F] font-medium max-w-[200px] truncate">{a.purpose || '-'}</td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex flex-wrap gap-1">
+                        {persons.slice(0, 3).map((p, i) => <Badge key={i} className="bg-slate-100 text-slate-600 text-[10px]">{p}</Badge>)}
+                        {persons.length > 3 && <Badge className="bg-slate-100 text-slate-400 text-[10px]">+{persons.length - 3}</Badge>}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-slate-600">{a.deadline || '-'}</td>
+                    <td className="px-3 py-2.5 text-xs text-slate-600">{a.next_assembly_date || '-'}</td>
+                    <td className="px-3 py-2.5 text-center">
+                      <button onClick={() => setExpandedRow(expandedRow === a.id ? null : a.id)}
+                        className={`p-1.5 rounded-lg transition-colors ${expandedRow === a.id ? 'bg-[#3D4F6F] text-white' : 'hover:bg-slate-100 text-slate-400'}`}
+                        data-testid={`view-detail-${a.id}`}><Eye className="w-4 h-4" /></button>
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <div className="flex justify-end gap-1">
+                        <button onClick={() => openModal(a)} className="p-1.5 hover:bg-slate-100 rounded-lg" data-testid={`edit-assembly-${a.id}`}><Pencil className="w-3.5 h-3.5 text-slate-400" /></button>
+                        <button onClick={() => handleDelete(a.id)} className="p-1.5 hover:bg-red-50 rounded-lg" data-testid={`delete-assembly-${a.id}`}><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -339,36 +412,18 @@ export default function Assembly() {
           if (!a) return null;
           return (
             <div className="border-t bg-slate-50/50 p-4 space-y-4" data-testid="assembly-detail">
-              {/* Agendas with nested tasks */}
               {(a.agendas || []).length > 0 && (
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">Gündəmlər / Tapşırıqlar / Məsul Şəxslər</p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">Gündəmlər / Tapşırıqlar</p>
                   <div className="space-y-3">
                     {a.agendas.map((ag, i) => (
                       <div key={i} className="bg-white rounded-lg border border-slate-200 p-3">
                         <p className="text-sm font-semibold text-[#3D4F6F] flex items-center gap-2">
-                          <Target className="w-3.5 h-3.5 text-blue-500" />
-                          {ag.title}
+                          <Target className="w-3.5 h-3.5 text-blue-500" />{ag.title}
                         </p>
                         {(ag.tasks || []).length > 0 && (
-                          <div className="mt-2 ml-5 space-y-1.5">
-                            {ag.tasks.map((t, j) => (
-                              <div key={j} className="flex items-center gap-2 text-xs">
-                                <ListChecks className="w-3 h-3 text-amber-500 flex-shrink-0" />
-                                <span className="text-slate-700 flex-1">{t.title}</span>
-                                {t.deadline && <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{t.deadline}</span>}
-                                {t.assignee && (
-                                  <Badge className="bg-blue-50 text-blue-600 text-[10px]">
-                                    <Users2 className="w-2.5 h-2.5 mr-0.5 inline" />{t.assignee}
-                                  </Badge>
-                                )}
-                                {t.responsible_person && (
-                                  <Badge className="bg-purple-50 text-purple-600 text-[10px]">
-                                    {t.responsible_person}
-                                  </Badge>
-                                )}
-                              </div>
-                            ))}
+                          <div className="mt-2 ml-5 space-y-1">
+                            {ag.tasks.map((t, j) => <DetailTaskRow key={j} t={t} />)}
                           </div>
                         )}
                       </div>
@@ -376,21 +431,25 @@ export default function Assembly() {
                   </div>
                 </div>
               )}
+              {(a.general_tasks || []).length > 0 && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-2">Ümumi Tapşırıqlar</p>
+                  <div className="bg-white rounded-lg border border-slate-200 p-3 space-y-1">
+                    {a.general_tasks.map((t, i) => <DetailTaskRow key={i} t={t} />)}
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {(a.discussion_topics || []).length > 0 && (
                   <div>
                     <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Müzakirə mövzuları</p>
-                    <ul className="space-y-0.5">
-                      {a.discussion_topics.map((m, i) => <li key={i} className="text-xs text-slate-600 flex gap-1.5"><span className="text-purple-500 font-bold">{i+1}.</span>{m}</li>)}
-                    </ul>
+                    <ul className="space-y-0.5">{a.discussion_topics.map((m, i) => <li key={i} className="text-xs text-slate-600 flex gap-1.5"><span className="text-purple-500 font-bold">{i+1}.</span>{m}</li>)}</ul>
                   </div>
                 )}
                 {(a.decisions || []).length > 0 && (
                   <div>
                     <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Qəbul edilən qərarlar</p>
-                    <ul className="space-y-0.5">
-                      {a.decisions.map((d, i) => <li key={i} className="text-xs text-slate-600 flex gap-1.5"><span className="text-green-500 font-bold">{i+1}.</span>{d}</li>)}
-                    </ul>
+                    <ul className="space-y-0.5">{a.decisions.map((d, i) => <li key={i} className="text-xs text-slate-600 flex gap-1.5"><span className="text-green-500 font-bold">{i+1}.</span>{d}</li>)}</ul>
                   </div>
                 )}
               </div>
@@ -411,9 +470,7 @@ export default function Assembly() {
                 <Label className="text-xs">Aparıcı Şöbə *</Label>
                 <Select value={form.department} onValueChange={(v) => setForm({ ...form, department: v })}>
                   <SelectTrigger className="text-sm" data-testid="assembly-dept-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
-                  <SelectContent>
-                    {departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
@@ -441,49 +498,36 @@ export default function Assembly() {
                       <button type="button" onClick={() => removeAgenda(aIdx)} className="p-1 hover:bg-red-100 rounded flex-shrink-0"><X className="w-3 h-3 text-red-500" /></button>
                     )}
                   </div>
-                  {/* Tasks under this agenda */}
-                  <div className="ml-6 space-y-1.5">
+                  <div className="ml-6 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] text-slate-400 uppercase tracking-wider">Tapşırıqlar</span>
                       <button type="button" onClick={() => addTask(aIdx)} className="text-[10px] text-[#9ACD32] hover:underline font-medium" data-testid={`add-task-${aIdx}`}>+ Tapşırıq</button>
                     </div>
                     {agenda.tasks.map((task, tIdx) => (
-                      <div key={tIdx} className="space-y-1.5 bg-slate-50/80 rounded-md p-2 border border-slate-100" data-testid={`task-${aIdx}-${tIdx}`}>
-                        <div className="flex items-center gap-1.5">
-                          <Input value={task.title} onChange={(e) => updateTask(aIdx, tIdx, 'title', e.target.value)} placeholder="Tapşırıq" className="text-sm h-7 flex-1" />
-                          {agenda.tasks.length > 1 && (
-                            <button type="button" onClick={() => removeTask(aIdx, tIdx)} className="p-1 hover:bg-red-100 rounded flex-shrink-0"><X className="w-3 h-3 text-red-500" /></button>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <div className="flex-1">
-                            <span className="text-[10px] text-slate-400">Məsul şəxs</span>
-                            <Select value={task.responsible_person} onValueChange={(v) => updateTask(aIdx, tIdx, 'responsible_person', v)}>
-                              <SelectTrigger className="text-sm h-7" data-testid={`responsible-${aIdx}-${tIdx}`}><SelectValue placeholder="Məsul şəxs" /></SelectTrigger>
-                              <SelectContent>
-                                {employeeNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="flex-1">
-                            <span className="text-[10px] text-slate-400">Əməkdaş</span>
-                            <Select value={task.assignee} onValueChange={(v) => updateTask(aIdx, tIdx, 'assignee', v)}>
-                              <SelectTrigger className="text-sm h-7" data-testid={`assignee-${aIdx}-${tIdx}`}><SelectValue placeholder="Əməkdaş" /></SelectTrigger>
-                              <SelectContent>
-                                {employeeNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="w-[130px]">
-                            <span className="text-[10px] text-slate-400">Son tarix</span>
-                            <Input type="date" value={task.deadline} onChange={(e) => updateTask(aIdx, tIdx, 'deadline', e.target.value)} className="text-sm h-7" data-testid={`task-deadline-${aIdx}-${tIdx}`} />
-                          </div>
-                        </div>
-                      </div>
+                      <TaskRow key={tIdx} task={task} prefix={`task-${aIdx}-${tIdx}`}
+                        onUpdate={(f, v) => updateTask(aIdx, tIdx, f, v)}
+                        onRemove={() => removeTask(aIdx, tIdx)}
+                        canRemove={agenda.tasks.length > 1} />
                     ))}
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* General Tasks */}
+            <div className="border border-orange-200 rounded-lg p-3 bg-orange-50/30">
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-xs font-semibold text-[#3D4F6F] flex items-center gap-1"><ClipboardList className="w-3.5 h-3.5" />Ümumi Tapşırıqlar</Label>
+                <button type="button" onClick={addGeneralTask} className="text-[10px] text-[#9ACD32] hover:underline font-medium" data-testid="add-general-task-btn">+ Tapşırıq əlavə et</button>
+              </div>
+              <div className="space-y-2">
+                {form.general_tasks.map((task, idx) => (
+                  <TaskRow key={idx} task={task} prefix={`general-task-${idx}`}
+                    onUpdate={(f, v) => updateGeneralTask(idx, f, v)}
+                    onRemove={() => removeGeneralTask(idx)}
+                    canRemove={form.general_tasks.length > 1} />
+                ))}
+              </div>
             </div>
 
             <ListField label="Müzakirə mövzuları" field="discussion_topics" placeholder="Müzakirə mövzusu" />

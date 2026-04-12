@@ -857,7 +857,7 @@ async def delete_meeting(meeting_id: str, current_user: dict = Depends(get_curre
 # ==================== ASSEMBLIES (İCLAS) ====================
 
 async def _sync_assembly_tasks(assembly_doc):
-    """Sync assembly agenda tasks to the tasks collection"""
+    """Sync assembly agenda tasks + general tasks to the tasks collection"""
     assembly_uuid = assembly_doc["id"]
     assembly_code = assembly_doc["assembly_code"]
     department = assembly_doc.get("department", "")
@@ -865,33 +865,45 @@ async def _sync_assembly_tasks(assembly_doc):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     # Remove old tasks from this assembly
     await db.tasks.delete_many({"source": "assembly", "assembly_id": assembly_uuid})
-    # Create new tasks
+
+    async def _create_task(task, related_label):
+        task_title = task.get("title", "")
+        responsibles = task.get("responsible_persons", [])
+        assignees = task.get("assignees", [])
+        # Backward compat for single values
+        if not responsibles and task.get("responsible_person"):
+            responsibles = [task["responsible_person"]]
+        if not assignees and task.get("assignee"):
+            assignees = [task["assignee"]]
+        task_deadline = task.get("deadline", "") or deadline
+        if task_title and (responsibles or assignees):
+            task_doc = {
+                "id": str(uuid.uuid4()),
+                "task_name": f"[{assembly_code}] {task_title}",
+                "department": department,
+                "assignee": ", ".join(assignees) if assignees else ", ".join(responsibles),
+                "responsible_person": ", ".join(responsibles),
+                "priority": "Orta",
+                "start_date": today,
+                "end_date": task_deadline,
+                "related_object": related_label,
+                "phase": "",
+                "status": "Gözləyir",
+                "notes": f"İclas: {assembly_code}",
+                "source": "assembly",
+                "assembly_id": assembly_uuid,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.tasks.insert_one(task_doc)
+
+    # Agenda tasks
     for agenda in assembly_doc.get("agendas", []):
         agenda_title = agenda.get("title", "")
         for task in agenda.get("tasks", []):
-            task_title = task.get("title", "")
-            responsible = task.get("responsible_person", "")
-            assignee = task.get("assignee", "")
-            task_deadline = task.get("deadline", "") or deadline
-            if task_title and (responsible or assignee):
-                task_doc = {
-                    "id": str(uuid.uuid4()),
-                    "task_name": f"[{assembly_code}] {task_title}",
-                    "department": department,
-                    "assignee": assignee or responsible,
-                    "responsible_person": responsible,
-                    "priority": "Orta",
-                    "start_date": today,
-                    "end_date": task_deadline,
-                    "related_object": f"{assembly_code} - {agenda_title}",
-                    "phase": "",
-                    "status": "Gözləyir",
-                    "notes": f"İclas gündəmi: {agenda_title}",
-                    "source": "assembly",
-                    "assembly_id": assembly_uuid,
-                    "created_at": datetime.now(timezone.utc).isoformat()
-                }
-                await db.tasks.insert_one(task_doc)
+            await _create_task(task, f"{assembly_code} - {agenda_title}")
+    # General tasks (not linked to any agenda)
+    for task in assembly_doc.get("general_tasks", []):
+        await _create_task(task, f"{assembly_code} - Ümumi")
 
 @api_router.get("/assemblies")
 async def get_assemblies(
@@ -923,6 +935,7 @@ async def create_assembly(data: dict, current_user: dict = Depends(get_current_u
         "department": data.get("department", ""),
         "purpose": data.get("purpose", ""),
         "agendas": data.get("agendas", []),
+        "general_tasks": data.get("general_tasks", []),
         "discussion_topics": data.get("discussion_topics", []),
         "deadline": data.get("deadline", ""),
         "next_assembly_date": data.get("next_assembly_date", ""),
