@@ -44,6 +44,7 @@ export default function Notifications() {
       debt_pending: 'Ödənilməmiş borc',
       contract_expired: 'Müqavilə bitib',
       contract_expiring: 'Müqavilə bitir',
+      reminder: 'Görüş xatırlatması',
     };
     return map[type] || type;
   };
@@ -53,6 +54,7 @@ export default function Notifications() {
     if (filter === 'high') return n.severity === 'high';
     if (filter === 'debt') return n.type.includes('debt');
     if (filter === 'contract') return n.type.includes('contract');
+    if (filter === 'reminder') return n.type === 'reminder';
     return true;
   });
 
@@ -76,6 +78,7 @@ export default function Notifications() {
               <SelectItem value="high">Yalnız təcili</SelectItem>
               <SelectItem value="debt">Borc bildirişləri</SelectItem>
               <SelectItem value="contract">Müqavilə bildirişləri</SelectItem>
+              <SelectItem value="reminder">Görüş xatırlatmaları</SelectItem>
             </SelectContent>
           </Select>
         </div>

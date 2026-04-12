@@ -16,7 +16,7 @@ import { Toaster, toast } from 'sonner';
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const emptyForm = {
-  employee: '', meeting_setter: '', date: '', time: '',
+  employee: '', date: '', time: '',
   company: '', contact_person: '', project: '',
   meeting_type: '', meeting_mode: 'Offline', department: '',
   location: '', result: '', next_meeting: '', notes: '',
@@ -26,7 +26,7 @@ const emptyForm = {
 export default function Meetings() {
   const [meetings, setMeetings] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [options, setOptions] = useState({ meeting_types: [], departments: [] });
+  const [options, setOptions] = useState({ meeting_types: [], departments: [], projects: [] });
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -124,6 +124,7 @@ export default function Meetings() {
 
   const meetingTypes = options.meeting_types || [];
   const departments = options.departments || [];
+  const projects = options.projects || [];
   const employeeNames = [...new Set(employees.map(e => `${e.first_name || ''} ${e.last_name || ''}`.trim()).filter(Boolean))];
 
   if (loading) return <div className="flex items-center justify-center h-[60vh]"><Loader2 className="w-8 h-8 animate-spin" style={{ color: '#3D4F6F' }} /></div>;
@@ -203,7 +204,6 @@ export default function Meetings() {
                     <td className="px-3 py-2.5 text-xs text-slate-400">{idx + 1}</td>
                     <td className="px-3 py-2.5">
                       <p className="text-sm font-medium text-[#3D4F6F]">{m.employee}</p>
-                      {m.meeting_setter && <p className="text-[10px] text-slate-400">Təyin edən: {m.meeting_setter}</p>}
                     </td>
                     <td className="px-3 py-2.5">
                       <Badge className="bg-[#3D4F6F]/10 text-[#3D4F6F] text-xs">{m.meeting_type}</Badge>
@@ -264,11 +264,11 @@ export default function Meetings() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Görüşü təyin edən</Label>
-                <Select value={form.meeting_setter} onValueChange={(v) => setForm({ ...form, meeting_setter: v })}>
-                  <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                <Label className="text-xs">Layihə</Label>
+                <Select value={form.project} onValueChange={(v) => setForm({ ...form, project: v })}>
+                  <SelectTrigger className="text-sm" data-testid="meeting-project-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
                   <SelectContent>
-                    {employeeNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+                    {projects.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -305,33 +305,29 @@ export default function Meetings() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Layihə</Label>
-                <Input value={form.project} onChange={(e) => setForm({ ...form, project: e.target.value })} className="text-sm" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
                 <Label className="text-xs">Tarix *</Label>
                 <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required className="text-sm" data-testid="meeting-date-input" />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Saat *</Label>
                 <Input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} required className="text-sm" />
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Şirkət</Label>
                 <Input value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} className="text-sm" />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Əlaqədar şəxs</Label>
                 <Input value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} className="text-sm" />
               </div>
-            </div>
-            <div>
-              <Label className="text-xs">Məkan / Link</Label>
-              <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="text-sm" placeholder={form.meeting_mode === 'Online' ? 'Zoom/Teams linki' : 'Ünvan'} />
+              <div>
+                <Label className="text-xs">Məkan / Link</Label>
+                <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="text-sm" placeholder={form.meeting_mode === 'Online' ? 'Zoom/Teams linki' : 'Ünvan'} />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>

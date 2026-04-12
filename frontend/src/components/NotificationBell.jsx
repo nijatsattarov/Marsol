@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { Bell, AlertTriangle, Clock, CreditCard, FileWarning, X } from 'lucide-react';
+import { Bell, AlertTriangle, Clock, CreditCard, FileWarning, X, CalendarClock } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 
@@ -26,13 +26,15 @@ export default function NotificationBell() {
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
-  const getSeverityIcon = (severity) => {
+  const getSeverityIcon = (type, severity) => {
+    if (type === 'reminder') return <CalendarClock className="w-4 h-4 text-purple-500 flex-shrink-0" />;
     if (severity === 'high') return <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />;
     if (severity === 'medium') return <Clock className="w-4 h-4 text-amber-500 flex-shrink-0" />;
     return <CreditCard className="w-4 h-4 text-blue-500 flex-shrink-0" />;
   };
 
-  const getSeverityBg = (severity) => {
+  const getSeverityBg = (type, severity) => {
+    if (type === 'reminder') return 'bg-purple-50 border-purple-100';
     if (severity === 'high') return 'bg-red-50 border-red-100';
     if (severity === 'medium') return 'bg-amber-50 border-amber-100';
     return 'bg-blue-50 border-blue-100';
@@ -44,6 +46,7 @@ export default function NotificationBell() {
       debt_pending: 'Ödənilməmiş borc',
       contract_expired: 'Müqavilə bitib',
       contract_expiring: 'Müqavilə bitir',
+      reminder: 'Görüş xatırlatması',
     };
     return map[type] || type;
   };
@@ -89,14 +92,14 @@ export default function NotificationBell() {
                 </div>
               ) : (
                 data.notifications.map(n => (
-                  <div key={n.id} className={`p-3 border-b ${getSeverityBg(n.severity)} hover:brightness-95 transition-all`} data-testid={`notification-${n.id}`}>
+                  <div key={n.id} className={`p-3 border-b ${getSeverityBg(n.type, n.severity)} hover:brightness-95 transition-all`} data-testid={`notification-${n.id}`}>
                     <div className="flex gap-3">
-                      {getSeverityIcon(n.severity)}
+                      {getSeverityIcon(n.type, n.severity)}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-xs text-slate-700">{n.title}</p>
                         <p className="text-xs text-slate-500 mt-0.5">{n.message}</p>
                         <div className="flex items-center gap-2 mt-1">
-                          <Badge className={`text-[10px] ${n.severity === 'high' ? 'bg-red-100 text-red-700' : n.severity === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                          <Badge className={`text-[10px] ${n.type === 'reminder' ? 'bg-purple-100 text-purple-700' : n.severity === 'high' ? 'bg-red-100 text-red-700' : n.severity === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
                             {getTypeLabel(n.type)}
                           </Badge>
                         </div>
