@@ -854,6 +854,66 @@ async def delete_meeting(meeting_id: str, current_user: dict = Depends(get_curre
     await db.notifications.delete_many({"meeting_id": meeting_id, "type": "reminder"})
     return {"message": "Görüş silindi"}
 
+# ==================== ASSEMBLIES (İCLAS) ====================
+
+@api_router.get("/assemblies")
+async def get_assemblies(
+    department: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    query = {}
+    if department and department != "all":
+        query["department"] = department
+    if date_from:
+        query.setdefault("deadline", {})["$gte"] = date_from
+    if date_to:
+        query.setdefault("deadline", {})["$lte"] = date_to
+    assemblies = await db.assemblies.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return assemblies
+
+@api_router.post("/assemblies")
+async def create_assembly(data: dict, current_user: dict = Depends(get_current_user)):
+    count = await db.assemblies.count_documents({})
+    assembly_id = f"IC-{str(count + 1).zfill(3)}"
+    doc = {
+        "id": str(uuid.uuid4()),
+        "assembly_code": assembly_id,
+        "department": data.get("department", ""),
+        "purpose": data.get("purpose", ""),
+        "agendas": data.get("agendas", []),
+        "discussion_topics": data.get("discussion_topics", []),
+        "tasks": data.get("tasks", []),
+        "responsible_persons": data.get("responsible_persons", []),
+        "deadline": data.get("deadline", ""),
+        "next_assembly_date": data.get("next_assembly_date", ""),
+        "decisions": data.get("decisions", []),
+        "created_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.assemblies.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/assemblies/{assembly_id}")
+async def update_assembly(assembly_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in data.items() if k not in ("id", "assembly_code")}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.assemblies.update_one({"id": assembly_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="İclas tapılmadı")
+    doc = await db.assemblies.find_one({"id": assembly_id}, {"_id": 0})
+    return doc
+
+@api_router.delete("/assemblies/{assembly_id}")
+async def delete_assembly(assembly_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.assemblies.delete_one({"id": assembly_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="İclas tapılmadı")
+    return {"message": "İclas silindi"}
+
+
 # ==================== OPTIONS ====================
 
 async def _get_setting_list(key: str, defaults: list) -> list:
