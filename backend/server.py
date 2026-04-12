@@ -856,6 +856,41 @@ async def delete_meeting(meeting_id: str, current_user: dict = Depends(get_curre
 
 # ==================== ASSEMBLIES (İCLAS) ====================
 
+async def _sync_assembly_tasks(assembly_doc):
+    """Sync assembly agenda tasks to the tasks collection"""
+    assembly_uuid = assembly_doc["id"]
+    assembly_code = assembly_doc["assembly_code"]
+    department = assembly_doc.get("department", "")
+    deadline = assembly_doc.get("deadline", "")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    # Remove old tasks from this assembly
+    await db.tasks.delete_many({"source": "assembly", "assembly_id": assembly_uuid})
+    # Create new tasks
+    for agenda in assembly_doc.get("agendas", []):
+        agenda_title = agenda.get("title", "")
+        for task in agenda.get("tasks", []):
+            task_title = task.get("title", "")
+            responsible = task.get("responsible_person", "")
+            if task_title and responsible:
+                task_doc = {
+                    "id": str(uuid.uuid4()),
+                    "task_name": f"[{assembly_code}] {task_title}",
+                    "department": department,
+                    "assignee": responsible,
+                    "responsible_person": responsible,
+                    "priority": "Orta",
+                    "start_date": today,
+                    "end_date": deadline,
+                    "related_object": f"{assembly_code} - {agenda_title}",
+                    "phase": "",
+                    "status": "Gözləyir",
+                    "notes": f"İclas gündəmi: {agenda_title}",
+                    "source": "assembly",
+                    "assembly_id": assembly_uuid,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.tasks.insert_one(task_doc)
+
 @api_router.get("/assemblies")
 async def get_assemblies(
     department: Optional[str] = None,
@@ -866,26 +901,27 @@ async def get_assemblies(
     query = {}
     if department and department != "all":
         query["department"] = department
-    if date_from:
-        query.setdefault("deadline", {})["$gte"] = date_from
-    if date_to:
-        query.setdefault("deadline", {})["$lte"] = date_to
+    if date_from or date_to:
+        date_q = {}
+        if date_from:
+            date_q["$gte"] = date_from
+        if date_to:
+            date_q["$lte"] = date_to
+        query["created_at"] = date_q
     assemblies = await db.assemblies.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return assemblies
 
 @api_router.post("/assemblies")
 async def create_assembly(data: dict, current_user: dict = Depends(get_current_user)):
     count = await db.assemblies.count_documents({})
-    assembly_id = f"IC-{str(count + 1).zfill(3)}"
+    assembly_code = f"IC-{str(count + 1).zfill(3)}"
     doc = {
         "id": str(uuid.uuid4()),
-        "assembly_code": assembly_id,
+        "assembly_code": assembly_code,
         "department": data.get("department", ""),
         "purpose": data.get("purpose", ""),
         "agendas": data.get("agendas", []),
         "discussion_topics": data.get("discussion_topics", []),
-        "tasks": data.get("tasks", []),
-        "responsible_persons": data.get("responsible_persons", []),
         "deadline": data.get("deadline", ""),
         "next_assembly_date": data.get("next_assembly_date", ""),
         "decisions": data.get("decisions", []),
@@ -894,6 +930,7 @@ async def create_assembly(data: dict, current_user: dict = Depends(get_current_u
     }
     await db.assemblies.insert_one(doc)
     doc.pop("_id", None)
+    await _sync_assembly_tasks(doc)
     return doc
 
 @api_router.put("/assemblies/{assembly_id}")
@@ -904,6 +941,7 @@ async def update_assembly(assembly_id: str, data: dict, current_user: dict = Dep
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="İclas tapılmadı")
     doc = await db.assemblies.find_one({"id": assembly_id}, {"_id": 0})
+    await _sync_assembly_tasks(doc)
     return doc
 
 @api_router.delete("/assemblies/{assembly_id}")
@@ -911,6 +949,7 @@ async def delete_assembly(assembly_id: str, current_user: dict = Depends(get_cur
     result = await db.assemblies.delete_one({"id": assembly_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="İclas tapılmadı")
+    await db.tasks.delete_many({"source": "assembly", "assembly_id": assembly_id})
     return {"message": "İclas silindi"}
 
 
