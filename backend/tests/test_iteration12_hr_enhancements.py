@@ -13,7 +13,7 @@ import requests
 import os
 import uuid
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://management-hub-18.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://marsol-dev-stage.preview.emergentagent.com').rstrip('/')
 
 class TestMarsolCompaniesCRUD:
     """Test Marsol Companies CRUD endpoints in Settings"""

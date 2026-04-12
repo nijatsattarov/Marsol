@@ -3,7 +3,8 @@ import axios from 'axios';
 import {
   Settings as SettingsIcon, Package, FolderKanban, Users, Columns3,
   Plus, Pencil, Trash2, Loader2, Shield, Eye, UserCog, User,
-  ChevronDown, Search, X, Building2, Layers, Briefcase, Activity, Building
+  ChevronDown, Search, X, Building2, Layers, Briefcase, Activity, Building,
+  Calendar
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -83,6 +84,8 @@ export default function Settings() {
   const [activities, setActivities] = useState([]);
   const [regions, setRegions] = useState([]);
   const [marsolCompanies, setMarsolCompanies] = useState([]);
+  const [meetingTypes, setMeetingTypes] = useState([]);
+  const [newMeetingType, setNewMeetingType] = useState('');
 
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0, invitation_count: 0 });
@@ -118,7 +121,7 @@ export default function Settings() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes, mcRes] = await Promise.all([
+      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes, mcRes, mtRes] = await Promise.all([
         axios.get(`${API}/settings/packages`, { headers }),
         axios.get(`${API}/settings/projects`, { headers }),
         axios.get(`${API}/settings/custom-fields`, { headers }),
@@ -129,6 +132,7 @@ export default function Settings() {
         axios.get(`${API}/settings/activities`, { headers }),
         axios.get(`${API}/settings/regions`, { headers }),
         axios.get(`${API}/settings/marsol-companies`, { headers }),
+        axios.get(`${API}/settings/lists/meeting_types`, { headers }),
       ]);
       setPackages(pkgRes.data);
       setProjects(prjRes.data);
@@ -140,6 +144,7 @@ export default function Settings() {
       setActivities(actRes.data);
       setRegions(regRes.data);
       setMarsolCompanies(mcRes.data);
+      setMeetingTypes(mtRes.data || []);
     } catch (err) {
       console.error('Error fetching settings:', err);
     } finally {
@@ -460,6 +465,7 @@ export default function Settings() {
           <TabsTrigger value="activities" className="text-xs sm:text-sm" data-testid="tab-activities"><Activity className="w-4 h-4 mr-1 hidden sm:inline" />Fəaliyyətlər</TabsTrigger>
           <TabsTrigger value="regions" className="text-xs sm:text-sm" data-testid="tab-regions"><Building2 className="w-4 h-4 mr-1 hidden sm:inline" />Regionlar</TabsTrigger>
           <TabsTrigger value="marsol-companies" className="text-xs sm:text-sm" data-testid="tab-marsol-companies"><Building className="w-4 h-4 mr-1 hidden sm:inline" />Müəssisələr</TabsTrigger>
+          <TabsTrigger value="meeting-types" className="text-xs sm:text-sm" data-testid="tab-meeting-types"><Calendar className="w-4 h-4 mr-1 hidden sm:inline" />Görüş növləri</TabsTrigger>
           <TabsTrigger value="custom-fields" className="text-xs sm:text-sm" data-testid="tab-custom-fields"><Columns3 className="w-4 h-4 mr-1 hidden sm:inline" />Xüsusi sahələr</TabsTrigger>
           <TabsTrigger value="users" className="text-xs sm:text-sm" data-testid="tab-users"><Users className="w-4 h-4 mr-1 hidden sm:inline" />İstifadəçilər</TabsTrigger>
         </TabsList>
@@ -768,6 +774,61 @@ export default function Settings() {
                 </div>
               ))}
               {marsolCompanies.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Müəssisə yoxdur</p>}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ========= MEETING TYPES TAB ========= */}
+        <TabsContent value="meeting-types">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
+            <h2 className="text-lg font-semibold mb-4" style={{ color: '#3D4F6F' }}>Görüş Növləri</h2>
+            <div className="flex gap-2 mb-4">
+              <Input
+                value={newMeetingType}
+                onChange={(e) => setNewMeetingType(e.target.value)}
+                placeholder="Yeni görüş növü..."
+                className="text-sm max-w-xs"
+                data-testid="meeting-type-input"
+              />
+              <Button
+                size="sm"
+                disabled={!newMeetingType.trim()}
+                onClick={async () => {
+                  const updated = [...meetingTypes, newMeetingType.trim()];
+                  try {
+                    await axios.put(`${API}/settings/lists/meeting_types`, { values: updated }, { headers });
+                    setMeetingTypes(updated);
+                    setNewMeetingType('');
+                    toast.success('Görüş növü əlavə edildi');
+                  } catch { toast.error('Xəta baş verdi'); }
+                }}
+                className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125]"
+                data-testid="add-meeting-type-btn"
+              >
+                <Plus className="w-4 h-4 mr-1" />Əlavə et
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              {meetingTypes.map((mt, idx) => (
+                <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <span className="text-sm text-[#3D4F6F] font-medium">{mt}</span>
+                  <button
+                    onClick={async () => {
+                      const updated = meetingTypes.filter((_, i) => i !== idx);
+                      try {
+                        await axios.put(`${API}/settings/lists/meeting_types`, { values: updated }, { headers });
+                        setMeetingTypes(updated);
+                        toast.success('Görüş növü silindi');
+                      } catch { toast.error('Xəta baş verdi'); }
+                    }}
+                    className="p-1 hover:bg-red-100 rounded"
+                    data-testid={`delete-meeting-type-${idx}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                  </button>
+                </div>
+              ))}
+              {meetingTypes.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Görüş növü yoxdur</p>}
             </div>
           </div>
         </TabsContent>

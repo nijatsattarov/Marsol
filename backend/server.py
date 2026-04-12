@@ -227,10 +227,13 @@ class MeetingCreate(BaseModel):
     contact_person: Optional[str] = ""
     project: Optional[str] = ""
     meeting_type: str
+    meeting_mode: Optional[str] = "Offline"
+    department: Optional[str] = ""
     location: Optional[str] = ""
     result: Optional[str] = ""
     next_meeting: Optional[str] = ""
     notes: Optional[str] = ""
+    reminders: Optional[list] = []
 
 # ==================== AUTH FUNCTIONS ====================
 
@@ -756,26 +759,92 @@ async def delete_task(task_id: str, current_user: dict = Depends(get_current_use
 @api_router.get("/meetings")
 async def get_meetings(
     meeting_type: Optional[str] = None,
+    department: Optional[str] = None,
+    employee: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     query = {}
     if meeting_type and meeting_type != "all":
         query["meeting_type"] = meeting_type
+    if department and department != "all":
+        query["department"] = department
+    if employee and employee != "all":
+        query["employee"] = employee
+    if date_from:
+        query.setdefault("date", {})["$gte"] = date_from
+    if date_to:
+        query.setdefault("date", {})["$lte"] = date_to
     
-    meetings = await db.meetings.find(query, {"_id": 0}).to_list(1000)
+    meetings = await db.meetings.find(query, {"_id": 0}).sort("date", -1).to_list(1000)
     return meetings
 
 @api_router.post("/meetings")
-async def create_meeting(meeting_data: MeetingCreate, current_user: dict = Depends(get_current_user)):
+async def create_meeting(data: dict, current_user: dict = Depends(get_current_user)):
     meeting_id = str(uuid.uuid4())
     meeting_doc = {
         "id": meeting_id,
-        **meeting_data.model_dump(),
+        "employee": data.get("employee", ""),
+        "meeting_setter": data.get("meeting_setter", ""),
+        "date": data.get("date", ""),
+        "time": data.get("time", ""),
+        "company": data.get("company", ""),
+        "contact_person": data.get("contact_person", ""),
+        "project": data.get("project", ""),
+        "meeting_type": data.get("meeting_type", ""),
+        "meeting_mode": data.get("meeting_mode", "Offline"),
+        "department": data.get("department", ""),
+        "location": data.get("location", ""),
+        "result": data.get("result", ""),
+        "next_meeting": data.get("next_meeting", ""),
+        "notes": data.get("notes", ""),
+        "reminders": data.get("reminders", []),
+        "created_by": current_user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.meetings.insert_one(meeting_doc)
     meeting_doc.pop("_id", None)
+    # Create notification for each reminder
+    for rem in meeting_doc.get("reminders", []):
+        notif_doc = {
+            "id": str(uuid.uuid4()),
+            "title": f"Görüş xatırlatması: {meeting_doc['meeting_type']}",
+            "message": f"{meeting_doc['date']} {meeting_doc['time']} - {meeting_doc['company'] or meeting_doc['employee']}. {rem.get('note', '')}",
+            "type": "reminder",
+            "meeting_id": meeting_id,
+            "reminder_date": rem.get("date", ""),
+            "reminder_time": rem.get("time", ""),
+            "is_read": False,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.notifications.insert_one(notif_doc)
     return meeting_doc
+
+@api_router.put("/meetings/{meeting_id}")
+async def update_meeting(meeting_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in data.items() if k != "id"}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.meetings.update_one({"id": meeting_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Görüş tapılmadı")
+    # Update reminders as notifications
+    await db.notifications.delete_many({"meeting_id": meeting_id, "type": "reminder"})
+    meeting = await db.meetings.find_one({"id": meeting_id}, {"_id": 0})
+    for rem in update_data.get("reminders", []):
+        notif_doc = {
+            "id": str(uuid.uuid4()),
+            "title": f"Görüş xatırlatması: {meeting.get('meeting_type', '')}",
+            "message": f"{meeting.get('date', '')} {meeting.get('time', '')} - {meeting.get('company', '') or meeting.get('employee', '')}. {rem.get('note', '')}",
+            "type": "reminder",
+            "meeting_id": meeting_id,
+            "reminder_date": rem.get("date", ""),
+            "reminder_time": rem.get("time", ""),
+            "is_read": False,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.notifications.insert_one(notif_doc)
+    return meeting
 
 @api_router.delete("/meetings/{meeting_id}")
 async def delete_meeting(meeting_id: str, current_user: dict = Depends(get_current_user)):
@@ -785,6 +854,25 @@ async def delete_meeting(meeting_id: str, current_user: dict = Depends(get_curre
     return {"message": "Görüş silindi"}
 
 # ==================== OPTIONS ====================
+
+async def _get_setting_list(key: str, defaults: list) -> list:
+    doc = await db.setting_lists.find_one({"key": key}, {"_id": 0})
+    if doc and doc.get("values"):
+        return doc["values"]
+    return defaults
+
+@api_router.get("/settings/lists/{key}")
+async def get_setting_list(key: str, current_user: dict = Depends(get_current_user)):
+    doc = await db.setting_lists.find_one({"key": key}, {"_id": 0})
+    if doc:
+        return doc.get("values", [])
+    return []
+
+@api_router.put("/settings/lists/{key}")
+async def update_setting_list(key: str, data: dict, current_user: dict = Depends(get_current_user)):
+    values = data.get("values", [])
+    await db.setting_lists.update_one({"key": key}, {"$set": {"key": key, "values": values, "updated_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    return {"key": key, "values": values}
 
 @api_router.get("/options/all")
 async def get_all_options(current_user: dict = Depends(get_current_user)):
@@ -823,6 +911,7 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
         "marsol_representatives": marsol_representatives,
         "projects": projects,
         "departments": ["Satış", "Marketing", "HR", "Maliyyə", "Layihə", "İT", "İdarəetmə"],
+        "meeting_types": await _get_setting_list("meeting_types", ["Satış görüşü", "Daxili iclas", "Müştəri görüşü", "Partnyor görüşü", "Təqdimat"]),
         "task_statuses": ["Gözləyir", "İcrada", "Tamamlandı", "Ləğv edildi"],
         "priorities": ["Yüksək", "Orta", "Aşağı"],
         "meeting_types": ["Satış görüşü", "Daxili iclas", "Müştəri görüşü", "Partnyor görüşü", "Təqdimat"],
