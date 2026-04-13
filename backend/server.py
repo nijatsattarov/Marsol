@@ -19,9 +19,11 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+mongo_url = os.environ.get('MONGO_URL')
+if not mongo_url:
+    raise RuntimeError("MONGO_URL environment variable is not set")
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[os.environ.get('DB_NAME', 'marsol_db')]
 
 # JWT Settings
 SECRET_KEY = os.environ.get('SECRET_KEY', 'marsol-secret-key-2024')
@@ -34,7 +36,7 @@ app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
 # Static files for uploads
-UPLOAD_DIR = Path("/app/backend/uploads")
+UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
