@@ -47,6 +47,8 @@ export default function NotificationBell() {
       contract_expired: 'Müqavilə bitib',
       contract_expiring: 'Müqavilə bitir',
       reminder: 'Görüş xatırlatması',
+      membership_expiry: 'Üzvlük bitir',
+      membership_expired: 'Üzvlük bitib',
     };
     return map[type] || type;
   };

@@ -90,6 +90,7 @@ export default function Settings() {
   const [newLeadSource, setNewLeadSource] = useState('');
   const [saleTypes, setSaleTypes] = useState([]);
   const [newSaleType, setNewSaleType] = useState('');
+  const [warningDays, setWarningDays] = useState('10');
 
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0, invitation_count: 0 });
@@ -125,7 +126,7 @@ export default function Settings() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes, mcRes, mtRes, lsRes, stRes] = await Promise.all([
+      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes, mcRes, mtRes, lsRes, stRes, wdRes] = await Promise.all([
         axios.get(`${API}/settings/packages`, { headers }),
         axios.get(`${API}/settings/projects`, { headers }),
         axios.get(`${API}/settings/custom-fields`, { headers }),
@@ -139,6 +140,7 @@ export default function Settings() {
         axios.get(`${API}/settings/lists/meeting_types`, { headers }),
         axios.get(`${API}/settings/lists/lead_sources`, { headers }),
         axios.get(`${API}/settings/lists/sale_types`, { headers }),
+        axios.get(`${API}/settings/lists/membership_warning_days`, { headers }),
       ]);
       setPackages(pkgRes.data);
       setProjects(prjRes.data);
@@ -153,6 +155,7 @@ export default function Settings() {
       setMeetingTypes(mtRes.data || []);
       setLeadSources(lsRes.data || []);
       setSaleTypes(stRes.data || []);
+      setWarningDays((wdRes.data && wdRes.data[0]) || '10');
     } catch (err) {
       console.error('Error fetching settings:', err);
     } finally {
@@ -476,6 +479,7 @@ export default function Settings() {
           <TabsTrigger value="meeting-types" className="text-xs sm:text-sm" data-testid="tab-meeting-types"><Calendar className="w-4 h-4 mr-1 hidden sm:inline" />Görüş növləri</TabsTrigger>
           <TabsTrigger value="lead-sources" className="text-xs sm:text-sm" data-testid="tab-lead-sources"><Target className="w-4 h-4 mr-1 hidden sm:inline" />Lead mənbələri</TabsTrigger>
           <TabsTrigger value="sale-types" className="text-xs sm:text-sm" data-testid="tab-sale-types"><TrendingUp className="w-4 h-4 mr-1 hidden sm:inline" />Satış növləri</TabsTrigger>
+          <TabsTrigger value="warning-days" className="text-xs sm:text-sm" data-testid="tab-warning-days"><Calendar className="w-4 h-4 mr-1 hidden sm:inline" />Xəbərdarlıq</TabsTrigger>
           <TabsTrigger value="custom-fields" className="text-xs sm:text-sm" data-testid="tab-custom-fields"><Columns3 className="w-4 h-4 mr-1 hidden sm:inline" />Xüsusi sahələr</TabsTrigger>
           <TabsTrigger value="users" className="text-xs sm:text-sm" data-testid="tab-users"><Users className="w-4 h-4 mr-1 hidden sm:inline" />İstifadəçilər</TabsTrigger>
         </TabsList>
@@ -911,6 +915,28 @@ export default function Settings() {
                 </div>
               ))}
               {saleTypes.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Satış növü yoxdur</p>}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ========= WARNING DAYS TAB ========= */}
+        <TabsContent value="warning-days">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
+            <h2 className="text-lg font-semibold mb-4" style={{ color: '#3D4F6F' }}>Üzvlük Bitmə Xəbərdarlığı</h2>
+            <p className="text-sm text-slate-500 mb-4">Üzvlüyün bitməsinə neçə gün qalmış bildiriş göndərilsin?</p>
+            <div className="flex gap-2 items-end">
+              <div>
+                <Label className="text-xs">Gün sayı</Label>
+                <Input type="number" value={warningDays} onChange={(e) => setWarningDays(e.target.value)} className="text-sm w-32" min="1" max="90" data-testid="warning-days-input" />
+              </div>
+              <Button size="sm" onClick={async () => {
+                try {
+                  await axios.put(`${API}/settings/lists/membership_warning_days`, { values: [warningDays] }, { headers });
+                  toast.success(`Xəbərdarlıq ${warningDays} gün olaraq təyin edildi`);
+                } catch { toast.error('Xəta baş verdi'); }
+              }} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125]" data-testid="save-warning-days-btn">
+                Yadda saxla
+              </Button>
             </div>
           </div>
         </TabsContent>

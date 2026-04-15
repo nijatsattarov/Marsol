@@ -129,7 +129,8 @@ export default function Members() {
     package: '',
     curator: '',
     business_size: '',
-    project: ''
+    project: '',
+    contract_status: ''
   });
 
   const [formData, setFormData] = useState({
@@ -141,6 +142,7 @@ export default function Members() {
     director_name: '',
     director_phone: '',
     contact_person: '',
+    contact_position: '',
     contact_phone: '',
     company_email: '',
     projects: []
@@ -220,6 +222,7 @@ export default function Members() {
       director_name: member.director_name,
       director_phone: member.director_phone,
       contact_person: member.contact_person,
+      contact_position: member.contact_position || '',
       contact_phone: member.contact_phone,
       company_email: member.company_email,
       projects: member.projects || []
@@ -237,6 +240,7 @@ export default function Members() {
       director_name: '',
       director_phone: '',
       contact_person: '',
+      contact_position: '',
       contact_phone: '',
       company_email: '',
       projects: []
@@ -280,11 +284,16 @@ export default function Members() {
     });
   };
 
-  const filteredMembers = members.filter(m => 
-    (m.company_name || m.brand_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (m.director_name || m.owner_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (m.contact_person || m.representative_name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredMembers = members.filter(m => {
+    if (searchTerm) {
+      const t = searchTerm.toLowerCase();
+      if (!(m.company_name || m.brand_name || '').toLowerCase().includes(t) &&
+          !(m.director_name || m.owner_name || '').toLowerCase().includes(t) &&
+          !(m.contact_person || m.representative_name || '').toLowerCase().includes(t)) return false;
+    }
+    if (filters.contract_status && filters.contract_status !== 'all' && (m.contract_status || 'Gözləyir') !== filters.contract_status) return false;
+    return true;
+  });
 
   const activeFilterCount = Object.values(filters).filter(v => v && v !== 'all').length;
 
@@ -442,6 +451,21 @@ export default function Members() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div>
+                <Label className="text-xs text-slate-500 mb-1.5 block">Müqavilə statusu</Label>
+                <Select value={filters.contract_status} onValueChange={(v) => setFilters({...filters, contract_status: v})}>
+                  <SelectTrigger className="text-sm" data-testid="filter-contract-status">
+                    <SelectValue placeholder="Hamısı" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Hamısı</SelectItem>
+                    {(options.contract_statuses || []).map(s => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             
             {activeFilterCount > 0 && (
@@ -489,6 +513,7 @@ export default function Members() {
                 <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Sektor</th>
                 <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Paket</th>
                 <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Kurator</th>
+                <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Müqavilə</th>
                 <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Rəhbər</th>
                 <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Əlaqədar</th>
                 <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Email</th>
@@ -498,7 +523,7 @@ export default function Members() {
             <tbody>
               {filteredMembers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-slate-500">
+                  <td colSpan={9} className="text-center py-12 text-slate-500">
                     <Building2 className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                     <p>Üzv tapılmadı</p>
                   </td>
@@ -521,6 +546,21 @@ export default function Members() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-slate-600 text-sm">{member.curator}</td>
+                    <td className="px-4 py-3">
+                      <div className="text-xs space-y-0.5">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          member.contract_status === 'Aktiv' ? 'bg-green-100 text-green-700' :
+                          member.contract_status === 'Bağlanıb' ? 'bg-blue-100 text-blue-700' :
+                          member.contract_status === 'Bitib' || member.contract_status === 'Ləğv edilib' ? 'bg-red-100 text-red-700' :
+                          'bg-slate-100 text-slate-600'
+                        }`}>{member.contract_status || 'Gözləyir'}</span>
+                        {member.contract_end_date && (
+                          <p className={`text-[10px] ${member.days_until_expiry !== null && member.days_until_expiry <= 10 ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
+                            {member.days_until_expiry !== null && member.days_until_expiry <= 0 ? 'Bitib!' : member.days_until_expiry !== null && member.days_until_expiry <= 10 ? `${member.days_until_expiry} gün qalıb` : member.contract_end_date}
+                          </p>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="text-sm">
                         <p className="font-medium text-slate-700">{member.director_name}</p>
@@ -724,6 +764,17 @@ export default function Members() {
                       data-testid="input-contact-person"
                     />
                   </div>
+                  <div>
+                    <Label className="text-xs sm:text-sm">Vəzifəsi</Label>
+                    <Input
+                      value={formData.contact_position}
+                      onChange={(e) => setFormData({...formData, contact_position: e.target.value})}
+                      className="text-sm"
+                      data-testid="input-contact-position"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs sm:text-sm">Əlaqə nömrəsi *</Label>
                     <Input

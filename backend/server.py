@@ -1017,14 +1017,27 @@ async def get_members(
         query["curator"] = current_user.get("name", "")
     companies = await db.companies.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
     # Map fields for frontend compatibility
+    now = datetime.now(timezone.utc)
     members = []
     for c in companies:
         c["company_name"] = c.get("brand_name", "")
         c["director_name"] = c.get("owner_name", "")
         c["director_phone"] = c.get("owner_phone", "")
         c["contact_person"] = c.get("representative_name", "")
+        c["contact_position"] = c.get("representative_position", "")
         c["business_size"] = c.get("company_size", "")
+        # Calculate days until expiry
+        end_date_str = c.get("contract_end_date", "")
+        c["days_until_expiry"] = None
+        if end_date_str:
+            try:
+                end_dt = datetime.strptime(end_date_str, "%Y-%m-%d")
+                c["days_until_expiry"] = (end_dt - now.replace(tzinfo=None)).days
+            except (ValueError, TypeError):
+                pass
         members.append(c)
+    # Sort: expiring soon first (non-null days_until_expiry, ascending)
+    members.sort(key=lambda m: (m["days_until_expiry"] is None, m["days_until_expiry"] if m["days_until_expiry"] is not None else 9999))
     return members
 
 @api_router.get("/members/options/all")
@@ -1040,6 +1053,7 @@ async def get_members_options(current_user: dict = Depends(get_current_user)):
         "business_sizes": ["Böyük", "Orta", "Kiçik", "Mikro"],
         "curators": [u["name"] for u in users_db if u.get("name")],
         "projects": [p["name"] for p in projects_db] if projects_db else ["Üzvlük", "Sərgi", "Təlim/Proqram"],
+        "contract_statuses": ["Gözləyir", "Bağlanıb", "Aktiv", "Bitib", "Ləğv edilib"],
     }
 
 @api_router.post("/members")
@@ -1072,7 +1086,7 @@ async def create_member(data: dict, current_user: dict = Depends(get_current_use
 @api_router.put("/members/{member_id}")
 async def update_member(member_id: str, data: dict, current_user: dict = Depends(get_current_user)):
     update = {}
-    field_map = {"company_name": "brand_name", "director_name": "owner_name", "director_phone": "owner_phone", "business_size": "company_size", "contact_person": "representative_name"}
+    field_map = {"company_name": "brand_name", "director_name": "owner_name", "director_phone": "owner_phone", "business_size": "company_size", "contact_person": "representative_name", "contact_position": "representative_position"}
     for k, v in data.items():
         if k in field_map:
             update[field_map[k]] = v
@@ -2278,6 +2292,42 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
             "is_read": r.get("is_read", False),
             "date": rem_date or today
         })
+
+    # 4. Membership expiry warnings (üzvlük bitmə xəbərdarlığı)
+    warning_days_doc = await db.setting_lists.find_one({"key": "membership_warning_days"}, {"_id": 0})
+    warning_days = 10
+    if warning_days_doc and warning_days_doc.get("values"):
+        try:
+            warning_days = int(warning_days_doc["values"][0])
+        except (ValueError, IndexError):
+            pass
+    expiring = await db.companies.find({"contract_end_date": {"$ne": ""}}, {"_id": 0, "id": 1, "brand_name": 1, "contract_end_date": 1, "curator": 1}).to_list(500)
+    for c in expiring:
+        try:
+            end_dt = datetime.strptime(c["contract_end_date"], "%Y-%m-%d")
+            diff = (end_dt - now.replace(tzinfo=None)).days
+            if 0 < diff <= warning_days:
+                notifications.append({
+                    "id": f"expiry-{c['id']}",
+                    "type": "membership_expiry",
+                    "severity": "high" if diff <= 3 else "medium",
+                    "title": f"Üzvlük bitir: {c['brand_name']}",
+                    "message": f"{diff} gün sonra bitəcək ({c['contract_end_date']})",
+                    "company_id": c["id"],
+                    "date": today
+                })
+            elif diff <= 0:
+                notifications.append({
+                    "id": f"expired-{c['id']}",
+                    "type": "membership_expired",
+                    "severity": "high",
+                    "title": f"Üzvlük bitib: {c['brand_name']}",
+                    "message": f"{abs(diff)} gün əvvəl bitib ({c['contract_end_date']})",
+                    "company_id": c["id"],
+                    "date": today
+                })
+        except (ValueError, TypeError):
+            pass
 
     # Sort by severity
     severity_order = {"high": 0, "medium": 1, "low": 2}
