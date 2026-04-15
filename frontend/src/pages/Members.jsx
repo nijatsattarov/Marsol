@@ -530,7 +530,11 @@ export default function Members() {
                 </tr>
               ) : (
                 filteredMembers.map((member) => (
-                  <tr key={member.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors" data-testid={`member-row-${member.id}`}>
+                  <tr key={member.id} className={`border-b transition-colors ${
+                    member.days_until_expiry !== null && member.days_until_expiry <= 0 ? 'bg-red-50 border-red-100 hover:bg-red-100/60' :
+                    member.days_until_expiry !== null && member.days_until_expiry <= 10 ? 'bg-amber-50 border-amber-100 hover:bg-amber-100/60' :
+                    'border-slate-50 hover:bg-slate-50/50'
+                  }`} data-testid={`member-row-${member.id}`}>
                     <td className="px-4 py-3">
                       <div>
                         <p className="font-semibold text-[#3D4F6F] text-sm">{member.company_name}</p>
