@@ -332,7 +332,7 @@ export default function Members() {
           <Button
             onClick={() => { resetForm(); setEditingMember(null); setShowAddModal(true); }}
             size="sm"
-            className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold text-xs sm:text-sm"
+            className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold text-xs sm:text-sm hidden"
             data-testid="add-member-btn"
           >
             <Plus className="w-4 h-4 sm:mr-2" />
@@ -517,13 +517,12 @@ export default function Members() {
                 <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Rəhbər</th>
                 <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Əlaqədar</th>
                 <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Email</th>
-                <th className="text-right font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Əməliyyat</th>
               </tr>
             </thead>
             <tbody>
               {filteredMembers.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-12 text-slate-500">
+                  <td colSpan={8} className="text-center py-12 text-slate-500">
                     <Building2 className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                     <p>Üzv tapılmadı</p>
                   </td>
@@ -588,29 +587,6 @@ export default function Members() {
                         <Mail className="w-3 h-3" />
                         {member.company_email}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" data-testid={`member-actions-${member.id}`}>
-                            <ChevronDown className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleEdit(member)} data-testid={`edit-member-${member.id}`}>
-                            <Pencil className="w-4 h-4 mr-2" />
-                            Redaktə et
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleDelete(member.id)}
-                            className="text-red-600"
-                            data-testid={`delete-member-${member.id}`}
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Sil
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
                     </td>
                   </tr>
                 ))
