@@ -4,7 +4,7 @@ import {
   Settings as SettingsIcon, Package, FolderKanban, Users, Columns3,
   Plus, Pencil, Trash2, Loader2, Shield, Eye, UserCog, User,
   ChevronDown, Search, X, Building2, Layers, Briefcase, Activity, Building,
-  Calendar
+  Calendar, Target
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -86,6 +86,8 @@ export default function Settings() {
   const [marsolCompanies, setMarsolCompanies] = useState([]);
   const [meetingTypes, setMeetingTypes] = useState([]);
   const [newMeetingType, setNewMeetingType] = useState('');
+  const [leadSources, setLeadSources] = useState([]);
+  const [newLeadSource, setNewLeadSource] = useState('');
 
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0, invitation_count: 0 });
@@ -121,7 +123,7 @@ export default function Settings() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes, mcRes, mtRes] = await Promise.all([
+      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes, mcRes, mtRes, lsRes] = await Promise.all([
         axios.get(`${API}/settings/packages`, { headers }),
         axios.get(`${API}/settings/projects`, { headers }),
         axios.get(`${API}/settings/custom-fields`, { headers }),
@@ -133,6 +135,7 @@ export default function Settings() {
         axios.get(`${API}/settings/regions`, { headers }),
         axios.get(`${API}/settings/marsol-companies`, { headers }),
         axios.get(`${API}/settings/lists/meeting_types`, { headers }),
+        axios.get(`${API}/settings/lists/lead_sources`, { headers }),
       ]);
       setPackages(pkgRes.data);
       setProjects(prjRes.data);
@@ -145,6 +148,7 @@ export default function Settings() {
       setRegions(regRes.data);
       setMarsolCompanies(mcRes.data);
       setMeetingTypes(mtRes.data || []);
+      setLeadSources(lsRes.data || []);
     } catch (err) {
       console.error('Error fetching settings:', err);
     } finally {
@@ -466,6 +470,7 @@ export default function Settings() {
           <TabsTrigger value="regions" className="text-xs sm:text-sm" data-testid="tab-regions"><Building2 className="w-4 h-4 mr-1 hidden sm:inline" />Regionlar</TabsTrigger>
           <TabsTrigger value="marsol-companies" className="text-xs sm:text-sm" data-testid="tab-marsol-companies"><Building className="w-4 h-4 mr-1 hidden sm:inline" />Müəssisələr</TabsTrigger>
           <TabsTrigger value="meeting-types" className="text-xs sm:text-sm" data-testid="tab-meeting-types"><Calendar className="w-4 h-4 mr-1 hidden sm:inline" />Görüş növləri</TabsTrigger>
+          <TabsTrigger value="lead-sources" className="text-xs sm:text-sm" data-testid="tab-lead-sources"><Target className="w-4 h-4 mr-1 hidden sm:inline" />Lead mənbələri</TabsTrigger>
           <TabsTrigger value="custom-fields" className="text-xs sm:text-sm" data-testid="tab-custom-fields"><Columns3 className="w-4 h-4 mr-1 hidden sm:inline" />Xüsusi sahələr</TabsTrigger>
           <TabsTrigger value="users" className="text-xs sm:text-sm" data-testid="tab-users"><Users className="w-4 h-4 mr-1 hidden sm:inline" />İstifadəçilər</TabsTrigger>
         </TabsList>
@@ -829,6 +834,42 @@ export default function Settings() {
                 </div>
               ))}
               {meetingTypes.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Görüş növü yoxdur</p>}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ========= LEAD SOURCES TAB ========= */}
+        <TabsContent value="lead-sources">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
+            <h2 className="text-lg font-semibold mb-4" style={{ color: '#3D4F6F' }}>Lead Mənbələri</h2>
+            <div className="flex gap-2 mb-4">
+              <Input value={newLeadSource} onChange={(e) => setNewLeadSource(e.target.value)} placeholder="Yeni mənbə..." className="text-sm max-w-xs" data-testid="lead-source-input" />
+              <Button size="sm" disabled={!newLeadSource.trim()} onClick={async () => {
+                const updated = [...leadSources, newLeadSource.trim()];
+                try {
+                  await axios.put(`${API}/settings/lists/lead_sources`, { values: updated }, { headers });
+                  setLeadSources(updated); setNewLeadSource(''); toast.success('Mənbə əlavə edildi');
+                } catch { toast.error('Xəta baş verdi'); }
+              }} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125]" data-testid="add-lead-source-btn">
+                <Plus className="w-4 h-4 mr-1" />Əlavə et
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              {leadSources.map((ls, idx) => (
+                <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <span className="text-sm text-[#3D4F6F] font-medium">{ls}</span>
+                  <button onClick={async () => {
+                    const updated = leadSources.filter((_, i) => i !== idx);
+                    try {
+                      await axios.put(`${API}/settings/lists/lead_sources`, { values: updated }, { headers });
+                      setLeadSources(updated); toast.success('Mənbə silindi');
+                    } catch { toast.error('Xəta baş verdi'); }
+                  }} className="p-1 hover:bg-red-100 rounded" data-testid={`delete-lead-source-${idx}`}>
+                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                  </button>
+                </div>
+              ))}
+              {leadSources.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Mənbə yoxdur</p>}
             </div>
           </div>
         </TabsContent>

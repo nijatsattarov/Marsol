@@ -868,6 +868,113 @@ async def delete_meeting(meeting_id: str, current_user: dict = Depends(get_curre
     await db.notifications.delete_many({"meeting_id": meeting_id, "type": "reminder"})
     return {"message": "Görüş silindi"}
 
+
+# ==================== SALES LEADS (ŞİRKƏT BAZASI) ====================
+
+LEAD_STATUSES = ["Yeni", "Əlaqə quruldu", "Görüş təyin edildi", "Təklif göndərildi", "Danışıqda", "Müqavilə", "İmtina"]
+
+@api_router.get("/sales-leads")
+async def get_sales_leads(
+    status: Optional[str] = None,
+    source: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    query = {}
+    if status and status != "all":
+        query["status"] = status
+    if source and source != "all":
+        query["source"] = source
+    # Non-admin: only own leads
+    if current_user.get("role") != "admin":
+        query["curator"] = current_user.get("name", "")
+    leads = await db.sales_leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    return leads
+
+@api_router.get("/sales-leads/stats")
+async def get_sales_leads_stats(current_user: dict = Depends(get_current_user)):
+    query = {}
+    if current_user.get("role") != "admin":
+        query["curator"] = current_user.get("name", "")
+    total = await db.sales_leads.count_documents(query)
+    stats = {"total": total}
+    for s in LEAD_STATUSES:
+        q = {**query, "status": s}
+        stats[s] = await db.sales_leads.count_documents(q)
+    return stats
+
+@api_router.post("/sales-leads")
+async def create_sales_lead(data: dict, current_user: dict = Depends(get_current_user)):
+    count = await db.sales_leads.count_documents({})
+    lead_code = f"SB-{str(count + 1).zfill(3)}"
+    doc = {
+        "id": str(uuid.uuid4()),
+        "lead_code": lead_code,
+        "company_name": data.get("company_name", ""),
+        "contact_name": data.get("contact_name", ""),
+        "position": data.get("position", ""),
+        "phone": data.get("phone", ""),
+        "email": data.get("email", ""),
+        "source": data.get("source", ""),
+        "status": data.get("status", "Yeni"),
+        "notes": data.get("notes", ""),
+        "curator": current_user.get("name", ""),
+        "created_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.sales_leads.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/sales-leads/{lead_id}")
+async def update_sales_lead(lead_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in data.items() if k not in ("id", "lead_code")}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.sales_leads.update_one({"id": lead_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Lead tapılmadı")
+    doc = await db.sales_leads.find_one({"id": lead_id}, {"_id": 0})
+    return doc
+
+@api_router.delete("/sales-leads/{lead_id}")
+async def delete_sales_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.sales_leads.delete_one({"id": lead_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Lead tapılmadı")
+    return {"message": "Lead silindi"}
+
+@api_router.post("/sales-leads/{lead_id}/create-meeting")
+async def create_meeting_from_lead(lead_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    lead = await db.sales_leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead tapılmadı")
+    meeting_id = str(uuid.uuid4())
+    meeting_doc = {
+        "id": meeting_id,
+        "employee": current_user.get("name", ""),
+        "meeting_setter": data.get("meeting_setter", current_user.get("name", "")),
+        "date": data.get("date", ""),
+        "time": data.get("time", ""),
+        "company": lead["company_name"],
+        "contact_person": lead["contact_name"],
+        "project": "",
+        "meeting_type": data.get("meeting_type", "Müştəri görüşü"),
+        "meeting_mode": data.get("meeting_mode", "Offline"),
+        "department": "Satış",
+        "location": data.get("location", ""),
+        "result": "",
+        "next_meeting": "",
+        "notes": data.get("notes", ""),
+        "reminders": [],
+        "source_lead_id": lead_id,
+        "created_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.meetings.insert_one(meeting_doc)
+    meeting_doc.pop("_id", None)
+    # Update lead status
+    await db.sales_leads.update_one({"id": lead_id}, {"$set": {"status": "Görüş təyin edildi", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return meeting_doc
+
 # ==================== ASSEMBLIES (İCLAS) ====================
 
 async def _sync_assembly_tasks(assembly_doc):
@@ -1067,6 +1174,8 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
         "education_levels": ["Orta təhsil", "Sub bakalavr", "Bakalavr", "Magistratura", "Doktorantura"],
         "event_types": EVENT_TYPES,
         "package_quotas": await get_package_quotas(),
+        "lead_sources": await _get_setting_list("lead_sources", ["Marketing", "Referans", "Sosial media", "Veb sayt", "Sərgi", "Soyuq zəng", "Digər"]),
+        "lead_statuses": ["Yeni", "Əlaqə quruldu", "Görüş təyin edildi", "Təklif göndərildi", "Danışıqda", "Müqavilə", "İmtina"],
     }
 
 # Get companies for select dropdown (simplified)
