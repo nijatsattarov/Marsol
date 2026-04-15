@@ -4,7 +4,7 @@ import {
   Settings as SettingsIcon, Package, FolderKanban, Users, Columns3,
   Plus, Pencil, Trash2, Loader2, Shield, Eye, UserCog, User,
   ChevronDown, Search, X, Building2, Layers, Briefcase, Activity, Building,
-  Calendar, Target
+  Calendar, Target, TrendingUp
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -88,6 +88,8 @@ export default function Settings() {
   const [newMeetingType, setNewMeetingType] = useState('');
   const [leadSources, setLeadSources] = useState([]);
   const [newLeadSource, setNewLeadSource] = useState('');
+  const [saleTypes, setSaleTypes] = useState([]);
+  const [newSaleType, setNewSaleType] = useState('');
 
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0, invitation_count: 0 });
@@ -123,7 +125,7 @@ export default function Settings() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes, mcRes, mtRes, lsRes] = await Promise.all([
+      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes, mcRes, mtRes, lsRes, stRes] = await Promise.all([
         axios.get(`${API}/settings/packages`, { headers }),
         axios.get(`${API}/settings/projects`, { headers }),
         axios.get(`${API}/settings/custom-fields`, { headers }),
@@ -136,6 +138,7 @@ export default function Settings() {
         axios.get(`${API}/settings/marsol-companies`, { headers }),
         axios.get(`${API}/settings/lists/meeting_types`, { headers }),
         axios.get(`${API}/settings/lists/lead_sources`, { headers }),
+        axios.get(`${API}/settings/lists/sale_types`, { headers }),
       ]);
       setPackages(pkgRes.data);
       setProjects(prjRes.data);
@@ -149,6 +152,7 @@ export default function Settings() {
       setMarsolCompanies(mcRes.data);
       setMeetingTypes(mtRes.data || []);
       setLeadSources(lsRes.data || []);
+      setSaleTypes(stRes.data || []);
     } catch (err) {
       console.error('Error fetching settings:', err);
     } finally {
@@ -471,6 +475,7 @@ export default function Settings() {
           <TabsTrigger value="marsol-companies" className="text-xs sm:text-sm" data-testid="tab-marsol-companies"><Building className="w-4 h-4 mr-1 hidden sm:inline" />Müəssisələr</TabsTrigger>
           <TabsTrigger value="meeting-types" className="text-xs sm:text-sm" data-testid="tab-meeting-types"><Calendar className="w-4 h-4 mr-1 hidden sm:inline" />Görüş növləri</TabsTrigger>
           <TabsTrigger value="lead-sources" className="text-xs sm:text-sm" data-testid="tab-lead-sources"><Target className="w-4 h-4 mr-1 hidden sm:inline" />Lead mənbələri</TabsTrigger>
+          <TabsTrigger value="sale-types" className="text-xs sm:text-sm" data-testid="tab-sale-types"><TrendingUp className="w-4 h-4 mr-1 hidden sm:inline" />Satış növləri</TabsTrigger>
           <TabsTrigger value="custom-fields" className="text-xs sm:text-sm" data-testid="tab-custom-fields"><Columns3 className="w-4 h-4 mr-1 hidden sm:inline" />Xüsusi sahələr</TabsTrigger>
           <TabsTrigger value="users" className="text-xs sm:text-sm" data-testid="tab-users"><Users className="w-4 h-4 mr-1 hidden sm:inline" />İstifadəçilər</TabsTrigger>
         </TabsList>
@@ -870,6 +875,42 @@ export default function Settings() {
                 </div>
               ))}
               {leadSources.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Mənbə yoxdur</p>}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ========= SALE TYPES TAB ========= */}
+        <TabsContent value="sale-types">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
+            <h2 className="text-lg font-semibold mb-4" style={{ color: '#3D4F6F' }}>Satış Növləri</h2>
+            <div className="flex gap-2 mb-4">
+              <Input value={newSaleType} onChange={(e) => setNewSaleType(e.target.value)} placeholder="Yeni satış növü..." className="text-sm max-w-xs" data-testid="sale-type-input" />
+              <Button size="sm" disabled={!newSaleType.trim()} onClick={async () => {
+                const updated = [...saleTypes, newSaleType.trim()];
+                try {
+                  await axios.put(`${API}/settings/lists/sale_types`, { values: updated }, { headers });
+                  setSaleTypes(updated); setNewSaleType(''); toast.success('Satış növü əlavə edildi');
+                } catch { toast.error('Xəta baş verdi'); }
+              }} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125]" data-testid="add-sale-type-btn">
+                <Plus className="w-4 h-4 mr-1" />Əlavə et
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              {saleTypes.map((st, idx) => (
+                <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <span className="text-sm text-[#3D4F6F] font-medium">{st}</span>
+                  <button onClick={async () => {
+                    const updated = saleTypes.filter((_, i) => i !== idx);
+                    try {
+                      await axios.put(`${API}/settings/lists/sale_types`, { values: updated }, { headers });
+                      setSaleTypes(updated); toast.success('Satış növü silindi');
+                    } catch { toast.error('Xəta baş verdi'); }
+                  }} className="p-1 hover:bg-red-100 rounded" data-testid={`delete-sale-type-${idx}`}>
+                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                  </button>
+                </div>
+              ))}
+              {saleTypes.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Satış növü yoxdur</p>}
             </div>
           </div>
         </TabsContent>

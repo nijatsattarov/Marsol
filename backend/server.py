@@ -871,7 +871,7 @@ async def delete_meeting(meeting_id: str, current_user: dict = Depends(get_curre
 
 # ==================== SALES LEADS (ŞİRKƏT BAZASI) ====================
 
-LEAD_STATUSES = ["Yeni", "Əlaqə quruldu", "Görüş təyin edildi", "Təklif göndərildi", "Danışıqda", "Müqavilə", "İmtina"]
+LEAD_STATUSES = ["Yeni", "Əlaqə quruldu", "Görüş təyin edildi", "Təklif göndərildi", "Danışıqda", "Üzv oldu", "Satıldı", "İmtina"]
 
 @api_router.get("/sales-leads")
 async def get_sales_leads(
@@ -915,6 +915,7 @@ async def create_sales_lead(data: dict, current_user: dict = Depends(get_current
         "phone": data.get("phone", ""),
         "email": data.get("email", ""),
         "source": data.get("source", ""),
+        "sale_type": data.get("sale_type", "Üzvlük"),
         "status": data.get("status", "Yeni"),
         "notes": data.get("notes", ""),
         "curator": current_user.get("name", ""),
@@ -929,9 +930,58 @@ async def create_sales_lead(data: dict, current_user: dict = Depends(get_current
 async def update_sales_lead(lead_id: str, data: dict, current_user: dict = Depends(get_current_user)):
     update_data = {k: v for k, v in data.items() if k not in ("id", "lead_code")}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    result = await db.sales_leads.update_one({"id": lead_id}, {"$set": update_data})
-    if result.matched_count == 0:
+    
+    # Check if status changed to "Üzv oldu"
+    new_status = update_data.get("status")
+    lead = await db.sales_leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
         raise HTTPException(status_code=404, detail="Lead tapılmadı")
+    
+    result = await db.sales_leads.update_one({"id": lead_id}, {"$set": update_data})
+    
+    if new_status == "Üzv oldu" and lead.get("status") != "Üzv oldu":
+        sale_type = update_data.get("sale_type", lead.get("sale_type", ""))
+        if sale_type == "Üzvlük":
+            # Check if company already exists
+            existing = await db.companies.find_one({"brand_name": lead["company_name"]}, {"_id": 0})
+            if not existing:
+                company_doc = {
+                    "id": str(uuid.uuid4()),
+                    "brand_name": lead["company_name"],
+                    "legal_name": lead["company_name"],
+                    "sector": "",
+                    "company_size": "",
+                    "registration_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    "address": "",
+                    "bank_details": "",
+                    "owner_name": lead.get("contact_name", ""),
+                    "owner_phone": lead.get("phone", ""),
+                    "owner_email": lead.get("email", ""),
+                    "owner_social_links": "",
+                    "co_founders": [],
+                    "representative_name": "",
+                    "representative_phone": "",
+                    "representative_email": "",
+                    "company_phone": lead.get("phone", ""),
+                    "company_email": lead.get("email", ""),
+                    "website": "",
+                    "package": "",
+                    "joined_project": "Üzvlük",
+                    "contract_start_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    "contract_end_date": "",
+                    "payment_amount": 0,
+                    "paid_amount": 0,
+                    "debt_amount": 0,
+                    "payment_due_date": "",
+                    "status": "Aktiv",
+                    "sub_sector": "",
+                    "marsol_representative": lead.get("curator", ""),
+                    "source_lead_id": lead_id,
+                    "curator": lead.get("curator", ""),
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.companies.insert_one(company_doc)
+    
     doc = await db.sales_leads.find_one({"id": lead_id}, {"_id": 0})
     return doc
 
@@ -941,6 +991,46 @@ async def delete_sales_lead(lead_id: str, current_user: dict = Depends(get_curre
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Lead tapılmadı")
     return {"message": "Lead silindi"}
+
+@api_router.get("/sales-members")
+async def get_sales_members(current_user: dict = Depends(get_current_user)):
+    query = {"status": "Üzv oldu", "sale_type": "Üzvlük"}
+    if current_user.get("role") != "admin":
+        query["curator"] = current_user.get("name", "")
+
+@api_router.get("/members")
+async def get_members(
+    package: Optional[str] = None,
+    sector: Optional[str] = None,
+    status: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    query = {}
+    if package and package != "all":
+        query["package"] = package
+    if sector and sector != "all":
+        query["sector"] = sector
+    if status and status != "all":
+        query["status"] = status
+    # Non-admin: only their curated companies
+    if current_user.get("role") != "admin":
+        query["curator"] = current_user.get("name", "")
+    members = await db.companies.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    return members
+
+@api_router.get("/members/options/all")
+async def get_members_options(current_user: dict = Depends(get_current_user)):
+    options = await db.options.find_one({"type": "members"}, {"_id": 0})
+    packages_db = await db.packages.find({}, {"_id": 0}).to_list(100)
+    sectors_db = await db.sectors.find({}, {"_id": 0}).to_list(100)
+    return {
+        "packages": [p["name"] for p in packages_db] if packages_db else ["Premium", "Business", "Business Plus"],
+        "sectors": [s["name"] for s in sectors_db] if sectors_db else [],
+        "statuses": ["Aktiv", "Qeyri-aktiv", "Gözləmədə"],
+    }
+
+    members = await db.sales_leads.find(query, {"_id": 0}).sort("updated_at", -1).to_list(2000)
+    return members
 
 @api_router.post("/sales-leads/{lead_id}/create-meeting")
 async def create_meeting_from_lead(lead_id: str, data: dict, current_user: dict = Depends(get_current_user)):
@@ -1175,7 +1265,8 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
         "event_types": EVENT_TYPES,
         "package_quotas": await get_package_quotas(),
         "lead_sources": await _get_setting_list("lead_sources", ["Marketing", "Referans", "Sosial media", "Veb sayt", "Sərgi", "Soyuq zəng", "Digər"]),
-        "lead_statuses": ["Yeni", "Əlaqə quruldu", "Görüş təyin edildi", "Təklif göndərildi", "Danışıqda", "Müqavilə", "İmtina"],
+        "lead_statuses": ["Yeni", "Əlaqə quruldu", "Görüş təyin edildi", "Təklif göndərildi", "Danışıqda", "Üzv oldu", "Satıldı", "İmtina"],
+        "sale_types": await _get_setting_list("sale_types", ["Üzvlük", "Sərgi stendi", "Tur (Daxili)", "Tur (Xarici)", "Təlim", "Digər"]),
     }
 
 # Get companies for select dropdown (simplified)

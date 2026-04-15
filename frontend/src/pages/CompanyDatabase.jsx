@@ -16,20 +16,21 @@ import * as XLSX from 'xlsx';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-const STATUSES = ['Yeni', 'Əlaqə quruldu', 'Görüş təyin edildi', 'Təklif göndərildi', 'Danışıqda', 'Müqavilə', 'İmtina'];
+const STATUSES = ['Yeni', 'Əlaqə quruldu', 'Görüş təyin edildi', 'Təklif göndərildi', 'Danışıqda', 'Üzv oldu', 'Satıldı', 'İmtina'];
 const STATUS_COLORS = {
   'Yeni': 'bg-slate-100 text-slate-700',
   'Əlaqə quruldu': 'bg-blue-100 text-blue-700',
   'Görüş təyin edildi': 'bg-amber-100 text-amber-700',
   'Təklif göndərildi': 'bg-purple-100 text-purple-700',
   'Danışıqda': 'bg-cyan-100 text-cyan-700',
-  'Müqavilə': 'bg-green-100 text-green-700',
+  'Üzv oldu': 'bg-green-100 text-green-700',
+  'Satıldı': 'bg-emerald-100 text-emerald-700',
   'İmtina': 'bg-red-100 text-red-700',
 };
 
 const emptyForm = {
   company_name: '', contact_name: '', position: '', phone: '', email: '',
-  source: '', status: 'Yeni', notes: ''
+  source: '', sale_type: 'Üzvlük', status: 'Yeni', notes: ''
 };
 
 const emptyMeetingForm = { date: '', time: '', meeting_type: 'Müştəri görüşü', meeting_mode: 'Offline', location: '', notes: '' };
@@ -115,12 +116,26 @@ export default function CompanyDatabase() {
     } catch { toast.error('Xəta baş verdi'); }
   };
 
-  const handleStatusChange = async (id, newStatus) => {
+  const handleStatusChange = async (lead, newStatus) => {
     try {
-      await axios.put(`${API}/sales-leads/${id}`, { status: newStatus }, { headers });
-      toast.success('Status yeniləndi');
+      await axios.put(`${API}/sales-leads/${lead.id}`, { status: newStatus, sale_type: lead.sale_type }, { headers });
+      if (newStatus === 'Üzv oldu') toast.success('Üzv oldu! Şirkət Məlumatlarına əlavə edildi');
+      else if (newStatus === 'Satıldı') toast.success('Satış tamamlandı!');
+      else toast.success('Status yeniləndi');
       fetchData();
     } catch { toast.error('Xəta baş verdi'); }
+  };
+
+  const getAvailableStatuses = (lead) => {
+    const base = ['Yeni', 'Əlaqə quruldu', 'Görüş təyin edildi', 'Təklif göndərildi', 'Danışıqda', 'İmtina'];
+    if (lead.sale_type === 'Üzvlük') return [...base, 'Üzv oldu'];
+    return [...base, 'Satıldı'];
+  };
+
+  const openNewSaleForCompany = (lead) => {
+    setEditing(null);
+    setForm({ ...emptyForm, company_name: lead.company_name, contact_name: lead.contact_name, position: lead.position, phone: lead.phone, email: lead.email, sale_type: '' });
+    setShowModal(true);
   };
 
   const filtered = leads.filter(l => {
@@ -135,6 +150,7 @@ export default function CompanyDatabase() {
   });
 
   const sources = options.lead_sources || [];
+  const saleTypes = options.sale_types || [];
   const meetingTypes = options.meeting_types || [];
 
   const exportToExcel = () => {
@@ -220,6 +236,7 @@ export default function CompanyDatabase() {
                   <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Əlaqədar şəxs</th>
                   <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Əlaqə</th>
                   <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Mənbə</th>
+                  <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Satış növü</th>
                   <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Status</th>
                   <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Kurator</th>
                   <th className="text-right px-3 py-3 text-xs font-semibold text-[#3D4F6F]"></th>
@@ -227,7 +244,7 @@ export default function CompanyDatabase() {
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-12 text-slate-400 text-sm">Lead tapılmadı</td></tr>
+                  <tr><td colSpan={9} className="text-center py-12 text-slate-400 text-sm">Lead tapılmadı</td></tr>
                 ) : filtered.map(l => (
                   <tr key={l.id} className="border-b border-slate-50 hover:bg-slate-50/50" data-testid={`lead-row-${l.id}`}>
                     <td className="px-3 py-2.5"><Badge className="bg-[#3D4F6F] text-white text-xs font-mono">{l.lead_code}</Badge></td>
@@ -245,14 +262,20 @@ export default function CompanyDatabase() {
                     </td>
                     <td className="px-3 py-2.5">{l.source && <Badge className="bg-slate-100 text-slate-600 text-[10px]">{l.source}</Badge>}</td>
                     <td className="px-3 py-2.5">
-                      <Select value={l.status} onValueChange={(v) => handleStatusChange(l.id, v)}>
+                      <Badge className={`text-[10px] ${l.sale_type === 'Üzvlük' ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>{l.sale_type || '-'}</Badge>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <Select value={l.status} onValueChange={(v) => handleStatusChange(l, v)}>
                         <SelectTrigger className={`text-xs h-7 w-[140px] border-0 ${STATUS_COLORS[l.status] || ''}`}><SelectValue /></SelectTrigger>
-                        <SelectContent>{STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                        <SelectContent>{getAvailableStatuses(l).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                       </Select>
                     </td>
                     <td className="px-3 py-2.5 text-xs text-slate-500">{l.curator}</td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex justify-end gap-1">
+                        <button onClick={() => openNewSaleForCompany(l)} className="p-1.5 hover:bg-indigo-50 rounded-lg" title="Yeni satış" data-testid={`new-sale-btn-${l.id}`}>
+                          <Plus className="w-3.5 h-3.5 text-indigo-500" />
+                        </button>
                         <button onClick={() => openMeetingModal(l)} className="p-1.5 hover:bg-amber-50 rounded-lg" title="Görüş təyin et" data-testid={`meeting-btn-${l.id}`}>
                           <Calendar className="w-3.5 h-3.5 text-amber-500" />
                         </button>
@@ -330,6 +353,15 @@ export default function CompanyDatabase() {
                 <Label className="text-xs">Vəzifə</Label>
                 <Input value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} className="text-sm" />
               </div>
+              <div>
+                <Label className="text-xs">Satış növü *</Label>
+                <Select value={form.sale_type} onValueChange={(v) => setForm({ ...form, sale_type: v })}>
+                  <SelectTrigger className="text-sm" data-testid="lead-sale-type"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                  <SelectContent>{saleTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Mənbə</Label>
                 <Select value={form.source} onValueChange={(v) => setForm({ ...form, source: v })}>
