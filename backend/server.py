@@ -1015,19 +1015,85 @@ async def get_members(
     # Non-admin: only their curated companies
     if current_user.get("role") != "admin":
         query["curator"] = current_user.get("name", "")
-    members = await db.companies.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    companies = await db.companies.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    # Map fields for frontend compatibility
+    members = []
+    for c in companies:
+        c["company_name"] = c.get("brand_name", "")
+        c["director_name"] = c.get("owner_name", "")
+        c["director_phone"] = c.get("owner_phone", "")
+        c["contact_person"] = c.get("representative_name", "")
+        c["business_size"] = c.get("company_size", "")
+        members.append(c)
     return members
 
 @api_router.get("/members/options/all")
 async def get_members_options(current_user: dict = Depends(get_current_user)):
-    options = await db.options.find_one({"type": "members"}, {"_id": 0})
     packages_db = await db.packages.find({}, {"_id": 0}).to_list(100)
     sectors_db = await db.sectors.find({}, {"_id": 0}).to_list(100)
+    projects_db = await db.projects.find({}, {"_id": 0}).to_list(100)
+    users_db = await db.users.find({}, {"_id": 0, "name": 1}).to_list(500)
     return {
         "packages": [p["name"] for p in packages_db] if packages_db else ["Premium", "Business", "Business Plus"],
         "sectors": [s["name"] for s in sectors_db] if sectors_db else [],
         "statuses": ["Aktiv", "Qeyri-aktiv", "Gözləmədə"],
+        "business_sizes": ["Böyük", "Orta", "Kiçik", "Mikro"],
+        "curators": [u["name"] for u in users_db if u.get("name")],
+        "projects": [p["name"] for p in projects_db] if projects_db else ["Üzvlük", "Sərgi", "Təlim/Proqram"],
     }
+
+@api_router.post("/members")
+async def create_member(data: dict, current_user: dict = Depends(get_current_user)):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "brand_name": data.get("company_name", ""),
+        "legal_name": data.get("company_name", ""),
+        "sector": data.get("sector", ""),
+        "company_size": data.get("business_size", ""),
+        "owner_name": data.get("director_name", ""),
+        "owner_phone": data.get("director_phone", ""),
+        "owner_email": data.get("email", ""),
+        "representative_name": data.get("contact_person", ""),
+        "company_phone": data.get("phone", ""),
+        "package": data.get("package", ""),
+        "joined_project": data.get("project", "Üzvlük"),
+        "status": data.get("status", "Aktiv"),
+        "curator": current_user.get("name", ""),
+        "registration_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.companies.insert_one(doc)
+    doc.pop("_id", None)
+    doc["company_name"] = doc["brand_name"]
+    doc["director_name"] = doc["owner_name"]
+    doc["business_size"] = doc["company_size"]
+    return doc
+
+@api_router.put("/members/{member_id}")
+async def update_member(member_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    update = {}
+    field_map = {"company_name": "brand_name", "director_name": "owner_name", "director_phone": "owner_phone", "business_size": "company_size", "contact_person": "representative_name"}
+    for k, v in data.items():
+        if k in field_map:
+            update[field_map[k]] = v
+        elif k not in ("id",):
+            update[k] = v
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.companies.update_one({"id": member_id}, {"$set": update})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Üzv tapılmadı")
+    doc = await db.companies.find_one({"id": member_id}, {"_id": 0})
+    doc["company_name"] = doc.get("brand_name", "")
+    doc["director_name"] = doc.get("owner_name", "")
+    doc["business_size"] = doc.get("company_size", "")
+    return doc
+
+@api_router.delete("/members/{member_id}")
+async def delete_member(member_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.companies.delete_one({"id": member_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Üzv tapılmadı")
+    return {"message": "Üzv silindi"}
 
     members = await db.sales_leads.find(query, {"_id": 0}).sort("updated_at", -1).to_list(2000)
     return members

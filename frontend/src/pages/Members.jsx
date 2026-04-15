@@ -281,9 +281,9 @@ export default function Members() {
   };
 
   const filteredMembers = members.filter(m => 
-    m.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.director_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.contact_person.toLowerCase().includes(searchTerm.toLowerCase())
+    (m.company_name || m.brand_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (m.director_name || m.owner_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (m.contact_person || m.representative_name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const activeFilterCount = Object.values(filters).filter(v => v && v !== 'all').length;
