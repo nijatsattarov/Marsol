@@ -21,7 +21,7 @@ export default function Login() {
       const response = await axios.post(`${API}/auth/login`, formData);
       localStorage.setItem('token', response.data.access_token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
-      navigate('/dashboard');
+      window.location.href = '/dashboard';
     } catch (err) {
       setError(err.response?.data?.detail || 'Giriş zamanı xəta baş verdi');
     } finally {
@@ -44,7 +44,7 @@ export default function Login() {
       });
       localStorage.setItem('token', response.data.access_token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
-      navigate('/dashboard');
+      window.location.href = '/dashboard';
     } catch (err) {
       setError(err.response?.data?.detail || 'Qeydiyyat zamanı xəta baş verdi');
     } finally {
