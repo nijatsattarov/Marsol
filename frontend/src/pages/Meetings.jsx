@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
+import { usePermissions, canEdit } from '../context/PermissionContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -39,6 +40,8 @@ export default function Meetings() {
   const [searchTerm, setSearchTerm] = useState('');
 
   const token = localStorage.getItem('token');
+  const { permissions } = usePermissions();
+  const _canEdit = canEdit(permissions, 'meetings');
   const headers = { Authorization: `Bearer ${token}` };
 
   const fetchData = useCallback(async () => {
@@ -139,9 +142,9 @@ export default function Meetings() {
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Görüşlər</h1>
           <p className="text-slate-500 text-sm mt-1">{filtered.length} görüş</p>
         </div>
-        <Button onClick={() => openModal()} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="add-meeting-btn">
+        {_canEdit && <Button onClick={() => openModal()} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="add-meeting-btn">
           <Plus className="w-4 h-4 mr-1" />Yeni Görüş
-        </Button>
+        </Button>}
       </div>
 
       {/* Filters */}
@@ -230,14 +233,14 @@ export default function Meetings() {
                       ) : <span className="text-xs text-slate-300">-</span>}
                     </td>
                     <td className="px-3 py-2.5 text-right">
-                      <div className="flex justify-end gap-1">
+                      {_canEdit && <div className="flex justify-end gap-1">
                         <button onClick={() => openModal(m)} className="p-1.5 hover:bg-slate-100 rounded-lg" data-testid={`edit-meeting-${m.id}`}>
                           <Pencil className="w-3.5 h-3.5 text-slate-400" />
                         </button>
                         <button onClick={() => handleDelete(m.id)} className="p-1.5 hover:bg-red-50 rounded-lg" data-testid={`delete-meeting-${m.id}`}>
                           <Trash2 className="w-3.5 h-3.5 text-red-400" />
                         </button>
-                      </div>
+                      </div>}
                     </td>
                   </tr>
                 ))

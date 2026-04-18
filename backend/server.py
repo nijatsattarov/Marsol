@@ -498,7 +498,7 @@ async def get_companies(
     return companies
 
 @api_router.post("/companies")
-async def create_company(company_data: dict, current_user: dict = Depends(get_current_user)):
+async def create_company(company_data: dict, current_user: dict = Depends(check_permission("companies", "write"))):
     company_id = str(uuid.uuid4())
     company_doc = {
         "id": company_id,
@@ -522,7 +522,7 @@ async def get_company(company_id: str, current_user: dict = Depends(get_current_
     return company
 
 @api_router.put("/companies/{company_id}")
-async def update_company(company_id: str, company_data: dict, current_user: dict = Depends(get_current_user)):
+async def update_company(company_id: str, company_data: dict, current_user: dict = Depends(check_permission("companies", "write"))):
     update_data = {k: v for k, v in company_data.items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="Yenilənəcək məlumat yoxdur")
@@ -543,7 +543,7 @@ async def update_company(company_id: str, company_data: dict, current_user: dict
 
 # Update finance note and payment info for a company
 @api_router.put("/companies/{company_id}/finance")
-async def update_company_finance(company_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+async def update_company_finance(company_id: str, data: dict, current_user: dict = Depends(check_permission("companies", "write"))):
     update_data = {}
     for key in ["finance_note", "paid_amount", "total_amount", "last_payment_date"]:
         if key in data:
@@ -567,7 +567,7 @@ async def update_company_finance(company_id: str, data: dict, current_user: dict
     return company
 
 @api_router.delete("/companies/{company_id}")
-async def delete_company(company_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_company(company_id: str, current_user: dict = Depends(check_permission("companies", "write"))):
     result = await db.companies.delete_one({"id": company_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
@@ -591,7 +591,7 @@ async def get_employees(
     return employees
 
 @api_router.post("/employees")
-async def create_employee(employee_data: dict, current_user: dict = Depends(get_current_user)):
+async def create_employee(employee_data: dict, current_user: dict = Depends(check_permission("hr", "write"))):
     employee_id = str(uuid.uuid4())
     # Auto-generate employee code (E001, E002...)
     count = await db.employees.count_documents({})
@@ -614,7 +614,7 @@ async def get_employee(employee_id: str, current_user: dict = Depends(get_curren
     return employee
 
 @api_router.put("/employees/{employee_id}")
-async def update_employee(employee_id: str, employee_data: dict, current_user: dict = Depends(get_current_user)):
+async def update_employee(employee_id: str, employee_data: dict, current_user: dict = Depends(check_permission("hr", "write"))):
     update_data = {k: v for k, v in employee_data.items() if v is not None}
     result = await db.employees.update_one({"id": employee_id}, {"$set": update_data})
     if result.matched_count == 0:
@@ -623,7 +623,7 @@ async def update_employee(employee_id: str, employee_data: dict, current_user: d
     return employee
 
 @api_router.delete("/employees/{employee_id}")
-async def delete_employee(employee_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_employee(employee_id: str, current_user: dict = Depends(check_permission("hr", "write"))):
     result = await db.employees.delete_one({"id": employee_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Əməkdaş tapılmadı")
@@ -637,7 +637,7 @@ async def get_incomes(current_user: dict = Depends(get_current_user)):
     return incomes
 
 @api_router.post("/finance/incomes")
-async def create_income(income_data: IncomeCreate, current_user: dict = Depends(get_current_user)):
+async def create_income(income_data: IncomeCreate, current_user: dict = Depends(check_permission("finance", "write"))):
     income_id = str(uuid.uuid4())
     income_doc = {
         "id": income_id,
@@ -650,7 +650,7 @@ async def create_income(income_data: IncomeCreate, current_user: dict = Depends(
     return income_doc
 
 @api_router.put("/finance/incomes/{income_id}")
-async def update_income(income_id: str, income_data: dict, current_user: dict = Depends(get_current_user)):
+async def update_income(income_id: str, income_data: dict, current_user: dict = Depends(check_permission("finance", "write"))):
     update_data = {k: v for k, v in income_data.items() if v is not None}
     if "amount" in update_data or "paid_amount" in update_data:
         current = await db.incomes.find_one({"id": income_id}, {"_id": 0})
@@ -665,7 +665,7 @@ async def update_income(income_id: str, income_data: dict, current_user: dict = 
     return income
 
 @api_router.delete("/finance/incomes/{income_id}")
-async def delete_income(income_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_income(income_id: str, current_user: dict = Depends(check_permission("finance", "write"))):
     result = await db.incomes.delete_one({"id": income_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Gəlir tapılmadı")
@@ -677,7 +677,7 @@ async def get_expenses(current_user: dict = Depends(get_current_user)):
     return expenses
 
 @api_router.post("/finance/expenses")
-async def create_expense(expense_data: ExpenseCreate, current_user: dict = Depends(get_current_user)):
+async def create_expense(expense_data: ExpenseCreate, current_user: dict = Depends(check_permission("finance", "write"))):
     expense_id = str(uuid.uuid4())
     expense_doc = {
         "id": expense_id,
@@ -689,7 +689,7 @@ async def create_expense(expense_data: ExpenseCreate, current_user: dict = Depen
     return expense_doc
 
 @api_router.put("/finance/expenses/{expense_id}")
-async def update_expense(expense_id: str, expense_data: dict, current_user: dict = Depends(get_current_user)):
+async def update_expense(expense_id: str, expense_data: dict, current_user: dict = Depends(check_permission("finance", "write"))):
     update_data = {k: v for k, v in expense_data.items() if v is not None}
     result = await db.expenses.update_one({"id": expense_id}, {"$set": update_data})
     if result.matched_count == 0:
@@ -698,7 +698,7 @@ async def update_expense(expense_id: str, expense_data: dict, current_user: dict
     return expense
 
 @api_router.delete("/finance/expenses/{expense_id}")
-async def delete_expense(expense_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_expense(expense_id: str, current_user: dict = Depends(check_permission("finance", "write"))):
     result = await db.expenses.delete_one({"id": expense_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Xərc tapılmadı")
@@ -759,7 +759,7 @@ async def get_tasks(
     return tasks
 
 @api_router.post("/tasks")
-async def create_task(task_data: TaskCreate, current_user: dict = Depends(get_current_user)):
+async def create_task(task_data: TaskCreate, current_user: dict = Depends(check_permission("tasks", "write"))):
     count = await db.tasks.count_documents({})
     task_code = f"T-{str(count + 1).zfill(3)}"
     task_doc = {
@@ -774,7 +774,7 @@ async def create_task(task_data: TaskCreate, current_user: dict = Depends(get_cu
     return task_doc
 
 @api_router.put("/tasks/{task_id}")
-async def update_task(task_id: str, task_data: dict, current_user: dict = Depends(get_current_user)):
+async def update_task(task_id: str, task_data: dict, current_user: dict = Depends(check_permission("tasks", "write"))):
     update_data = {k: v for k, v in task_data.items() if v is not None}
     result = await db.tasks.update_one({"id": task_id}, {"$set": update_data})
     if result.matched_count == 0:
@@ -783,7 +783,7 @@ async def update_task(task_id: str, task_data: dict, current_user: dict = Depend
     return task
 
 @api_router.delete("/tasks/{task_id}")
-async def delete_task(task_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_task(task_id: str, current_user: dict = Depends(check_permission("tasks", "write"))):
     result = await db.tasks.delete_one({"id": task_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Tapşırıq tapılmadı")
@@ -816,7 +816,7 @@ async def get_meetings(
     return meetings
 
 @api_router.post("/meetings")
-async def create_meeting(data: dict, current_user: dict = Depends(get_current_user)):
+async def create_meeting(data: dict, current_user: dict = Depends(check_permission("meetings", "write"))):
     meeting_id = str(uuid.uuid4())
     meeting_doc = {
         "id": meeting_id,
@@ -857,7 +857,7 @@ async def create_meeting(data: dict, current_user: dict = Depends(get_current_us
     return meeting_doc
 
 @api_router.put("/meetings/{meeting_id}")
-async def update_meeting(meeting_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+async def update_meeting(meeting_id: str, data: dict, current_user: dict = Depends(check_permission("meetings", "write"))):
     update_data = {k: v for k, v in data.items() if k != "id"}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     result = await db.meetings.update_one({"id": meeting_id}, {"$set": update_data})
@@ -882,7 +882,7 @@ async def update_meeting(meeting_id: str, data: dict, current_user: dict = Depen
     return meeting
 
 @api_router.delete("/meetings/{meeting_id}")
-async def delete_meeting(meeting_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_meeting(meeting_id: str, current_user: dict = Depends(check_permission("meetings", "write"))):
     result = await db.meetings.delete_one({"id": meeting_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Görüş tapılmadı")
@@ -924,7 +924,7 @@ async def get_sales_leads_stats(current_user: dict = Depends(get_current_user)):
     return stats
 
 @api_router.post("/sales-leads")
-async def create_sales_lead(data: dict, current_user: dict = Depends(get_current_user)):
+async def create_sales_lead(data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
     count = await db.sales_leads.count_documents({})
     lead_code = f"SB-{str(count + 1).zfill(3)}"
     doc = {
@@ -948,7 +948,7 @@ async def create_sales_lead(data: dict, current_user: dict = Depends(get_current
     return doc
 
 @api_router.put("/sales-leads/{lead_id}")
-async def update_sales_lead(lead_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+async def update_sales_lead(lead_id: str, data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
     update_data = {k: v for k, v in data.items() if k not in ("id", "lead_code")}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     
@@ -1007,7 +1007,7 @@ async def update_sales_lead(lead_id: str, data: dict, current_user: dict = Depen
     return doc
 
 @api_router.delete("/sales-leads/{lead_id}")
-async def delete_sales_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_sales_lead(lead_id: str, current_user: dict = Depends(check_permission("sales", "write"))):
     result = await db.sales_leads.delete_one({"id": lead_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Lead tapılmadı")
@@ -1078,7 +1078,7 @@ async def get_members_options(current_user: dict = Depends(get_current_user)):
     }
 
 @api_router.post("/members")
-async def create_member(data: dict, current_user: dict = Depends(get_current_user)):
+async def create_member(data: dict, current_user: dict = Depends(check_permission("members", "write"))):
     doc = {
         "id": str(uuid.uuid4()),
         "brand_name": data.get("company_name", ""),
@@ -1105,7 +1105,7 @@ async def create_member(data: dict, current_user: dict = Depends(get_current_use
     return doc
 
 @api_router.put("/members/{member_id}")
-async def update_member(member_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+async def update_member(member_id: str, data: dict, current_user: dict = Depends(check_permission("members", "write"))):
     update = {}
     field_map = {"company_name": "brand_name", "director_name": "owner_name", "director_phone": "owner_phone", "business_size": "company_size", "contact_person": "representative_name", "contact_position": "representative_position"}
     for k, v in data.items():
@@ -1124,7 +1124,7 @@ async def update_member(member_id: str, data: dict, current_user: dict = Depends
     return doc
 
 @api_router.delete("/members/{member_id}")
-async def delete_member(member_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_member(member_id: str, current_user: dict = Depends(check_permission("members", "write"))):
     result = await db.companies.delete_one({"id": member_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Üzv tapılmadı")
@@ -1134,7 +1134,7 @@ async def delete_member(member_id: str, current_user: dict = Depends(get_current
     return members
 
 @api_router.post("/sales-leads/{lead_id}/create-meeting")
-async def create_meeting_from_lead(lead_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+async def create_meeting_from_lead(lead_id: str, data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
     lead = await db.sales_leads.find_one({"id": lead_id}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead tapılmadı")
@@ -1243,7 +1243,7 @@ async def get_assemblies(
     return assemblies
 
 @api_router.post("/assemblies")
-async def create_assembly(data: dict, current_user: dict = Depends(get_current_user)):
+async def create_assembly(data: dict, current_user: dict = Depends(check_permission("assembly", "write"))):
     count = await db.assemblies.count_documents({})
     assembly_code = f"IC-{str(count + 1).zfill(3)}"
     doc = {
@@ -1266,7 +1266,7 @@ async def create_assembly(data: dict, current_user: dict = Depends(get_current_u
     return doc
 
 @api_router.put("/assemblies/{assembly_id}")
-async def update_assembly(assembly_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+async def update_assembly(assembly_id: str, data: dict, current_user: dict = Depends(check_permission("assembly", "write"))):
     update_data = {k: v for k, v in data.items() if k not in ("id", "assembly_code")}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     result = await db.assemblies.update_one({"id": assembly_id}, {"$set": update_data})
@@ -1277,7 +1277,7 @@ async def update_assembly(assembly_id: str, data: dict, current_user: dict = Dep
     return doc
 
 @api_router.delete("/assemblies/{assembly_id}")
-async def delete_assembly(assembly_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_assembly(assembly_id: str, current_user: dict = Depends(check_permission("assembly", "write"))):
     result = await db.assemblies.delete_one({"id": assembly_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="İclas tapılmadı")
@@ -1352,7 +1352,7 @@ async def get_setting_list(key: str, current_user: dict = Depends(get_current_us
     return []
 
 @api_router.put("/settings/lists/{key}")
-async def update_setting_list(key: str, data: dict, current_user: dict = Depends(get_current_user)):
+async def update_setting_list(key: str, data: dict, current_user: dict = Depends(check_permission("settings", "write"))):
     values = data.get("values", [])
     await db.setting_lists.update_one({"key": key}, {"$set": {"key": key, "values": values, "updated_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
     return {"key": key, "values": values}

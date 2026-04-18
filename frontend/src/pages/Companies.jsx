@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { ScrollArea } from '../components/ui/scroll-area';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { usePermissions, canEdit } from '../context/PermissionContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -98,6 +99,8 @@ export default function Companies() {
 
   const [formData, setFormData] = useState(initialFormData);
   const token = localStorage.getItem('token');
+  const { permissions } = usePermissions();
+  const _canEdit = canEdit(permissions, 'companies');
   const headers = { Authorization: `Bearer ${token}` };
 
   const recalcTotals = (contracts) => {

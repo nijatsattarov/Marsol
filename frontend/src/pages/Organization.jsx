@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
+import { usePermissions, canEdit } from '../context/PermissionContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -71,6 +72,8 @@ export default function Organization() {
   const [sectorWarning, setSectorWarning] = useState(null);
 
   const token = localStorage.getItem('token');
+  const { permissions } = usePermissions();
+  const _canEdit = canEdit(permissions, 'organization');
   const headers = { Authorization: `Bearer ${token}` };
 
   const fetchEvents = useCallback(async () => {

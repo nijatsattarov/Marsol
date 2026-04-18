@@ -13,6 +13,7 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Textarea } from '../components/ui/textarea';
 import { Toaster, toast } from 'sonner';
+import { usePermissions, canEdit } from '../context/PermissionContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -70,6 +71,8 @@ export default function Tasks() {
   const [formData, setFormData] = useState(initialFormData);
 
   const token = localStorage.getItem('token');
+  const { permissions } = usePermissions();
+  const _canEdit = canEdit(permissions, 'tasks');
   const headers = { Authorization: `Bearer ${token}` };
 
   const fetchData = useCallback(async () => {
@@ -175,10 +178,10 @@ export default function Tasks() {
             <Filter className="w-4 h-4 mr-1" />Filtr
             {activeFilterCount > 0 && <Badge className="ml-1 bg-[#9ACD32] text-[#3D4F6F] text-xs">{activeFilterCount}</Badge>}
           </Button>
-          <Button onClick={() => { setFormData(initialFormData); setEditingTask(null); setShowModal(true); }}
+          {_canEdit && <Button onClick={() => { setFormData(initialFormData); setEditingTask(null); setShowModal(true); }}
             className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold text-xs sm:text-sm" data-testid="add-task-btn">
             <Plus className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Tapşırıq əlavə et</span>
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -228,7 +231,7 @@ export default function Tasks() {
                       {task.task_code && <span className="text-[10px] text-slate-400 font-mono">{task.task_code}</span>}
                       <h4 className="font-medium text-sm text-slate-800 line-clamp-2">{task.task_name}</h4>
                     </div>
-                    <DropdownMenu>
+                    {_canEdit && <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0"><MoreVertical className="w-3.5 h-3.5" /></Button>
                       </DropdownMenuTrigger>
@@ -241,7 +244,7 @@ export default function Tasks() {
                         ))}
                         <DropdownMenuItem onClick={() => handleDelete(task.id)} className="text-red-600"><Trash2 className="w-4 h-4 mr-2" />Sil</DropdownMenuItem>
                       </DropdownMenuContent>
-                    </DropdownMenu>
+                    </DropdownMenu>}
                   </div>
                   <div className="flex items-center gap-2 mb-1.5">
                     <Flag className={`w-3.5 h-3.5 ${getPriorityColor(task.priority)}`} />

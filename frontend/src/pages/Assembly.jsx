@@ -12,6 +12,7 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { usePermissions, canEdit } from '../context/PermissionContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -75,6 +76,8 @@ export default function Assembly() {
   const [expandedRow, setExpandedRow] = useState(null);
 
   const token = localStorage.getItem('token');
+  const { permissions } = usePermissions();
+  const _canEdit = canEdit(permissions, 'assembly');
   const headers = { Authorization: `Bearer ${token}` };
 
   const fetchData = useCallback(async () => {
@@ -329,9 +332,9 @@ export default function Assembly() {
           <Button onClick={exportToExcel} variant="outline" className="text-[#3D4F6F] border-[#3D4F6F]/20 hover:bg-[#3D4F6F]/5" data-testid="export-excel-btn">
             <Download className="w-4 h-4 mr-1" />Excel
           </Button>
-          <Button onClick={() => openModal()} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="add-assembly-btn">
+          {_canEdit && <Button onClick={() => openModal()} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="add-assembly-btn">
             <Plus className="w-4 h-4 mr-1" />Yeni İclas
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -395,8 +398,8 @@ export default function Assembly() {
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex justify-end gap-1">
-                        <button onClick={() => openModal(a)} className="p-1.5 hover:bg-slate-100 rounded-lg" data-testid={`edit-assembly-${a.id}`}><Pencil className="w-3.5 h-3.5 text-slate-400" /></button>
-                        <button onClick={() => handleDelete(a.id)} className="p-1.5 hover:bg-red-50 rounded-lg" data-testid={`delete-assembly-${a.id}`}><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
+                        {_canEdit && <button onClick={() => openModal(a)} className="p-1.5 hover:bg-slate-100 rounded-lg" data-testid={`edit-assembly-${a.id}`}><Pencil className="w-3.5 h-3.5 text-slate-400" /></button>}
+                        {_canEdit && <button onClick={() => handleDelete(a.id)} className="p-1.5 hover:bg-red-50 rounded-lg" data-testid={`delete-assembly-${a.id}`}><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>}
                       </div>
                     </td>
                   </tr>
