@@ -1,7 +1,16 @@
 # Test Credentials
 
-## Admin User
+## Admin
 - Email: settings@marsol.az
 - Password: marsol123
-- Name: Settings Admin
 - Role: admin
+
+## Satış meneceri
+- Email: satis@marsol.az
+- Password: marsol123
+- Role: Satış meneceri
+
+## Mühasib
+- Email: muhasib@marsol.az
+- Password: marsol123
+- Role: Mühasib

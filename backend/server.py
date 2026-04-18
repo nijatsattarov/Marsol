@@ -543,28 +543,58 @@ async def update_company(company_id: str, company_data: dict, current_user: dict
 
 # Update finance note and payment info for a company
 @api_router.put("/companies/{company_id}/finance")
-async def update_company_finance(company_id: str, data: dict, current_user: dict = Depends(check_permission("companies", "write"))):
+async def update_company_finance(company_id: str, data: dict, current_user: dict = Depends(check_permission("finance", "write"))):
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
+    
     update_data = {}
-    for key in ["finance_note", "paid_amount", "total_amount", "last_payment_date"]:
-        if key in data:
+    
+    # Handle new payment (additive)
+    new_payment = data.get("new_payment_amount")
+    if new_payment and float(new_payment) > 0:
+        payment_amount = float(new_payment)
+        old_paid = float(company.get("paid_amount", 0) or 0)
+        total = float(company.get("total_amount", 0) or company.get("payment_amount", 0) or 0)
+        new_paid = old_paid + payment_amount
+        update_data["paid_amount"] = new_paid
+        update_data["debt_amount"] = total - new_paid
+        update_data["last_payment_date"] = data.get("payment_date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+        
+        # Save payment history
+        payment_record = {
+            "id": str(uuid.uuid4()),
+            "company_id": company_id,
+            "amount": payment_amount,
+            "date": data.get("payment_date", datetime.now(timezone.utc).strftime("%Y-%m-%d")),
+            "note": data.get("payment_note", ""),
+            "recorded_by": current_user.get("name", ""),
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.payment_history.insert_one(payment_record)
+    
+    # Handle direct field updates (total_amount, finance_note, contract dates)
+    for key in ["finance_note", "total_amount", "payment_amount", "last_payment_date", "contract_start_date", "contract_end_date", "contract_status"]:
+        if key in data and key != "new_payment_amount":
             update_data[key] = data[key]
     
-    if "total_amount" in update_data or "paid_amount" in update_data:
-        company = await db.companies.find_one({"id": company_id}, {"_id": 0})
-        if not company:
-            raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
-        total = update_data.get("total_amount", company.get("total_amount", 0))
-        paid = update_data.get("paid_amount", company.get("paid_amount", 0))
+    # Recalculate debt if total changed
+    if "total_amount" in update_data or "payment_amount" in update_data:
+        total = float(update_data.get("total_amount", update_data.get("payment_amount", company.get("total_amount", 0) or company.get("payment_amount", 0))) or 0)
+        paid = float(update_data.get("paid_amount", company.get("paid_amount", 0)) or 0)
         update_data["debt_amount"] = total - paid
     
     if not update_data:
         raise HTTPException(status_code=400, detail="Yenilənəcək məlumat yoxdur")
     
-    result = await db.companies.update_one({"id": company_id}, {"$set": update_data})
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
-    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
-    return company
+    await db.companies.update_one({"id": company_id}, {"$set": update_data})
+    updated = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    return updated
+
+@api_router.get("/companies/{company_id}/payments")
+async def get_payment_history(company_id: str, current_user: dict = Depends(get_current_user)):
+    payments = await db.payment_history.find({"company_id": company_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return payments
 
 @api_router.delete("/companies/{company_id}")
 async def delete_company(company_id: str, current_user: dict = Depends(check_permission("companies", "write"))):

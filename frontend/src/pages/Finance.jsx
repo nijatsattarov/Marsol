@@ -52,7 +52,8 @@ export default function Finance() {
   // Payment edit modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentCompany, setPaymentCompany] = useState(null);
-  const [paymentForm, setPaymentForm] = useState({ paid_amount: 0, last_payment_date: '' });
+  const [paymentForm, setPaymentForm] = useState({ new_payment_amount: '', payment_date: '', payment_note: '' });
+  const [paymentHistory, setPaymentHistory] = useState([]);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -130,19 +131,26 @@ export default function Finance() {
   };
 
   // Payment edit handlers
-  const openPaymentEdit = (company) => {
+  const openPaymentEdit = async (company) => {
     setPaymentCompany(company);
-    setPaymentForm({ paid_amount: company.paid_amount || 0, last_payment_date: company.last_payment_date || '' });
+    setPaymentForm({ new_payment_amount: '', payment_date: new Date().toISOString().split('T')[0], payment_note: '' });
+    try {
+      const res = await axios.get(`${API}/companies/${company.id}/payments`, { headers });
+      setPaymentHistory(res.data);
+    } catch { setPaymentHistory([]); }
     setShowPaymentModal(true);
   };
 
   const savePayment = async () => {
+    if (!paymentForm.new_payment_amount || parseFloat(paymentForm.new_payment_amount) <= 0) {
+      return toast.error('Ödəniş məbləği daxil edin');
+    }
     try {
       await axios.put(`${API}/companies/${paymentCompany.id}/finance`, paymentForm, { headers });
-      toast.success('Ödəniş məlumatı yeniləndi');
+      toast.success('Ödəniş əlavə edildi');
       setShowPaymentModal(false);
       fetchData();
-    } catch { toast.error('Xəta baş verdi'); }
+    } catch(e) { toast.error(e.response?.data?.detail || 'Xəta baş verdi'); }
   };
 
   // Expense handlers
@@ -608,39 +616,77 @@ export default function Finance() {
         </DialogContent>
       </Dialog>
 
-      {/* Payment Edit Modal */}
+      {/* Payment Modal */}
       <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle style={{ color: '#3D4F6F' }}>
-              Ödəniş redaktə - {paymentCompany?.brand_name}
+              Ödəniş — {paymentCompany?.brand_name}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label className="text-xs">Ümumi məbləğ (AZN)</Label>
-              <Input type="number" value={paymentCompany?.total_amount || 0} disabled className="text-sm bg-slate-50" />
-            </div>
-            <div>
-              <Label className="text-xs">Ödənilən məbləğ (AZN)</Label>
-              <Input type="number" value={paymentForm.paid_amount} onChange={(e) => setPaymentForm({ ...paymentForm, paid_amount: parseFloat(e.target.value) || 0 })} className="text-sm" data-testid="payment-amount-input" />
-            </div>
-            <div>
-              <Label className="text-xs">Son ödəniş tarixi</Label>
-              <Input type="date" value={paymentForm.last_payment_date} onChange={(e) => setPaymentForm({ ...paymentForm, last_payment_date: e.target.value })} className="text-sm" data-testid="payment-date-input" />
-            </div>
+            {/* Summary */}
             {paymentCompany && (
-              <div className="p-3 bg-slate-50 rounded-lg text-xs">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Yeni borc:</span>
-                  <span className="font-bold text-red-600">{((paymentCompany.total_amount || 0) - (paymentForm.paid_amount || 0)).toLocaleString()} AZN</span>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="p-2 bg-slate-50 rounded-lg">
+                  <p className="text-[10px] text-slate-400">Ümumi</p>
+                  <p className="text-sm font-bold text-[#3D4F6F]">{(paymentCompany.total_amount || paymentCompany.payment_amount || 0).toLocaleString()} AZN</p>
+                </div>
+                <div className="p-2 bg-green-50 rounded-lg">
+                  <p className="text-[10px] text-slate-400">Ödənilib</p>
+                  <p className="text-sm font-bold text-green-600">{(paymentCompany.paid_amount || 0).toLocaleString()} AZN</p>
+                </div>
+                <div className="p-2 bg-red-50 rounded-lg">
+                  <p className="text-[10px] text-slate-400">Borc</p>
+                  <p className="text-sm font-bold text-red-600">{(paymentCompany.debt_amount || 0).toLocaleString()} AZN</p>
                 </div>
               </div>
             )}
+
+            {/* New payment form */}
+            <div className="border border-green-200 rounded-lg p-3 bg-green-50/30">
+              <p className="text-xs font-semibold text-green-700 mb-2">Yeni ödəniş əlavə et</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Məbləğ (AZN) *</Label>
+                  <Input type="number" value={paymentForm.new_payment_amount} onChange={(e) => setPaymentForm({ ...paymentForm, new_payment_amount: e.target.value })} className="text-sm" placeholder="0" data-testid="payment-amount-input" />
+                </div>
+                <div>
+                  <Label className="text-xs">Tarix *</Label>
+                  <Input type="date" value={paymentForm.payment_date} onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })} className="text-sm" data-testid="payment-date-input" />
+                </div>
+              </div>
+              <div className="mt-2">
+                <Label className="text-xs">Qeyd</Label>
+                <Input value={paymentForm.payment_note} onChange={(e) => setPaymentForm({ ...paymentForm, payment_note: e.target.value })} className="text-sm" placeholder="Ödəniş haqqında qeyd" />
+              </div>
+            </div>
+
+            {/* Payment History */}
+            {paymentHistory.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-[#3D4F6F] mb-2">Ödəniş tarixçəsi</p>
+                <div className="max-h-[150px] overflow-y-auto space-y-1.5">
+                  {paymentHistory.map((p, i) => (
+                    <div key={p.id || i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg text-xs">
+                      <div>
+                        <span className="text-slate-500">{p.date}</span>
+                        {p.note && <span className="text-slate-400 ml-2">— {p.note}</span>}
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold text-green-600">+{p.amount?.toLocaleString()} AZN</span>
+                        <p className="text-[10px] text-slate-400">{p.recorded_by}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowPaymentModal(false)}>Ləğv et</Button>
               <Button onClick={savePayment} className="bg-green-500 hover:bg-green-600 text-white" data-testid="save-payment-btn">
-                <Check className="w-4 h-4 mr-1" />Yadda saxla
+                Ödəniş əlavə et
               </Button>
             </div>
           </div>
