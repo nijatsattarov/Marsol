@@ -1,5 +1,6 @@
 import { useState, createContext, useContext } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { usePermissions, canView } from '../context/PermissionContext';
 import { 
   LayoutDashboard, 
   Building2, 
@@ -33,35 +34,35 @@ import {
 } from 'lucide-react';
 
 const salesSubItems = [
-  { path: '/sales/company-database', label: 'Şirkət bazası', icon: Database },
-  { path: '/sales/members', label: 'Üzvlər', icon: Users2 },
-  { path: '/sales/obligations', label: 'Öhdəliklər', icon: FileCheck },
-  { path: '/sales/obligation-history', label: 'Öhdəlik tarixçəsi', icon: History },
-  { path: '/sales/membership-forum', label: 'Üzvlük forumu', icon: MessageCircle },
-  { path: '/sales/proposals', label: 'Təkliflər', icon: Lightbulb },
-  { path: '/sales/invitations', label: 'Dəvətlər', icon: Send },
+  { path: '/sales/company-database', label: 'Şirkət bazası', icon: Database, module: 'sales' },
+  { path: '/sales/members', label: 'Üzvlər', icon: Users2, module: 'members' },
+  { path: '/sales/obligations', label: 'Öhdəliklər', icon: FileCheck, module: 'obligations' },
+  { path: '/sales/obligation-history', label: 'Öhdəlik tarixçəsi', icon: History, module: 'obligations' },
+  { path: '/sales/membership-forum', label: 'Üzvlük forumu', icon: MessageCircle, module: 'sales' },
+  { path: '/sales/proposals', label: 'Təkliflər', icon: Lightbulb, module: 'sales' },
+  { path: '/sales/invitations', label: 'Dəvətlər', icon: Send, module: 'sales' },
 ];
 
 const menuItems = [
-  { path: '/companies', label: 'Şirkət Məlumatları', icon: Building2 },
-  { path: '/hr', label: 'İnsan Resursları', icon: UserCog },
-  { path: '/sales', label: 'Satış', icon: TrendingUp, children: salesSubItems },
-  { path: '/marketing', label: 'Marketinq', icon: Megaphone },
-  { path: '/projects', label: 'Layihələr', icon: FolderKanban },
-  { path: '/organization', label: 'Təşkilatçılıq', icon: Users2 },
-  { path: '/finance', label: 'Maliyyə', icon: Wallet },
-  { path: '/reports', label: 'Hesabatlar', icon: BarChart3 },
-  { path: '/meetings', label: 'Görüşlər', icon: Calendar },
-  { path: '/assembly', label: 'İclas', icon: Presentation },
-  { path: '/tasks', label: 'Tapşırıqlar', icon: ClipboardList },
-  { path: '/messages', label: 'Mesajlar', icon: MessageSquare },
-  { path: '/files', label: 'Fayllar', icon: FolderOpen },
-  { path: '/notes', label: 'Qeydlər', icon: StickyNote },
+  { path: '/companies', label: 'Şirkət Məlumatları', icon: Building2, module: 'companies' },
+  { path: '/hr', label: 'İnsan Resursları', icon: UserCog, module: 'hr' },
+  { path: '/sales', label: 'Satış', icon: TrendingUp, children: salesSubItems, module: 'sales' },
+  { path: '/marketing', label: 'Marketinq', icon: Megaphone, module: 'marketing' },
+  { path: '/projects', label: 'Layihələr', icon: FolderKanban, module: 'projects' },
+  { path: '/organization', label: 'Təşkilatçılıq', icon: Users2, module: 'organization' },
+  { path: '/finance', label: 'Maliyyə', icon: Wallet, module: 'finance' },
+  { path: '/reports', label: 'Hesabatlar', icon: BarChart3, module: 'reports' },
+  { path: '/meetings', label: 'Görüşlər', icon: Calendar, module: 'meetings' },
+  { path: '/assembly', label: 'İclas', icon: Presentation, module: 'assembly' },
+  { path: '/tasks', label: 'Tapşırıqlar', icon: ClipboardList, module: 'tasks' },
+  { path: '/messages', label: 'Mesajlar', icon: MessageSquare, module: 'messages' },
+  { path: '/files', label: 'Fayllar', icon: FolderOpen, module: 'files' },
+  { path: '/notes', label: 'Qeydlər', icon: StickyNote, module: 'notes' },
 ];
 
 const bottomItems = [
-  { path: '/notifications', label: 'Bildirişlər', icon: Bell },
-  { path: '/settings', label: 'Tənzimləmələr', icon: Settings },
+  { path: '/notifications', label: 'Bildirişlər', icon: Bell, module: 'notifications' },
+  { path: '/settings', label: 'Tənzimləmələr', icon: Settings, module: 'settings' },
 ];
 
 // Create context for sidebar state
@@ -208,10 +209,16 @@ const ExpandableMenu = ({ item, collapsed, mobileOpen, onClick }) => {
 export const Sidebar = () => {
   const navigate = useNavigate();
   const { collapsed, toggleCollapsed, mobileOpen, closeMobileMenu } = useSidebar();
+  const { permissions } = usePermissions();
   const [user] = useState(() => {
     const userData = localStorage.getItem('user');
     return userData ? JSON.parse(userData) : null;
   });
+
+  const isVisible = (item) => {
+    if (!item.module) return true;
+    return canView(permissions, item.module);
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -298,11 +305,11 @@ export const Sidebar = () => {
           <div className="my-2 mx-4 border-t border-white/8" />
 
           {/* Main menu items */}
-          {menuItems.map((item) => 
+          {menuItems.filter(isVisible).map((item) => 
             item.children ? (
               <ExpandableMenu 
                 key={item.path} 
-                item={item} 
+                item={{...item, children: item.children.filter(isVisible)}} 
                 collapsed={collapsed} 
                 mobileOpen={mobileOpen} 
                 onClick={handleNavClick} 
@@ -321,7 +328,7 @@ export const Sidebar = () => {
           <div className="my-2 mx-4 border-t border-white/8" />
 
           {/* Bottom utility items */}
-          {bottomItems.map((item) => (
+          {bottomItems.filter(isVisible).map((item) => (
             <MenuLink 
               key={item.path} 
               item={item} 

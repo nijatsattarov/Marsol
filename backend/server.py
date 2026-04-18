@@ -270,20 +270,38 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise HTTPException(status_code=401, detail="Invalid token")
 
 # ==================== RBAC HELPER ====================
-ROLE_PERMISSIONS = {
-    "admin": ["*"],
-    "manager": ["read", "write", "delete_own"],
-    "user": ["read", "write_own"],
-    "viewer": ["read"]
-}
 
-def require_role(*allowed_roles):
-    async def role_checker(current_user: dict = Depends(get_current_user)):
-        user_role = current_user.get("role", "viewer")
-        if user_role not in allowed_roles and "admin" not in [user_role]:
-            raise HTTPException(status_code=403, detail="Bu əməliyyat üçün icazəniz yoxdur")
-        return current_user
-    return role_checker
+MODULES = [
+    "dashboard", "companies", "hr", "sales", "members", "obligations",
+    "finance", "organization", "meetings", "assembly", "tasks",
+    "marketing", "projects", "reports", "messages", "files", "notes",
+    "settings", "notifications"
+]
+
+async def get_user_permissions(user: dict) -> dict:
+    """Get merged permissions for a user based on their role"""
+    if user.get("role") == "admin":
+        return {m: "write" for m in MODULES}
+    role_name = user.get("role", "")
+    if role_name:
+        role = await db.roles.find_one({"name": role_name}, {"_id": 0})
+        if role:
+            return role.get("permissions", {})
+    return {m: "read" for m in MODULES}
+
+def check_permission(module: str, level: str = "read"):
+    """Dependency: check if current user has required permission for a module"""
+    async def checker(current_user: dict = Depends(get_current_user)):
+        if current_user.get("role") == "admin":
+            return current_user
+        perms = await get_user_permissions(current_user)
+        user_level = perms.get(module, "none")
+        if level == "read" and user_level in ("read", "write"):
+            return current_user
+        if level == "write" and user_level == "write":
+            return current_user
+        raise HTTPException(status_code=403, detail="Bu əməliyyat üçün icazəniz yoxdur")
+    return checker
 
 # ==================== AUTH ROUTES ====================
 
@@ -318,10 +336,13 @@ async def login(user_data: UserLogin):
         raise HTTPException(status_code=401, detail="Yanlış email və ya şifrə")
     
     access_token = create_access_token({"sub": user["id"]})
+    user_dict = {"id": user["id"], "email": user["email"], "name": user["name"], "role": user["role"]}
+    perms = await get_user_permissions(user)
+    user_dict["permissions"] = perms
     return Token(
         access_token=access_token,
         token_type="bearer",
-        user={"id": user["id"], "email": user["email"], "name": user["name"], "role": user["role"]}
+        user=user_dict
     )
 
 @api_router.get("/auth/me")
@@ -1265,6 +1286,57 @@ async def delete_assembly(assembly_id: str, current_user: dict = Depends(get_cur
 
 
 # ==================== OPTIONS ====================
+
+# ==================== ROLES ====================
+
+@api_router.get("/roles")
+async def get_roles(current_user: dict = Depends(get_current_user)):
+    roles = await db.roles.find({}, {"_id": 0}).to_list(100)
+    return roles
+
+@api_router.post("/roles")
+async def create_role(data: dict, current_user: dict = Depends(check_permission("settings", "write"))):
+    existing = await db.roles.find_one({"name": data.get("name", "")})
+    if existing:
+        raise HTTPException(status_code=400, detail="Bu adda rol artıq mövcuddur")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": data.get("name", ""),
+        "permissions": data.get("permissions", {}),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.roles.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/roles/{role_id}")
+async def update_role(role_id: str, data: dict, current_user: dict = Depends(check_permission("settings", "write"))):
+    update_data = {k: v for k, v in data.items() if k not in ("id",)}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.roles.update_one({"id": role_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Rol tapılmadı")
+    doc = await db.roles.find_one({"id": role_id}, {"_id": 0})
+    return doc
+
+@api_router.delete("/roles/{role_id}")
+async def delete_role(role_id: str, current_user: dict = Depends(check_permission("settings", "write"))):
+    role = await db.roles.find_one({"id": role_id}, {"_id": 0})
+    if not role:
+        raise HTTPException(status_code=404, detail="Rol tapılmadı")
+    # Don't allow deleting role if users are assigned to it
+    users_with_role = await db.users.count_documents({"role": role["name"]})
+    if users_with_role > 0:
+        raise HTTPException(status_code=400, detail=f"Bu rol {users_with_role} istifadəçiyə təyin edilib, əvvəl onların rolunu dəyişin")
+    await db.roles.delete_one({"id": role_id})
+    return {"message": "Rol silindi"}
+
+@api_router.get("/my-permissions")
+async def get_my_permissions(current_user: dict = Depends(get_current_user)):
+    perms = await get_user_permissions(current_user)
+    return {"role": current_user.get("role", ""), "permissions": perms}
+
+
 
 async def _get_setting_list(key: str, defaults: list) -> list:
     doc = await db.setting_lists.find_one({"key": key}, {"_id": 0})

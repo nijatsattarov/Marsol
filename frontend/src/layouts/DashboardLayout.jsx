@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { Sidebar, MobileHeader, SidebarProvider, useSidebar } from '../components/Sidebar';
 import NotificationBell from '../components/NotificationBell';
+import { PermissionProvider } from '../context/PermissionContext';
 
 const DashboardContent = () => {
   const navigate = useNavigate();
@@ -38,8 +39,10 @@ const DashboardContent = () => {
 
 export default function DashboardLayout() {
   return (
-    <SidebarProvider>
-      <DashboardContent />
-    </SidebarProvider>
+    <PermissionProvider>
+      <SidebarProvider>
+        <DashboardContent />
+      </SidebarProvider>
+    </PermissionProvider>
   );
 }

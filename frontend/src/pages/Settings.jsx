@@ -91,6 +91,10 @@ export default function Settings() {
   const [saleTypes, setSaleTypes] = useState([]);
   const [newSaleType, setNewSaleType] = useState('');
   const [warningDays, setWarningDays] = useState('10');
+  const [roles, setRoles] = useState([]);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [editingRole, setEditingRole] = useState(null);
+  const [roleForm, setRoleForm] = useState({ name: '', permissions: {} });
 
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0, invitation_count: 0 });
@@ -126,7 +130,7 @@ export default function Settings() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes, mcRes, mtRes, lsRes, stRes, wdRes] = await Promise.all([
+      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes, mcRes, mtRes, lsRes, stRes, wdRes, rolesRes] = await Promise.all([
         axios.get(`${API}/settings/packages`, { headers }),
         axios.get(`${API}/settings/projects`, { headers }),
         axios.get(`${API}/settings/custom-fields`, { headers }),
@@ -141,6 +145,7 @@ export default function Settings() {
         axios.get(`${API}/settings/lists/lead_sources`, { headers }),
         axios.get(`${API}/settings/lists/sale_types`, { headers }),
         axios.get(`${API}/settings/lists/membership_warning_days`, { headers }),
+        axios.get(`${API}/roles`, { headers }),
       ]);
       setPackages(pkgRes.data);
       setProjects(prjRes.data);
@@ -156,6 +161,7 @@ export default function Settings() {
       setLeadSources(lsRes.data || []);
       setSaleTypes(stRes.data || []);
       setWarningDays((wdRes.data && wdRes.data[0]) || '10');
+      setRoles(rolesRes.data || []);
     } catch (err) {
       console.error('Error fetching settings:', err);
     } finally {
@@ -481,6 +487,7 @@ export default function Settings() {
           <TabsTrigger value="sale-types" className="text-xs sm:text-sm" data-testid="tab-sale-types"><TrendingUp className="w-4 h-4 mr-1 hidden sm:inline" />Satış növləri</TabsTrigger>
           <TabsTrigger value="warning-days" className="text-xs sm:text-sm" data-testid="tab-warning-days"><Calendar className="w-4 h-4 mr-1 hidden sm:inline" />Xəbərdarlıq</TabsTrigger>
           <TabsTrigger value="custom-fields" className="text-xs sm:text-sm" data-testid="tab-custom-fields"><Columns3 className="w-4 h-4 mr-1 hidden sm:inline" />Xüsusi sahələr</TabsTrigger>
+          <TabsTrigger value="roles" className="text-xs sm:text-sm" data-testid="tab-roles"><Shield className="w-4 h-4 mr-1 hidden sm:inline" />Rollar</TabsTrigger>
           <TabsTrigger value="users" className="text-xs sm:text-sm" data-testid="tab-users"><Users className="w-4 h-4 mr-1 hidden sm:inline" />İstifadəçilər</TabsTrigger>
         </TabsList>
 
@@ -941,6 +948,135 @@ export default function Settings() {
           </div>
         </TabsContent>
 
+
+        {/* ========= ROLES TAB ========= */}
+        <TabsContent value="roles">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold" style={{ color: '#3D4F6F' }}>Rollar & İcazələr</h2>
+              <Button size="sm" onClick={() => {
+                setEditingRole(null);
+                const defaultPerms = {};
+                ['dashboard','companies','hr','sales','members','obligations','finance','organization','meetings','assembly','tasks','marketing','projects','reports','messages','files','notes','settings','notifications'].forEach(m => defaultPerms[m] = 'none');
+                setRoleForm({ name: '', permissions: defaultPerms });
+                setShowRoleModal(true);
+              }} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125]" data-testid="add-role-btn">
+                <Plus className="w-4 h-4 mr-1" />Yeni Rol
+              </Button>
+            </div>
+
+            {roles.length === 0 ? (
+              <p className="text-center text-slate-400 py-12 text-sm">Rol yaradılmayıb. "Yeni Rol" düyməsinə basın.</p>
+            ) : (
+              <div className="space-y-3">
+                {roles.map(role => (
+                  <div key={role.id} className="border border-slate-200 rounded-lg p-4" data-testid={`role-${role.id}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-[#3D4F6F]">{role.name}</h3>
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => {
+                          setEditingRole(role);
+                          setRoleForm({ name: role.name, permissions: { ...role.permissions } });
+                          setShowRoleModal(true);
+                        }} data-testid={`edit-role-${role.id}`}><Pencil className="w-3.5 h-3.5" /></Button>
+                        <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={async () => {
+                          if (!window.confirm('Bu rolu silmək istədiyinizə əminsiniz?')) return;
+                          try { await axios.delete(`${API}/roles/${role.id}`, { headers }); toast.success('Rol silindi'); fetchData(); }
+                          catch(e) { toast.error(e.response?.data?.detail || 'Xəta baş verdi'); }
+                        }} data-testid={`delete-role-${role.id}`}><Trash2 className="w-3.5 h-3.5" /></Button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.entries(role.permissions || {}).filter(([,v]) => v !== 'none').map(([mod, level]) => (
+                        <span key={mod} className={`text-[10px] px-2 py-0.5 rounded ${level === 'write' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                          {mod} ({level === 'write' ? 'Tam' : 'Oxu'})
+                        </span>
+                      ))}
+                      {Object.values(role.permissions || {}).every(v => v === 'none') && (
+                        <span className="text-[10px] text-slate-400">İcazə verilməyib</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Role Modal */}
+          <Dialog open={showRoleModal} onOpenChange={setShowRoleModal}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle style={{ color: '#3D4F6F' }}>{editingRole ? 'Rolu redaktə et' : 'Yeni Rol'}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-xs">Rol adı *</Label>
+                  <Input value={roleForm.name} onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })} className="text-sm" placeholder="Məs: Satış meneceri" data-testid="role-name-input" />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">Modul İcazələri</Label>
+                  <div className="mt-2 border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b">
+                          <th className="text-left px-3 py-2 text-xs font-semibold text-[#3D4F6F]">Modul</th>
+                          <th className="text-center px-3 py-2 text-xs font-semibold text-red-500">Görə bilmir</th>
+                          <th className="text-center px-3 py-2 text-xs font-semibold text-blue-500">Yalnız görür</th>
+                          <th className="text-center px-3 py-2 text-xs font-semibold text-green-500">Redaktə edə bilir</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          ['dashboard', 'İdarə Paneli'], ['companies', 'Şirkət Məlumatları'], ['hr', 'İnsan Resursları'],
+                          ['sales', 'Satış (Şirkət Bazası)'], ['members', 'Üzvlər'], ['obligations', 'Öhdəliklər'],
+                          ['finance', 'Maliyyə'], ['organization', 'Təşkilatçılıq'], ['meetings', 'Görüşlər'],
+                          ['assembly', 'İclaslar'], ['tasks', 'Tapşırıqlar'], ['marketing', 'Marketinq'],
+                          ['projects', 'Layihələr'], ['reports', 'Hesabatlar'], ['messages', 'Mesajlar'],
+                          ['files', 'Fayllar'], ['notes', 'Qeydlər'], ['settings', 'Tənzimləmələr'],
+                          ['notifications', 'Bildirişlər']
+                        ].map(([key, label]) => (
+                          <tr key={key} className="border-b border-slate-100 hover:bg-slate-50/50">
+                            <td className="px-3 py-2 text-xs text-slate-700 font-medium">{label}</td>
+                            {['none', 'read', 'write'].map(level => (
+                              <td key={level} className="text-center px-3 py-2">
+                                <input
+                                  type="radio"
+                                  name={`perm-${key}`}
+                                  checked={(roleForm.permissions[key] || 'none') === level}
+                                  onChange={() => setRoleForm({ ...roleForm, permissions: { ...roleForm.permissions, [key]: level } })}
+                                  className="w-4 h-4 accent-[#3D4F6F]"
+                                  data-testid={`perm-${key}-${level}`}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => setShowRoleModal(false)}>Ləğv et</Button>
+                  <Button className="bg-[#3D4F6F] hover:bg-[#2A364C] text-white" disabled={!roleForm.name.trim()} onClick={async () => {
+                    try {
+                      if (editingRole) {
+                        await axios.put(`${API}/roles/${editingRole.id}`, roleForm, { headers });
+                        toast.success('Rol yeniləndi');
+                      } else {
+                        await axios.post(`${API}/roles`, roleForm, { headers });
+                        toast.success('Rol yaradıldı');
+                      }
+                      setShowRoleModal(false);
+                      fetchData();
+                    } catch(e) { toast.error(e.response?.data?.detail || 'Xəta baş verdi'); }
+                  }} data-testid="role-submit-btn">{editingRole ? 'Yadda saxla' : 'Yarat'}</Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+
+
         {/* ========= CUSTOM FIELDS TAB ========= */}
         <TabsContent value="custom-fields">
           <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
@@ -1144,7 +1280,8 @@ export default function Settings() {
                 <Select value={userForm.role} onValueChange={(v) => setUserForm({ ...userForm, role: v })}>
                   <SelectTrigger className="text-sm" data-testid="user-role-select"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                    <SelectItem value="admin">Admin</SelectItem>
+                    {roles.map(r => <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
