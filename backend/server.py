@@ -1371,16 +1371,18 @@ async def update_forum_fields(data: dict, current_user: dict = Depends(check_per
 
 
 async def _get_all_options():
-    """Helper: get dynamic options for forms"""
-    positions_db = await db.positions.find({}, {"_id": 0}).to_list(200)
-    regions_db = await db.regions.find({}, {"_id": 0}).to_list(200)
-    activities_db = await db.activities.find({}, {"_id": 0}).to_list(200)
+    """Helper: get dynamic options for forms - from actual DB, no hardcoded fallbacks"""
+    positions_db = await db.positions.find({}, {"_id": 0}).to_list(500)
+    regions_db = await db.regions.find({}, {"_id": 0}).to_list(500)
+    activities_db = await db.activities.find({}, {"_id": 0}).to_list(500)
+    company_sizes = await _get_setting_list("company_sizes", [])
+    education_levels = await _get_setting_list("education_levels", [])
     return {
-        "company_sizes": ["Böyük", "Orta", "Kiçik", "Mikro"],
-        "regions": [r["name"] for r in regions_db] if regions_db else ["Bakı", "Sumqayıt", "Gəncə"],
-        "positions": [p["name"] for p in positions_db] if positions_db else ["Direktor", "Təsisçi"],
-        "education_levels": ["Orta təhsil", "Sub bakalavr", "Bakalavr", "Magistratura", "Doktorantura"],
-        "activities": [a["name"] for a in activities_db] if activities_db else ["Networking", "Təlim", "Sərgi"],
+        "company_sizes": company_sizes,
+        "regions": [r["name"] for r in regions_db],
+        "positions": [p["name"] for p in positions_db],
+        "education_levels": education_levels,
+        "activities": [a["name"] for a in activities_db],
     }
 
 @api_router.post("/forum/generate-link/{company_id}")
