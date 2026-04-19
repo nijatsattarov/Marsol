@@ -269,7 +269,7 @@ export default function Organization() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Təşkilatçılıq</h1>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Fəaliyyətlər</h1>
           <p className="text-slate-500 text-sm mt-1">Həftəlik fəaliyyət planlaması və dəvət idarəetməsi</p>
         </div>
         <Button onClick={() => openEventModal()} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="add-event-btn">

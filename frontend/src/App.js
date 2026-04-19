@@ -73,7 +73,7 @@ function App() {
             <Route path="organization/photovideo" element={<VendorModule config={ORG_CONFIGS.photovideo} />} />
             <Route path="organization/transport" element={<VendorModule config={ORG_CONFIGS.transport} />} />
             <Route path="organization/materials" element={<VendorModule config={ORG_CONFIGS.materials} />} />
-            <Route path="organization/legacy" element={<Organization />} />
+            <Route path="activities" element={<Organization />} />
             <Route path="reports" element={<Reports />} />
             <Route path="meetings" element={<Meetings />} />
             <Route path="assembly" element={<Assembly />} />

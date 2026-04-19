@@ -47,7 +47,7 @@ export default function OrgDashboard() {
   return (
     <div className="p-4 sm:p-6 lg:p-8" data-testid="org-dashboard">
       <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-[#3D4F6F]">Fəaliyyətlər</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-[#3D4F6F]">Təşkilatçılıq</h1>
         <p className="text-slate-500 text-sm mt-1">Tədbir təchizatçılarının və xidmətlərin mərkəzi bazası</p>
       </div>
 
