@@ -29,29 +29,6 @@ export default function Login() {
     }
   };
 
-  const handleRegister = async () => {
-    if (!formData.email || !formData.password) {
-      setError('Email və şifrə daxil edin');
-      return;
-    }
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await axios.post(`${API}/auth/register`, {
-        ...formData,
-        name: formData.email.split('@')[0]
-      });
-      localStorage.setItem('token', response.data.access_token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-      window.location.href = '/dashboard';
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Qeydiyyat zamanı xəta baş verdi');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="login-page">
       <div className="login-card animate-fade-in">
@@ -100,7 +77,8 @@ export default function Login() {
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="input-field pl-12"
+                className="input-field"
+                style={{ paddingLeft: '48px' }}
                 placeholder="admin@marsol.az"
                 required
                 data-testid="login-email-input"
@@ -119,7 +97,8 @@ export default function Login() {
                 type={showPassword ? 'text' : 'password'}
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="input-field pl-12 pr-12"
+                className="input-field"
+                style={{ paddingLeft: '48px', paddingRight: '48px' }}
                 placeholder="Şifrənizi daxil edin"
                 required
                 data-testid="login-password-input"
@@ -148,16 +127,6 @@ export default function Login() {
               ) : (
                 'Daxil ol'
               )}
-            </button>
-            
-            <button
-              type="button"
-              onClick={handleRegister}
-              disabled={loading}
-              className="btn-secondary w-full"
-              data-testid="register-btn"
-            >
-              Yeni hesab yarat
             </button>
           </div>
         </form>

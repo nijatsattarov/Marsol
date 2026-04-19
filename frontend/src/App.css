@@ -114,7 +114,10 @@
 /* Input styles */
 .input-field {
   width: 100%;
-  padding: 14px 18px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  padding-left: 18px;
+  padding-right: 18px;
   border: 2px solid #E2E8F0;
   border-radius: 12px;
   font-family: 'Montserrat', sans-serif;
