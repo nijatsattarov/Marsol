@@ -2219,6 +2219,42 @@ async def public_upload_file(file: UploadFile = File(...)):
     url = f"/uploads/{filename}"
     return {"url": url, "filename": file.filename}
 
+# ==================== BRANDING (LOGOLAR) ====================
+
+DEFAULT_LOGO = "https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png"
+
+@api_router.get("/public/branding")
+async def get_public_branding():
+    """Public read of branding config (used by Login page, PublicForm, etc)."""
+    doc = await db.app_config.find_one({"key": "branding"}, {"_id": 0}) or {}
+    return {
+        "sidebar_logo_url": doc.get("sidebar_logo_url") or "",
+        "main_logo_url": doc.get("main_logo_url") or DEFAULT_LOGO,
+    }
+
+@api_router.get("/settings/branding")
+async def get_branding(current_user: dict = Depends(get_current_user)):
+    doc = await db.app_config.find_one({"key": "branding"}, {"_id": 0}) or {}
+    return {
+        "sidebar_logo_url": doc.get("sidebar_logo_url") or "",
+        "main_logo_url": doc.get("main_logo_url") or DEFAULT_LOGO,
+    }
+
+@api_router.put("/settings/branding")
+async def update_branding(data: dict, current_user: dict = Depends(check_permission("settings", "write"))):
+    update = {
+        "key": "branding",
+        "sidebar_logo_url": (data.get("sidebar_logo_url") or "").strip(),
+        "main_logo_url": (data.get("main_logo_url") or "").strip(),
+        "updated_by": current_user.get("name", ""),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.app_config.update_one({"key": "branding"}, {"$set": update}, upsert=True)
+    return {
+        "sidebar_logo_url": update["sidebar_logo_url"],
+        "main_logo_url": update["main_logo_url"] or DEFAULT_LOGO,
+    }
+
 
 # ==================== SUB-SECTORS ====================
 

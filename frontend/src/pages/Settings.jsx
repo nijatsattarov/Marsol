@@ -4,7 +4,7 @@ import {
   Settings as SettingsIcon, Package, FolderKanban, Users, Columns3,
   Plus, Pencil, Trash2, Loader2, Shield, Eye, UserCog, User,
   ChevronDown, Search, X, Building2, Layers, Briefcase, Activity, Building,
-  Calendar, Target, TrendingUp
+  Calendar, Target, TrendingUp, Image as ImageIcon, Upload
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -98,6 +98,8 @@ export default function Settings() {
   const [forumFields, setForumFields] = useState([]);
   const [forumEnabled, setForumEnabled] = useState([]);
   const [forumDescription, setForumDescription] = useState('Zəhmət olmasa şirkət məlumatlarını doldurun');
+  const [branding, setBranding] = useState({ sidebar_logo_url: '', main_logo_url: '' });
+  const [brandingUploading, setBrandingUploading] = useState({ sidebar: false, main: false });
 
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0, invitation_count: 0 });
@@ -169,6 +171,7 @@ export default function Settings() {
       setForumFields(ffRes.data.fields || []);
       setForumEnabled(ffRes.data.enabled || []);
       try { const descRes = await axios.get(`${API}/settings/lists/forum_description`, { headers }); setForumDescription((descRes.data && descRes.data[0]) || 'Zəhmət olmasa şirkət məlumatlarını doldurun'); } catch {}
+      try { const brRes = await axios.get(`${API}/settings/branding`, { headers }); setBranding(brRes.data); } catch {}
     } catch (err) {
       console.error('Error fetching settings:', err);
     } finally {
@@ -497,6 +500,7 @@ export default function Settings() {
           <TabsTrigger value="custom-fields" className="text-xs sm:text-sm" data-testid="tab-custom-fields"><Columns3 className="w-4 h-4 mr-1 hidden sm:inline" />Xüsusi sahələr</TabsTrigger>
           <TabsTrigger value="roles" className="text-xs sm:text-sm" data-testid="tab-roles"><Shield className="w-4 h-4 mr-1 hidden sm:inline" />Rollar</TabsTrigger>
           <TabsTrigger value="users" className="text-xs sm:text-sm" data-testid="tab-users"><Users className="w-4 h-4 mr-1 hidden sm:inline" />İstifadəçilər</TabsTrigger>
+          <TabsTrigger value="branding" className="text-xs sm:text-sm" data-testid="tab-branding"><ImageIcon className="w-4 h-4 mr-1 hidden sm:inline" />Brendinq</TabsTrigger>
         </TabsList>
 
         {/* ========= PACKAGES TAB ========= */}
@@ -1239,6 +1243,112 @@ export default function Settings() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </TabsContent>
+
+        {/* ========= BRANDING TAB ========= */}
+        <TabsContent value="branding">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
+            <div className="mb-5">
+              <h2 className="text-lg font-semibold" style={{ color: '#3D4F6F' }}>Logolar</h2>
+              <p className="text-xs text-slate-500 mt-1">Sidebar loqosu tünd fon üçün (ağ versiya), əsas loqo açıq fonlar (Login, Public Form, çaplar) üçündür.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Sidebar logo */}
+              <div className="border rounded-xl p-4 bg-gradient-to-br from-[#3D4F6F] to-[#2A364C]">
+                <Label className="text-xs font-bold text-white/80 uppercase tracking-wider">Sidebar loqosu (tünd fon)</Label>
+                <div className="bg-white/5 border border-white/20 rounded-lg h-24 flex items-center justify-center my-3">
+                  {branding.sidebar_logo_url ? (
+                    <img src={branding.sidebar_logo_url.startsWith('http') ? branding.sidebar_logo_url : `${process.env.REACT_APP_BACKEND_URL}${branding.sidebar_logo_url}`} alt="Sidebar" className="h-14 object-contain" data-testid="preview-sidebar-logo" />
+                  ) : (
+                    <p className="text-xs text-white/40">Loqo yüklənməyib (default istifadə olunur)</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <label className="flex-1 cursor-pointer bg-white/10 hover:bg-white/20 border border-white/30 text-white text-xs font-medium py-2 px-3 rounded-lg text-center flex items-center justify-center gap-2 transition">
+                    <Upload className="w-3.5 h-3.5" />
+                    {brandingUploading.sidebar ? 'Yüklənir...' : 'Yüklə (PNG şəffaf tövsiyə olunur)'}
+                    <input
+                      type="file" accept="image/*" className="hidden"
+                      disabled={brandingUploading.sidebar}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0]; if (!file) return;
+                        setBrandingUploading({ ...brandingUploading, sidebar: true });
+                        try {
+                          const fd = new FormData(); fd.append('file', file);
+                          const r = await axios.post(`${API}/upload`, fd, { headers: { ...headers, 'Content-Type': 'multipart/form-data' } });
+                          const next = { ...branding, sidebar_logo_url: r.data.url };
+                          const saved = await axios.put(`${API}/settings/branding`, next, { headers });
+                          setBranding(saved.data); toast.success('Sidebar loqosu yeniləndi');
+                        } catch (err) { toast.error('Xəta baş verdi'); }
+                        finally { setBrandingUploading({ ...brandingUploading, sidebar: false }); e.target.value = ''; }
+                      }}
+                      data-testid="upload-sidebar-logo"
+                    />
+                  </label>
+                  {branding.sidebar_logo_url && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try { const r = await axios.put(`${API}/settings/branding`, { ...branding, sidebar_logo_url: '' }, { headers }); setBranding(r.data); toast.success('Sidebar loqosu defaulta qaytarıldı'); } catch { toast.error('Xəta'); }
+                      }}
+                      className="bg-red-500/20 hover:bg-red-500/30 border border-red-400/30 text-red-100 text-xs font-medium py-2 px-3 rounded-lg flex items-center gap-1 transition"
+                      data-testid="reset-sidebar-logo"
+                    ><Trash2 className="w-3.5 h-3.5" />Sıfırla</button>
+                  )}
+                </div>
+              </div>
+
+              {/* Main logo */}
+              <div className="border rounded-xl p-4 bg-gradient-to-br from-slate-50 to-white">
+                <Label className="text-xs font-bold text-[#3D4F6F] uppercase tracking-wider">Əsas loqo (açıq fon)</Label>
+                <div className="bg-slate-100 border border-slate-200 rounded-lg h-24 flex items-center justify-center my-3">
+                  {branding.main_logo_url ? (
+                    <img src={branding.main_logo_url.startsWith('http') ? branding.main_logo_url : `${process.env.REACT_APP_BACKEND_URL}${branding.main_logo_url}`} alt="Main" className="h-14 object-contain" data-testid="preview-main-logo" />
+                  ) : (
+                    <p className="text-xs text-slate-400">Loqo yüklənməyib</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <label className="flex-1 cursor-pointer bg-[#3D4F6F] hover:bg-[#2A364C] text-white text-xs font-medium py-2 px-3 rounded-lg text-center flex items-center justify-center gap-2 transition">
+                    <Upload className="w-3.5 h-3.5" />
+                    {brandingUploading.main ? 'Yüklənir...' : 'Yüklə'}
+                    <input
+                      type="file" accept="image/*" className="hidden"
+                      disabled={brandingUploading.main}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0]; if (!file) return;
+                        setBrandingUploading({ ...brandingUploading, main: true });
+                        try {
+                          const fd = new FormData(); fd.append('file', file);
+                          const r = await axios.post(`${API}/upload`, fd, { headers: { ...headers, 'Content-Type': 'multipart/form-data' } });
+                          const next = { ...branding, main_logo_url: r.data.url };
+                          const saved = await axios.put(`${API}/settings/branding`, next, { headers });
+                          setBranding(saved.data); toast.success('Əsas loqo yeniləndi');
+                        } catch (err) { toast.error('Xəta baş verdi'); }
+                        finally { setBrandingUploading({ ...brandingUploading, main: false }); e.target.value = ''; }
+                      }}
+                      data-testid="upload-main-logo"
+                    />
+                  </label>
+                  {branding.main_logo_url && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try { const r = await axios.put(`${API}/settings/branding`, { ...branding, main_logo_url: '' }, { headers }); setBranding(r.data); toast.success('Əsas loqo defaulta qaytarıldı'); } catch { toast.error('Xəta'); }
+                      }}
+                      className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-xs font-medium py-2 px-3 rounded-lg flex items-center gap-1 transition"
+                      data-testid="reset-main-logo"
+                    ><Trash2 className="w-3.5 h-3.5" />Sıfırla</button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-400 mt-4">
+              💡 Qeyd: Sidebar loqosu PNG şəffaf fonlu olsa, tünd fon üzərində daha yaxşı görünəcək. Dəyişikliklər səhifəni yeniləyəndən sonra tətbiq olunur.
+            </p>
           </div>
         </TabsContent>
       </Tabs>

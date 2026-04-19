@@ -1,4 +1,5 @@
-import { useState, createContext, useContext } from 'react';
+import { useState, useEffect, createContext, useContext } from 'react';
+import axios from 'axios';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { usePermissions, canView } from '../context/PermissionContext';
 import { 
@@ -229,6 +230,18 @@ export const Sidebar = () => {
     const userData = localStorage.getItem('user');
     return userData ? JSON.parse(userData) : null;
   });
+  const [logoUrl, setLogoUrl] = useState('');
+
+  useEffect(() => {
+    axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/public/branding`)
+      .then(r => setLogoUrl(r.data.sidebar_logo_url || ''))
+      .catch(() => {});
+  }, []);
+
+  const resolvedLogo = logoUrl
+    ? (logoUrl.startsWith('http') ? logoUrl : `${process.env.REACT_APP_BACKEND_URL}${logoUrl}`)
+    : "https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png";
+  const applyInvert = !logoUrl;  // only apply invert filter when using the default logo
 
   const isVisible = (item) => {
     if (!item.module) return true;
@@ -276,10 +289,10 @@ export const Sidebar = () => {
           <div className="flex items-center justify-between">
             {(!collapsed || mobileOpen) && (
               <img 
-                src="https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png" 
+                src={resolvedLogo}
                 alt="Marsol Group" 
                 className="h-8 lg:h-10 object-contain"
-                style={{ filter: 'brightness(0) invert(1)' }}
+                style={applyInvert ? { filter: 'brightness(0) invert(1)' } : undefined}
                 data-testid="sidebar-logo"
               />
             )}

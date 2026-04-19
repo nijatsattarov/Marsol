@@ -60,6 +60,13 @@ export default function PublicForm() {
   const [formData, setFormData] = useState({});
   const [owners, setOwners] = useState([emptyOwner()]);
   const [meta, setMeta] = useState({ company_name: '', owner_phone: '', owner_name: '', fields: [], options: {}, description: '' });
+  const [logoUrl, setLogoUrl] = useState('https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png');
+
+  useEffect(() => {
+    axios.get(`${API}/public/branding`).then(r => {
+      if (r.data.main_logo_url) setLogoUrl(r.data.main_logo_url.startsWith('http') ? r.data.main_logo_url : `${process.env.REACT_APP_BACKEND_URL}${r.data.main_logo_url}`);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const fetchForm = async () => {
@@ -132,7 +139,7 @@ export default function PublicForm() {
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-6">
           <div className="inline-block mb-4">
-            <img src="https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png" alt="Marsol Group" className="h-12 object-contain" />
+            <img src={logoUrl} alt="Marsol Group" className="h-12 object-contain" />
           </div>
           <h1 className="text-xl font-bold text-[#3D4F6F]">Üzvlük Forumu</h1>
           <p className="text-slate-500 text-sm mt-1">{meta.description}</p>

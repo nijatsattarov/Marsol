@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Eye, EyeOff, Lock, Mail, Loader2 } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const DEFAULT_LOGO = "https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -11,6 +12,13 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [logoUrl, setLogoUrl] = useState(DEFAULT_LOGO);
+
+  useEffect(() => {
+    axios.get(`${API}/public/branding`)
+      .then(r => { if (r.data.main_logo_url) setLogoUrl(r.data.main_logo_url.startsWith('http') ? r.data.main_logo_url : `${process.env.REACT_APP_BACKEND_URL}${r.data.main_logo_url}`); })
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -35,7 +43,7 @@ export default function Login() {
         {/* Logo */}
         <div className="flex justify-center mb-8">
           <img 
-            src="https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png" 
+            src={logoUrl} 
             alt="Marsol Group" 
             className="h-16 object-contain"
             data-testid="login-logo"
