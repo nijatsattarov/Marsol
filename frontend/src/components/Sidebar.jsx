@@ -279,6 +279,7 @@ export const Sidebar = () => {
                 src="https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png" 
                 alt="Marsol Group" 
                 className="h-8 lg:h-10 object-contain"
+                style={{ filter: 'brightness(0) invert(1)' }}
                 data-testid="sidebar-logo"
               />
             )}
