@@ -50,7 +50,7 @@ const menuItems = [
   { path: '/sales', label: 'Satış', icon: TrendingUp, children: salesSubItems, module: 'sales' },
   { path: '/marketing', label: 'Marketinq', icon: Megaphone, module: 'marketing' },
   { path: '/projects', label: 'Layihələr', icon: FolderKanban, module: 'projects' },
-  { path: '/organization', label: 'Təşkilatçılıq', icon: Users2, module: 'organization' },
+  { path: '/organization', label: 'Fəaliyyətlər', icon: Users2, module: 'organization' },
   { path: '/finance', label: 'Maliyyə', icon: Wallet, module: 'finance' },
   { path: '/barter', label: 'Barter', icon: ArrowLeftRight, module: 'finance' },
   { path: '/reports', label: 'Hesabatlar', icon: BarChart3, module: 'reports' },
