@@ -494,7 +494,20 @@ async def get_companies(
     if status and status != "all":
         query["status"] = status
     
-    companies = await db.companies.find(query, {"_id": 0}).to_list(1000)
+    companies = await db.companies.find(query, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    # Compute finance_id (FN001, FN002...) and contract_days
+    today = datetime.now(timezone.utc).date()
+    for idx, c in enumerate(companies):
+        c["finance_id"] = f"FN{str(idx + 1).zfill(3)}"
+        cs = c.get("contract_start_date", "")
+        if cs:
+            try:
+                d = datetime.strptime(cs, "%Y-%m-%d").date()
+                c["contract_days"] = (today - d).days
+            except (ValueError, TypeError):
+                c["contract_days"] = None
+        else:
+            c["contract_days"] = None
     return companies
 
 @api_router.post("/companies")
@@ -573,8 +586,11 @@ async def update_company_finance(company_id: str, data: dict, current_user: dict
         }
         await db.payment_history.insert_one(payment_record)
     
-    # Handle direct field updates (total_amount, finance_note, contract dates)
-    for key in ["finance_note", "total_amount", "payment_amount", "last_payment_date", "contract_start_date", "contract_end_date", "contract_status"]:
+    # Handle direct field updates (total_amount, finance_note, contract dates, finance tracking fields)
+    for key in ["finance_note", "total_amount", "payment_amount", "last_payment_date",
+                "contract_start_date", "contract_end_date", "contract_status",
+                "finance_contract_number", "payment_due_date", "voen",
+                "e_invoice_date", "e_invoice_number", "follow_up"]:
         if key in data and key != "new_payment_amount":
             update_data[key] = data[key]
     

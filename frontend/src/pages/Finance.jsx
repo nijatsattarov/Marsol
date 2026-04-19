@@ -52,7 +52,11 @@ export default function Finance() {
   // Payment edit modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentCompany, setPaymentCompany] = useState(null);
-  const [paymentForm, setPaymentForm] = useState({ new_payment_amount: '', payment_date: '', payment_note: '' });
+  const [paymentForm, setPaymentForm] = useState({
+    new_payment_amount: '', payment_date: '', payment_note: '',
+    finance_contract_number: '', payment_due_date: '', voen: '',
+    e_invoice_date: '', e_invoice_number: '', follow_up: ''
+  });
   const [paymentHistory, setPaymentHistory] = useState([]);
 
   // Filters
@@ -133,7 +137,15 @@ export default function Finance() {
   // Payment edit handlers
   const openPaymentEdit = async (company) => {
     setPaymentCompany(company);
-    setPaymentForm({ new_payment_amount: '', payment_date: new Date().toISOString().split('T')[0], payment_note: '' });
+    setPaymentForm({
+      new_payment_amount: '', payment_date: new Date().toISOString().split('T')[0], payment_note: '',
+      finance_contract_number: company.finance_contract_number || '',
+      payment_due_date: company.payment_due_date || '',
+      voen: company.voen || '',
+      e_invoice_date: company.e_invoice_date || '',
+      e_invoice_number: company.e_invoice_number || '',
+      follow_up: company.follow_up || ''
+    });
     try {
       const res = await axios.get(`${API}/companies/${company.id}/payments`, { headers });
       setPaymentHistory(res.data);
@@ -142,12 +154,16 @@ export default function Finance() {
   };
 
   const savePayment = async () => {
-    if (!paymentForm.new_payment_amount || parseFloat(paymentForm.new_payment_amount) <= 0) {
-      return toast.error('Ödəniş məbləği daxil edin');
-    }
     try {
-      await axios.put(`${API}/companies/${paymentCompany.id}/finance`, paymentForm, { headers });
-      toast.success('Ödəniş əlavə edildi');
+      const payload = { ...paymentForm };
+      // If no new payment amount, skip the payment-specific fields
+      if (!payload.new_payment_amount || parseFloat(payload.new_payment_amount) <= 0) {
+        delete payload.new_payment_amount;
+        delete payload.payment_date;
+        delete payload.payment_note;
+      }
+      await axios.put(`${API}/companies/${paymentCompany.id}/finance`, payload, { headers });
+      toast.success('Yadda saxlandı');
       setShowPaymentModal(false);
       fetchData();
     } catch(e) { toast.error(e.response?.data?.detail || 'Xəta baş verdi'); }
@@ -462,53 +478,52 @@ export default function Finance() {
               <table className="w-full" data-testid="finance-companies-table">
                 <thead>
                   <tr className="bg-slate-50 border-b">
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Şirkət</th>
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Paket</th>
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Təmsilçi</th>
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Müqavilə</th>
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Xitam</th>
-                    <th className="text-right px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Məbləğ</th>
-                    <th className="text-right px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Ödənilib</th>
-                    <th className="text-right px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Borc</th>
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Qeyd</th>
-                    <th className="text-right px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Əməliyyat</th>
+                    <th className="text-left px-2 py-3 text-[11px] font-semibold text-[#3D4F6F]">ID</th>
+                    <th className="text-left px-2 py-3 text-[11px] font-semibold text-[#3D4F6F]">Şirkət</th>
+                    <th className="text-left px-2 py-3 text-[11px] font-semibold text-[#3D4F6F]">Paket</th>
+                    <th className="text-left px-2 py-3 text-[11px] font-semibold text-[#3D4F6F]">Müqavilə №</th>
+                    <th className="text-center px-2 py-3 text-[11px] font-semibold text-[#3D4F6F]">Gün sayı</th>
+                    <th className="text-left px-2 py-3 text-[11px] font-semibold text-[#3D4F6F]">Ödənilməli</th>
+                    <th className="text-left px-2 py-3 text-[11px] font-semibold text-[#3D4F6F]">VÖEN</th>
+                    <th className="text-left px-2 py-3 text-[11px] font-semibold text-[#3D4F6F]">E-qaimə tarixi</th>
+                    <th className="text-left px-2 py-3 text-[11px] font-semibold text-[#3D4F6F]">Nömrə</th>
+                    <th className="text-right px-2 py-3 text-[11px] font-semibold text-[#3D4F6F]">Məbləğ</th>
+                    <th className="text-right px-2 py-3 text-[11px] font-semibold text-[#3D4F6F]">Ödənilib</th>
+                    <th className="text-right px-2 py-3 text-[11px] font-semibold text-[#3D4F6F]">Borc</th>
+                    <th className="text-left px-2 py-3 text-[11px] font-semibold text-[#3D4F6F]">Təqib</th>
+                    <th className="text-right px-2 py-3 text-[11px] font-semibold text-[#3D4F6F]"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredCompanies.length === 0 ? (
-                    <tr><td colSpan={10} className="text-center py-8 text-slate-400 text-sm">Şirkət tapılmadı</td></tr>
+                    <tr><td colSpan={14} className="text-center py-8 text-slate-400 text-sm">Şirkət tapılmadı</td></tr>
                   ) : (
-                    filteredCompanies.map(c => (
+                    filteredCompanies.map(c => {
+                      const today = new Date().toISOString().split('T')[0];
+                      const isOverdue = c.payment_due_date && c.payment_due_date < today && (c.debt_amount || 0) > 0;
+                      return (
                       <tr key={c.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors" data-testid={`finance-row-${c.id}`}>
-                        <td className="px-3 py-3">
-                          <p className="font-medium text-sm text-[#3D4F6F]">{c.brand_name}</p>
-                          <p className="text-xs text-slate-500">{c.owner_name}</p>
+                        <td className="px-2 py-2"><Badge className="bg-slate-100 text-slate-700 text-[10px] font-mono">{c.finance_id || '—'}</Badge></td>
+                        <td className="px-2 py-2">
+                          <p className="font-medium text-xs text-[#3D4F6F]">{c.brand_name}</p>
+                          <p className="text-[10px] text-slate-500">{c.owner_name}</p>
                         </td>
-                        <td className="px-3 py-3">
-                          <Badge className="bg-[#3D4F6F] text-white text-xs">{c.package}</Badge>
-                        </td>
-                        <td className="px-3 py-3 text-xs text-slate-600">{c.marsol_representative}</td>
-                        <td className="px-3 py-3 text-xs text-slate-600">{c.contract_start_date || '-'}</td>
-                        <td className="px-3 py-3 text-xs text-slate-600">{c.contract_end_date || '-'}</td>
-                        <td className="px-3 py-3 text-right text-sm font-medium">{(c.total_amount || 0).toLocaleString()}</td>
-                        <td className="px-3 py-3 text-right text-sm text-green-600">{(c.paid_amount || 0).toLocaleString()}</td>
-                        <td className="px-3 py-3 text-right">
-                          <span className={`text-sm font-bold ${(c.debt_amount || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        <td className="px-2 py-2"><Badge className="bg-[#3D4F6F] text-white text-[10px]">{c.package}</Badge></td>
+                        <td className="px-2 py-2 text-xs text-slate-600 font-mono">{c.finance_contract_number || '—'}</td>
+                        <td className="px-2 py-2 text-xs text-center">{c.contract_days != null ? <Badge className="bg-blue-50 text-blue-700 text-[10px]">{c.contract_days} gün</Badge> : '—'}</td>
+                        <td className={`px-2 py-2 text-xs ${isOverdue ? 'text-red-600 font-semibold' : 'text-slate-600'}`}>{c.payment_due_date || '—'}</td>
+                        <td className="px-2 py-2 text-xs text-slate-600 font-mono">{c.voen || '—'}</td>
+                        <td className="px-2 py-2 text-xs text-slate-600">{c.e_invoice_date || '—'}</td>
+                        <td className="px-2 py-2 text-xs text-slate-600 font-mono">{c.e_invoice_number || '—'}</td>
+                        <td className="px-2 py-2 text-right text-xs font-medium">{(c.total_amount || 0).toLocaleString()}</td>
+                        <td className="px-2 py-2 text-right text-xs text-green-600">{(c.paid_amount || 0).toLocaleString()}</td>
+                        <td className="px-2 py-2 text-right">
+                          <span className={`text-xs font-bold ${(c.debt_amount || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                             {(c.debt_amount || 0).toLocaleString()}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
-                          {c.finance_note ? (
-                            <button onClick={() => openNote(c)} className="text-left group" data-testid={`note-view-${c.id}`}>
-                              <p className="text-xs text-slate-600 max-w-[140px] truncate group-hover:text-[#3D4F6F]">{c.finance_note}</p>
-                            </button>
-                          ) : (
-                            <button onClick={() => openNote(c)} className="text-xs text-slate-400 hover:text-[#3D4F6F]" data-testid={`note-add-${c.id}`}>
-                              + Qeyd əlavə et
-                            </button>
-                          )}
-                        </td>
-                        <td className="px-3 py-3 text-right">
+                        <td className="px-2 py-2 text-xs text-slate-500 max-w-[120px] truncate" title={c.follow_up}>{c.follow_up || '—'}</td>
+                        <td className="px-2 py-2 text-right">
                           <div className="flex justify-end gap-1">
                             <Button variant="ghost" size="sm" onClick={() => openNote(c)} title="Qeyd" data-testid={`note-btn-${c.id}`}>
                               <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
@@ -519,7 +534,8 @@ export default function Finance() {
                           </div>
                         </td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -659,6 +675,37 @@ export default function Finance() {
               <div className="mt-2">
                 <Label className="text-xs">Qeyd</Label>
                 <Input value={paymentForm.payment_note} onChange={(e) => setPaymentForm({ ...paymentForm, payment_note: e.target.value })} className="text-sm" placeholder="Ödəniş haqqında qeyd" />
+              </div>
+            </div>
+
+            {/* Finance tracking fields */}
+            <div className="border border-blue-200 rounded-lg p-3 bg-blue-50/30">
+              <p className="text-xs font-semibold text-blue-700 mb-2">Maliyyə izləməsi</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Müqavilə nömrəsi</Label>
+                  <Input value={paymentForm.finance_contract_number} onChange={(e) => setPaymentForm({ ...paymentForm, finance_contract_number: e.target.value })} className="text-sm" placeholder="MQ-2026-001" data-testid="finance-contract-number" />
+                </div>
+                <div>
+                  <Label className="text-xs">Ödənilməli tarix</Label>
+                  <Input type="date" value={paymentForm.payment_due_date} onChange={(e) => setPaymentForm({ ...paymentForm, payment_due_date: e.target.value })} className="text-sm" data-testid="finance-payment-due" />
+                </div>
+                <div>
+                  <Label className="text-xs">VÖEN</Label>
+                  <Input value={paymentForm.voen} onChange={(e) => setPaymentForm({ ...paymentForm, voen: e.target.value })} className="text-sm" placeholder="1234567890" data-testid="finance-voen" />
+                </div>
+                <div>
+                  <Label className="text-xs">E-qaimə tarixi</Label>
+                  <Input type="date" value={paymentForm.e_invoice_date} onChange={(e) => setPaymentForm({ ...paymentForm, e_invoice_date: e.target.value })} className="text-sm" data-testid="finance-einvoice-date" />
+                </div>
+                <div>
+                  <Label className="text-xs">E-qaimə nömrəsi</Label>
+                  <Input value={paymentForm.e_invoice_number} onChange={(e) => setPaymentForm({ ...paymentForm, e_invoice_number: e.target.value })} className="text-sm" placeholder="EQN123456" data-testid="finance-einvoice-number" />
+                </div>
+                <div>
+                  <Label className="text-xs">Təqib</Label>
+                  <Input value={paymentForm.follow_up} onChange={(e) => setPaymentForm({ ...paymentForm, follow_up: e.target.value })} className="text-sm" placeholder="Zəng et, e-mail göndər..." data-testid="finance-followup" />
+                </div>
               </div>
             </div>
 
