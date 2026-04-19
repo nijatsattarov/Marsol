@@ -3101,6 +3101,388 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
 async def root():
     return {"message": "Marsol Group Management System API"}
 
+# ==================== AI DATA ANALYST (GPT-5.2 via Emergent LLM Key) ====================
+
+AI_SCHEMA = """
+MongoDB database with these collections (all documents use `id` field, `_id` is excluded in responses):
+
+1. companies — Marsol üzvü olan şirkətlər (active members)
+   fields: id, brand_name, legal_name, sector, company_size, registration_date, address,
+   owner_name, owner_phone, owner_email, owner_birth_date,
+   co_founders (array of {name, phone, email, birth_date, children_count, ...}),
+   representative_name, representative_phone, representative_email,
+   company_phone, company_website, children_count, children_info (array of {name, birth_date, gender}),
+   reference_source, reference_person, marsol_representative, package (Premium/Business/Business+/Sponsor),
+   contract_start_date, contract_end_date, total_amount, paid_amount, debt_amount, last_payment_date,
+   status (Aktiv/Passiv/Ləğv edilib)
+
+2. employees — Marsol daxili əməkdaşlar
+   fields: id, full_name, first_name, last_name, birth_date, gender, department, position,
+   company_phone, personal_phone, email, contract_start_date, contract_end_date, probation_end_date,
+   gross_salary, net_salary, children_count, children_birth_dates, status, marital_status, education_level
+
+3. meetings — görüşlər
+   fields: id, date, time, employee, meeting_setter, company, contact_person, project, meeting_type,
+   location, result, next_meeting, department, meeting_mode, notes
+
+4. tasks — tapşırıqlar
+   fields: id, task_name, department, assignee, responsible_person, priority, start_date, end_date,
+   related_object, phase, status, task_code (T-XXX)
+
+5. project_events — Marsol-un təşkil etdiyi tədbirlər (Sərgi, Forum, İftar, Təlim, Tur, Networking, Konfrans)
+   fields: id, name, type, date, end_date, location, status (Planlaşdırılır/Aktiv/Tamamlandı)
+
+6. event_invitations — tədbirlərə dəvət olunan qonaqlar (non-members)
+   fields: id, event_id, event_name, guest_name, guest_company, guest_position, guest_phone,
+   guest_email, status (Dəvət edilib/Gələcəm/Gəlməyəcəm/İştirak etdi), invited_by, converted_to_lead
+
+7. sales_leads — satış pipeline
+   fields: id, lead_code, company_name, contact_name, contact_person, phone, email, position, source,
+   sale_type, stage, status, assigned_to, curator, expected_amount, package, notes
+
+8. contact_lists — sahibkar/CEO siyahıları
+   fields: id, title, description, created_by
+
+9. contacts — contact_lists-dəki kontaktlar
+   fields: id, list_id, name, surname, company, position, phone, email
+
+10. barters — barter əməliyyatları
+    fields: id, barter_code (B-XXX), partner_name, partner_contact, partner_phone,
+    our_service, their_service, our_value, their_value, status (Təklif/Müzakirədə/Aktiv/Tamamlandı/Ləğv edilib),
+    start_date, end_date, responsible
+
+11. incomes — gəlirlər (şirkət ödənişləri)
+    fields: id, company_id, company_name, owner_name, project, package, amount, paid_amount,
+    debt_amount, currency, contract_start_date, contract_end_date
+
+12. expenses — xərclər
+    fields: id, expense_name, category, sub_category, amount, currency, date, project, department,
+    responsible_person, payment_type, status
+
+13. attendance — əməkdaş davamiyyəti (günlük)
+    fields: id, employee_id, employee_name, date (YYYY-MM-DD), status (İşdə/Gəlməyib/Məzuniyyət/Xəstəlik/İcazəli/Uzaq),
+    check_in, check_out
+
+14. leave_requests — məzuniyyət sorğuları
+    fields: id, employee_id, employee_name, type (Məzuniyyət/Xəstəlik/İcazə/Digər),
+    start_date, end_date, reason, status (Gözləyir/Təsdiqlənib/Rədd edilib)
+
+15. users — sistem istifadəçiləri (auth)
+    fields: id, name, email, role, department
+
+16. assemblies — iclaslar
+    fields: id, title, date, time, location, agenda (array), participants, status
+
+17. invitations — KÖHNƏ sistem: üzv şirkətlərin fəaliyyətlərə dəvətləri (Obligations modulu üçün)
+    fields: id, event_id, event_name, event_type, event_date, company_id, company_name,
+    call_status, participation_status, obligation_deducted
+
+18. events — Təşkilatçılıq modulu fəaliyyətləri
+    fields: id, name, date, event_type, location
+
+Dates are stored as ISO strings (YYYY-MM-DD) or ISO datetimes. Birth dates follow YYYY-MM-DD.
+To match month (e.g., June birthdays): use {"$regex": "^\\\\d{4}-06-"} on date fields.
+"""
+
+AI_SYSTEM_PROMPT = """You are an AI data analyst for Marsol Group B2B networking ERP system.
+You receive user questions in Azerbaijani about the data in their MongoDB database.
+
+Your job: produce a single JSON response containing a MongoDB aggregation pipeline that answers the question.
+
+Use ONLY these MongoDB operators in $match, $project, $group, $sort, $limit, $unwind, $addFields, $lookup, $count.
+NEVER use: $out, $merge, $function, $where, $accumulator, $expr with $function, $redact.
+
+Response format (strict JSON):
+{
+  "title": "Qısa Azərbaycanca başlıq (cədvəl başlığı)",
+  "collection": "companies|employees|meetings|...",
+  "pipeline": [ ...mongodb aggregation stages... ],
+  "list_mapping": {
+    "name": "<column header that contains person/contact name>",
+    "company": "<column header with company name, or null>",
+    "phone": "<column header with phone, or null>",
+    "email": "<column header with email, or null>",
+    "position": "<column header with position/title, or null>",
+    "notes": "<column header with extra info, or null>"
+  }
+}
+
+CRITICAL RULES:
+- Final $project stage MUST produce dictionary with HUMAN-READABLE Azerbaijani field names as column headers
+- Always add {"_id": 0} in $project (exclude _id)
+- Order $project fields logically (name/company first, then details)
+- Add $sort when meaningful
+- Keep results reasonable (add $limit only if user asks for top-N)
+- list_mapping maps logical fields (name/company/phone/email) to YOUR OUTPUT COLUMN HEADERS so the result can be saved into contact lists
+- If the result is a statistical breakdown (not contact-style), set list_mapping fields to null
+
+SCHEMA:
+""" + AI_SCHEMA + """
+
+Examples:
+
+Q: "5 yaş üzəri uşağı olan sahibkarlar"
+A: {
+  "title": "5 yaş üzəri uşağı olan sahibkarlar",
+  "collection": "companies",
+  "pipeline": [
+    {"$match": {"children_info": {"$elemMatch": {"birth_date": {"$lt": "2020-01-01", "$ne": ""}}}}},
+    {"$project": {"_id": 0, "Sahibkar": "$owner_name", "Şirkət": "$brand_name", "Telefon": "$owner_phone", "Email": "$owner_email", "Uşaq sayı": "$children_count", "Paket": "$package"}},
+    {"$sort": {"Sahibkar": 1}}
+  ],
+  "list_mapping": {"name": "Sahibkar", "company": "Şirkət", "phone": "Telefon", "email": "Email", "position": null, "notes": "Paket"}
+}
+
+Q: "iyun ayında doğum günü olan sahibkarlar"
+A: {
+  "title": "İyun ayında doğum günləri",
+  "collection": "companies",
+  "pipeline": [
+    {"$match": {"owner_birth_date": {"$regex": "^\\\\d{4}-06-"}}},
+    {"$project": {"_id": 0, "Sahibkar": "$owner_name", "Şirkət": "$brand_name", "Doğum tarixi": "$owner_birth_date", "Telefon": "$owner_phone", "Email": "$owner_email"}},
+    {"$sort": {"Doğum tarixi": 1}}
+  ],
+  "list_mapping": {"name": "Sahibkar", "company": "Şirkət", "phone": "Telefon", "email": "Email", "position": null, "notes": "Doğum tarixi"}
+}
+
+Q: "hansı sektordan neçə şirkət var"
+A: {
+  "title": "Sektorlar üzrə şirkət sayı",
+  "collection": "companies",
+  "pipeline": [
+    {"$match": {"status": "Aktiv"}},
+    {"$group": {"_id": "$sector", "count": {"$sum": 1}}},
+    {"$project": {"_id": 0, "Sektor": "$_id", "Şirkət sayı": "$count"}},
+    {"$sort": {"Şirkət sayı": -1}}
+  ],
+  "list_mapping": {"name": null, "company": null, "phone": null, "email": null, "position": null, "notes": null}
+}
+
+Q: "neçə görüş etmişik, nəticələri necə olub"
+A: {
+  "title": "Görüşlər nəticə bölgüsü",
+  "collection": "meetings",
+  "pipeline": [
+    {"$group": {"_id": "$result", "count": {"$sum": 1}}},
+    {"$project": {"_id": 0, "Nəticə": "$_id", "Say": "$count"}},
+    {"$sort": {"Say": -1}}
+  ],
+  "list_mapping": {"name": null, "company": null, "phone": null, "email": null, "position": null, "notes": null}
+}
+
+Return ONLY the JSON object, no markdown, no commentary.
+"""
+
+AI_ALLOWED_COLLECTIONS = {
+    "companies", "employees", "meetings", "tasks", "project_events", "event_invitations",
+    "sales_leads", "contact_lists", "contacts", "barters", "incomes", "expenses",
+    "attendance", "leave_requests", "users", "assemblies", "invitations", "events", "roles"
+}
+
+AI_FORBIDDEN_OPERATORS = {"$out", "$merge", "$function", "$where", "$accumulator", "$redact"}
+
+def _scan_forbidden_operators(obj) -> Optional[str]:
+    """Recursively scan for forbidden MongoDB operators. Returns operator name if found."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(k, str) and k in AI_FORBIDDEN_OPERATORS:
+                return k
+            found = _scan_forbidden_operators(v)
+            if found:
+                return found
+    elif isinstance(obj, list):
+        for item in obj:
+            found = _scan_forbidden_operators(item)
+            if found:
+                return found
+    return None
+
+@api_router.post("/ai/analyze")
+async def ai_analyze(data: dict, current_user: dict = Depends(get_current_user)):
+    """AI Data Analyst — takes Azerbaijani prompt, generates aggregation pipeline, executes, returns table."""
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Prompt tələb olunur")
+    if len(prompt) > 2000:
+        raise HTTPException(status_code=400, detail="Prompt çox uzundur (max 2000 simvol)")
+
+    emergent_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not emergent_key:
+        raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY mövcud deyil")
+
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+    except ImportError:
+        raise HTTPException(status_code=500, detail="emergentintegrations kitabxanası yüklü deyil")
+
+    import json as _json
+    session_id = f"ai-analyst-{current_user.get('id', 'unknown')}-{uuid.uuid4().hex[:8]}"
+    # Model is configurable via env; defaults to Claude Sonnet 4.5 (OpenAI GPT-5.2 experiencing timeouts)
+    ai_provider = os.environ.get("AI_ANALYST_PROVIDER", "anthropic")
+    ai_model = os.environ.get("AI_ANALYST_MODEL", "claude-sonnet-4-5-20250929")
+    chat = LlmChat(api_key=emergent_key, session_id=session_id, system_message=AI_SYSTEM_PROMPT).with_model(ai_provider, ai_model)
+
+    try:
+        ai_text = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"AI cavab vermədi: {str(e)[:200]}")
+
+    # Parse AI response
+    cleaned = (ai_text or "").strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.lower().startswith("json"):
+            cleaned = cleaned[4:].strip()
+    # Find first { and last }
+    first_brace = cleaned.find("{")
+    last_brace = cleaned.rfind("}")
+    if first_brace == -1 or last_brace == -1:
+        raise HTTPException(status_code=422, detail="AI cavabını parse etmək mümkün olmadı")
+    try:
+        plan = _json.loads(cleaned[first_brace:last_brace + 1])
+    except _json.JSONDecodeError as e:
+        raise HTTPException(status_code=422, detail=f"AI JSON xətası: {str(e)[:100]}")
+
+    collection = plan.get("collection", "")
+    pipeline = plan.get("pipeline", [])
+    title = plan.get("title", "Nəticə")
+    list_mapping = plan.get("list_mapping") or {}
+
+    if collection not in AI_ALLOWED_COLLECTIONS:
+        raise HTTPException(status_code=403, detail=f"Icazəsiz kolleksiya: {collection}")
+    if not isinstance(pipeline, list) or len(pipeline) == 0 or len(pipeline) > 20:
+        raise HTTPException(status_code=422, detail="Yanlış pipeline strukturu")
+
+    forbidden = _scan_forbidden_operators(pipeline)
+    if forbidden:
+        raise HTTPException(status_code=403, detail=f"Qadağan edilmiş operator: {forbidden}")
+
+    # Validate $lookup only targets allowed collections
+    for stage in pipeline:
+        if isinstance(stage, dict) and "$lookup" in stage:
+            lookup = stage["$lookup"]
+            if isinstance(lookup, dict):
+                from_col = lookup.get("from", "")
+                if from_col not in AI_ALLOWED_COLLECTIONS:
+                    raise HTTPException(status_code=403, detail=f"$lookup qadağan: {from_col}")
+
+    # Execute pipeline
+    try:
+        docs = await db[collection].aggregate(pipeline).to_list(10000)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline icra xətası: {str(e)[:200]}")
+
+    # Sanitize: remove any stray _id
+    for d in docs:
+        d.pop("_id", None)
+
+    # Extract headers (preserve order from first doc if possible)
+    headers = []
+    if docs:
+        headers = list(docs[0].keys())
+    # Convert rows to arrays following header order
+    rows = [[d.get(h, "") for h in headers] for d in docs]
+
+    return {
+        "title": title,
+        "headers": headers,
+        "rows": rows,
+        "row_count": len(rows),
+        "collection": collection,
+        "list_mapping": list_mapping,
+        "prompt": prompt
+    }
+
+@api_router.post("/ai/save-to-list")
+async def ai_save_to_list(data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
+    """Save AI analysis result rows to a contact list."""
+    title = (data.get("title") or "").strip()
+    description = (data.get("description") or "").strip()
+    headers = data.get("headers") or []
+    rows = data.get("rows") or []
+    mapping = data.get("mapping") or {}
+
+    if not title:
+        raise HTTPException(status_code=400, detail="Siyahı başlığı tələb olunur")
+    if not headers or not rows:
+        raise HTTPException(status_code=400, detail="Məlumat yoxdur")
+
+    # Create list
+    list_doc = {
+        "id": str(uuid.uuid4()),
+        "title": title,
+        "description": description or f"AI tərəfindən yaradıldı",
+        "created_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.contact_lists.insert_one(list_doc)
+    list_doc.pop("_id", None)
+
+    # Column indices by header name
+    def col_idx(header_name):
+        if not header_name:
+            return -1
+        try:
+            return headers.index(header_name)
+        except ValueError:
+            return -1
+
+    idx_name = col_idx(mapping.get("name"))
+    idx_company = col_idx(mapping.get("company"))
+    idx_phone = col_idx(mapping.get("phone"))
+    idx_email = col_idx(mapping.get("email"))
+    idx_position = col_idx(mapping.get("position"))
+    idx_notes = col_idx(mapping.get("notes"))
+
+    def safe_get(row, i):
+        if i < 0 or i >= len(row):
+            return ""
+        v = row[i]
+        return str(v) if v is not None else ""
+
+    contact_docs = []
+    for row in rows:
+        full_name = safe_get(row, idx_name)
+        parts = full_name.split(" ", 1) if full_name else ["", ""]
+        first = parts[0] if parts else ""
+        last = parts[1] if len(parts) > 1 else ""
+        contact_docs.append({
+            "id": str(uuid.uuid4()),
+            "list_id": list_doc["id"],
+            "name": first,
+            "surname": last,
+            "company": safe_get(row, idx_company),
+            "position": safe_get(row, idx_position),
+            "phone": safe_get(row, idx_phone),
+            "email": safe_get(row, idx_email),
+            "notes": safe_get(row, idx_notes),
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+
+    if contact_docs:
+        await db.contacts.insert_many(contact_docs)
+
+    return {"message": f"{len(contact_docs)} kontakt əlavə edildi", "list_id": list_doc["id"], "list_title": list_doc["title"]}
+
+@api_router.get("/ai/examples")
+async def ai_examples(current_user: dict = Depends(get_current_user)):
+    """Return example prompts for the AI Data Analyst UI."""
+    return {"examples": [
+        "5 yaş üzəri uşağı olan sahibkarların siyahısı",
+        "İyun ayında doğum günü olan sahibkarlar",
+        "Hansı sektordan neçə şirkət var",
+        "Aktiv üzvlər (paket və müqavilə bitmə tarixi ilə)",
+        "Bu ay keçirilmiş görüşlərin say və nəticələri",
+        "Bitməkdə olan müqavilələr (30 gün içində)",
+        "Borcu olan şirkətlər (borc məbləğinə görə sıralanmış)",
+        "Tamamlanmamış tapşırıqlar",
+        "Bu ay davamiyyət statistikası",
+        "Aktiv barter əməliyyatları və balans",
+        "İyul ayında doğum günü olan əməkdaşlar",
+        "Hər paket üzrə üzv şirkət sayı",
+        "Bakıda olan premium üzvlər",
+    ]}
+
 # Include router
 app.include_router(api_router)
 
