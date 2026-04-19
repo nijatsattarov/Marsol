@@ -19,6 +19,10 @@ import DashboardLayout from "./layouts/DashboardLayout";
 import Marketing from "./pages/Marketing";
 import Projects from "./pages/Projects";
 import Organization from "./pages/Organization";
+import OrgDashboard from "./pages/organization/OrgDashboard";
+import VendorModule from "./pages/organization/VendorModule";
+import OrgRatings from "./pages/organization/OrgRatings";
+import { ORG_CONFIGS } from "./pages/organization/configs";
 import Reports from "./pages/Reports";
 import Assembly from "./pages/Assembly";
 import Files from "./pages/Files";
@@ -60,7 +64,16 @@ function App() {
             <Route path="sales/contact-lists" element={<ContactLists />} />
             <Route path="marketing" element={<Marketing />} />
             <Route path="projects" element={<Projects />} />
-            <Route path="organization" element={<Organization />} />
+            <Route path="organization" element={<OrgDashboard />} />
+            <Route path="organization/ratings" element={<OrgRatings />} />
+            <Route path="organization/venues" element={<VendorModule config={ORG_CONFIGS.venues} />} />
+            <Route path="organization/catering" element={<VendorModule config={ORG_CONFIGS.catering} />} />
+            <Route path="organization/decor" element={<VendorModule config={ORG_CONFIGS.decor} />} />
+            <Route path="organization/musicians" element={<VendorModule config={ORG_CONFIGS.musicians} />} />
+            <Route path="organization/photovideo" element={<VendorModule config={ORG_CONFIGS.photovideo} />} />
+            <Route path="organization/transport" element={<VendorModule config={ORG_CONFIGS.transport} />} />
+            <Route path="organization/materials" element={<VendorModule config={ORG_CONFIGS.materials} />} />
+            <Route path="organization/legacy" element={<Organization />} />
             <Route path="reports" element={<Reports />} />
             <Route path="meetings" element={<Meetings />} />
             <Route path="assembly" element={<Assembly />} />

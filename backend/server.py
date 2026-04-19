@@ -3101,6 +3101,239 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
 async def root():
     return {"message": "Marsol Group Management System API"}
 
+# ==================== TƏŞKİLATÇILIQ / FƏALİYYƏTLƏR — VENDOR MODULLARI ====================
+
+ORG_COLLECTIONS = {
+    "venues": "org_venues",
+    "catering": "org_catering",
+    "decor": "org_decor",
+    "musicians": "org_musicians",
+    "photovideo": "org_photovideo",
+    "transport": "org_transport",
+    "materials": "org_materials",
+}
+
+ORG_LABELS = {
+    "venues": "Məkanlar",
+    "catering": "Catering",
+    "decor": "Dekor və texniki təchizat",
+    "musicians": "Musiqiçilər və şou komandaları",
+    "photovideo": "Foto / Video",
+    "transport": "Nəqliyyat və logistika",
+    "materials": "Tədbir materialları",
+}
+
+# ===== RATINGS (DECLARE BEFORE /organization/{module} TO AVOID ROUTE CONFLICT) =====
+
+@api_router.get("/organization/ratings/list")
+async def list_ratings(
+    vendor_type: Optional[str] = None,
+    vendor_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    query = {}
+    if vendor_type and vendor_type != "all":
+        query["vendor_type"] = vendor_type
+    if vendor_id:
+        query["vendor_id"] = vendor_id
+    items = await db.org_ratings.find(query, {"_id": 0}).sort("event_date", -1).to_list(5000)
+    return items
+
+@api_router.post("/organization/ratings")
+async def create_rating(data: dict, current_user: dict = Depends(check_permission("organization", "write"))):
+    vendor_type = data.get("vendor_type", "")
+    if vendor_type not in ORG_COLLECTIONS:
+        raise HTTPException(status_code=400, detail="Yanlış təchizatçı növü")
+    vendor = await db[ORG_COLLECTIONS[vendor_type]].find_one({"id": data.get("vendor_id", "")}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Təchizatçı tapılmadı")
+    def f(x, default=0):
+        try: return float(x or default)
+        except (ValueError, TypeError): return default
+    doc = {
+        "id": str(uuid.uuid4()),
+        "vendor_type": vendor_type,
+        "vendor_id": data.get("vendor_id", ""),
+        "vendor_name": vendor.get("name") or vendor.get("vendor_name") or vendor.get("venue_name") or "",
+        "event_name": data.get("event_name", ""),
+        "event_date": data.get("event_date", ""),
+        "price_score": f(data.get("price_score"), 5),
+        "quality_score": f(data.get("quality_score"), 5),
+        "operativity_score": f(data.get("operativity_score"), 5),
+        "behavior_score": f(data.get("behavior_score"), 5),
+        "flexibility_score": f(data.get("flexibility_score"), 5),
+        "event_fit_score": f(data.get("event_fit_score"), 5),
+        "rehire_willingness": data.get("rehire_willingness", "Bəli"),
+        "comment": data.get("comment", ""),
+        "rated_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.org_ratings.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.delete("/organization/ratings/{rating_id}")
+async def delete_rating(rating_id: str, current_user: dict = Depends(check_permission("organization", "write"))):
+    await db.org_ratings.delete_one({"id": rating_id})
+    return {"message": "Reytinq silindi"}
+
+@api_router.get("/organization/ratings/summary")
+async def ratings_summary(current_user: dict = Depends(get_current_user)):
+    pipeline = [
+        {"$group": {
+            "_id": {"vendor_type": "$vendor_type", "vendor_id": "$vendor_id"},
+            "vendor_name": {"$last": "$vendor_name"},
+            "count": {"$sum": 1},
+            "avg_price": {"$avg": "$price_score"},
+            "avg_quality": {"$avg": "$quality_score"},
+            "avg_operativity": {"$avg": "$operativity_score"},
+            "avg_behavior": {"$avg": "$behavior_score"},
+            "avg_flexibility": {"$avg": "$flexibility_score"},
+            "avg_fit": {"$avg": "$event_fit_score"},
+            "rehire_yes": {"$sum": {"$cond": [{"$eq": ["$rehire_willingness", "Bəli"]}, 1, 0]}},
+            "last_event_date": {"$max": "$event_date"},
+        }},
+        {"$project": {
+            "_id": 0,
+            "vendor_type": "$_id.vendor_type",
+            "vendor_id": "$_id.vendor_id",
+            "vendor_name": 1, "count": 1,
+            "avg_price": {"$round": ["$avg_price", 2]},
+            "avg_quality": {"$round": ["$avg_quality", 2]},
+            "avg_operativity": {"$round": ["$avg_operativity", 2]},
+            "avg_behavior": {"$round": ["$avg_behavior", 2]},
+            "avg_flexibility": {"$round": ["$avg_flexibility", 2]},
+            "avg_fit": {"$round": ["$avg_fit", 2]},
+            "overall": {"$round": [{"$divide": [{"$add": ["$avg_price", "$avg_quality", "$avg_operativity", "$avg_behavior"]}, 4]}, 2]},
+            "rehire_rate": {"$round": [{"$multiply": [{"$divide": ["$rehire_yes", "$count"]}, 100]}, 1]},
+            "last_event_date": 1,
+        }},
+        {"$sort": {"overall": -1}}
+    ]
+    results = await db.org_ratings.aggregate(pipeline).to_list(5000)
+    for r in results:
+        ov = r.get("overall") or 0
+        rr = r.get("rehire_rate") or 0
+        if ov >= 4.2 and rr >= 75:
+            r["recommendation"] = "Tövsiyə edilir"
+        elif ov >= 3.0:
+            r["recommendation"] = "Şərtlə tövsiyə"
+        else:
+            r["recommendation"] = "Tövsiyə edilmir"
+    return results
+
+# ===== DASHBOARD (DECLARE BEFORE /organization/{module}) =====
+
+@api_router.get("/organization/dashboard/stats")
+async def org_dashboard(current_user: dict = Depends(get_current_user)):
+    counts = {}
+    for mod, col in ORG_COLLECTIONS.items():
+        counts[mod] = await db[col].count_documents({})
+    total_ratings = await db.org_ratings.count_documents({})
+    pipeline = [
+        {"$group": {
+            "_id": {"vendor_type": "$vendor_type", "vendor_id": "$vendor_id"},
+            "vendor_name": {"$last": "$vendor_name"},
+            "avg_price": {"$avg": "$price_score"},
+            "avg_quality": {"$avg": "$quality_score"},
+            "avg_operativity": {"$avg": "$operativity_score"},
+            "avg_behavior": {"$avg": "$behavior_score"},
+            "count": {"$sum": 1},
+        }},
+        {"$project": {
+            "_id": 0,
+            "vendor_type": "$_id.vendor_type",
+            "vendor_id": "$_id.vendor_id",
+            "vendor_name": 1,
+            "count": 1,
+            "overall": {"$round": [{"$divide": [{"$add": ["$avg_price", "$avg_quality", "$avg_operativity", "$avg_behavior"]}, 4]}, 2]},
+        }},
+        {"$sort": {"overall": -1}},
+        {"$limit": 5}
+    ]
+    top_rated = await db.org_ratings.aggregate(pipeline).to_list(5)
+    recent = []
+    for mod, col in ORG_COLLECTIONS.items():
+        items = await db[col].find({}, {"_id": 0, "id": 1, "created_at": 1, "name": 1, "vendor_name": 1, "venue_name": 1}).sort("created_at", -1).limit(3).to_list(3)
+        for i in items:
+            recent.append({
+                "module": mod,
+                "module_label": ORG_LABELS[mod],
+                "id": i.get("id"),
+                "name": i.get("name") or i.get("vendor_name") or i.get("venue_name") or "—",
+                "created_at": i.get("created_at")
+            })
+    recent.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    recent = recent[:8]
+    return {"counts": counts, "total_ratings": total_ratings, "top_rated": top_rated, "recent_additions": recent}
+
+# ===== VENDOR CRUD (parameterized — declare LAST) =====
+
+@api_router.get("/organization/{module}")
+async def get_org_vendors(module: str, current_user: dict = Depends(get_current_user)):
+    if module not in ORG_COLLECTIONS:
+        raise HTTPException(status_code=404, detail="Modul tapılmadı")
+    items = await db[ORG_COLLECTIONS[module]].find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    # Attach rating aggregation
+    vendor_ids = [i["id"] for i in items]
+    ratings_pipeline = [
+        {"$match": {"vendor_type": module, "vendor_id": {"$in": vendor_ids}}},
+        {"$group": {
+            "_id": "$vendor_id",
+            "count": {"$sum": 1},
+            "avg_price": {"$avg": "$price_score"},
+            "avg_quality": {"$avg": "$quality_score"},
+            "avg_operativity": {"$avg": "$operativity_score"},
+            "avg_behavior": {"$avg": "$behavior_score"},
+            "last_used": {"$max": "$event_date"},
+        }}
+    ]
+    ratings = {r["_id"]: r async for r in db.org_ratings.aggregate(ratings_pipeline)}
+    for i in items:
+        r = ratings.get(i["id"])
+        if r:
+            overall = round((r["avg_price"] + r["avg_quality"] + r["avg_operativity"] + r["avg_behavior"]) / 4, 2)
+            i["rating_count"] = r["count"]
+            i["rating_avg"] = overall
+            i["rating_last_used"] = r["last_used"]
+        else:
+            i["rating_count"] = 0
+            i["rating_avg"] = None
+            i["rating_last_used"] = None
+    return items
+
+@api_router.post("/organization/{module}")
+async def create_org_vendor(module: str, data: dict, current_user: dict = Depends(check_permission("organization", "write"))):
+    if module not in ORG_COLLECTIONS:
+        raise HTTPException(status_code=404, detail="Modul tapılmadı")
+    doc = {**data}
+    doc["id"] = str(uuid.uuid4())
+    doc["module"] = module
+    doc["created_by"] = current_user.get("name", "")
+    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    await db[ORG_COLLECTIONS[module]].insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/organization/{module}/{item_id}")
+async def update_org_vendor(module: str, item_id: str, data: dict, current_user: dict = Depends(check_permission("organization", "write"))):
+    if module not in ORG_COLLECTIONS:
+        raise HTTPException(status_code=404, detail="Modul tapılmadı")
+    update = {k: v for k, v in data.items() if k not in ("id", "created_at", "created_by", "module")}
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db[ORG_COLLECTIONS[module]].update_one({"id": item_id}, {"$set": update})
+    doc = await db[ORG_COLLECTIONS[module]].find_one({"id": item_id}, {"_id": 0})
+    return doc
+
+@api_router.delete("/organization/{module}/{item_id}")
+async def delete_org_vendor(module: str, item_id: str, current_user: dict = Depends(check_permission("organization", "write"))):
+    if module not in ORG_COLLECTIONS:
+        raise HTTPException(status_code=404, detail="Modul tapılmadı")
+    await db[ORG_COLLECTIONS[module]].delete_one({"id": item_id})
+    # Also cascade delete ratings for this vendor
+    await db.org_ratings.delete_many({"vendor_type": module, "vendor_id": item_id})
+    return {"message": "Silindi"}
+
 # ==================== AI DATA ANALYST (GPT-5.2 via Emergent LLM Key) ====================
 
 AI_SCHEMA = """

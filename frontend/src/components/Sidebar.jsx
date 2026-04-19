@@ -43,6 +43,18 @@ const salesSubItems = [
   { path: '/sales/contact-lists', label: 'Siyahılar', icon: ClipboardList, module: 'sales' },
 ];
 
+const organizationSubItems = [
+  { path: '/organization', label: 'İdarə paneli', icon: LayoutDashboard, module: 'organization' },
+  { path: '/organization/venues', label: 'Məkanlar', icon: Building2, module: 'organization' },
+  { path: '/organization/catering', label: 'Catering', icon: FolderOpen, module: 'organization' },
+  { path: '/organization/decor', label: 'Dekor və texniki', icon: FolderKanban, module: 'organization' },
+  { path: '/organization/musicians', label: 'Musiqi və şou', icon: Megaphone, module: 'organization' },
+  { path: '/organization/photovideo', label: 'Foto / Video', icon: Presentation, module: 'organization' },
+  { path: '/organization/transport', label: 'Nəqliyyat', icon: Send, module: 'organization' },
+  { path: '/organization/materials', label: 'Materiallar', icon: Database, module: 'organization' },
+  { path: '/organization/ratings', label: 'Reytinq', icon: Lightbulb, module: 'organization' },
+];
+
 const menuItems = [
   { path: '/companies', label: 'Şirkət Məlumatları', icon: Building2, module: 'companies' },
   { path: '/hr', label: 'İnsan Resursları', icon: UserCog, module: 'hr' },
@@ -50,7 +62,7 @@ const menuItems = [
   { path: '/sales', label: 'Satış', icon: TrendingUp, children: salesSubItems, module: 'sales' },
   { path: '/marketing', label: 'Marketinq', icon: Megaphone, module: 'marketing' },
   { path: '/projects', label: 'Layihələr', icon: FolderKanban, module: 'projects' },
-  { path: '/organization', label: 'Fəaliyyətlər', icon: Users2, module: 'organization' },
+  { path: '/organization', label: 'Fəaliyyətlər', icon: Users2, children: organizationSubItems, module: 'organization' },
   { path: '/finance', label: 'Maliyyə', icon: Wallet, module: 'finance' },
   { path: '/barter', label: 'Barter', icon: ArrowLeftRight, module: 'finance' },
   { path: '/reports', label: 'Hesabatlar', icon: BarChart3, module: 'reports' },
