@@ -131,8 +131,8 @@ export default function PublicForm() {
     <div className="min-h-screen bg-slate-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center gap-2 bg-[#3D4F6F] text-white px-4 py-2 rounded-xl mb-4">
-            <Building2 className="w-5 h-5" /><span className="font-bold text-sm">MARSOL GROUP</span>
+          <div className="inline-block mb-4">
+            <img src="https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png" alt="Marsol Group" className="h-12 object-contain" />
           </div>
           <h1 className="text-xl font-bold text-[#3D4F6F]">Üzvlük Forumu</h1>
           <p className="text-slate-500 text-sm mt-1">{meta.description}</p>
