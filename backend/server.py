@@ -3107,19 +3107,36 @@ AI_SCHEMA = """
 MongoDB database with these collections (all documents use `id` field, `_id` is excluded in responses):
 
 1. companies — Marsol üzvü olan şirkətlər (active members)
-   fields: id, brand_name, legal_name, sector, company_size, registration_date, address,
-   owner_name, owner_phone, owner_email, owner_birth_date,
-   co_founders (array of {name, phone, email, birth_date, children_count, ...}),
+   top-level fields: id, brand_name, legal_name, voen, sector, sub_sector, company_size,
+   registration_date, address, region, status (Aktiv/Passiv/Ləğv edilib),
+   company_phone, company_website, logo_url, social_links (array),
+   owner_name (LEGACY, tez-tez boş), owner_first_name, owner_last_name, owner_phone, owner_email,
    representative_name, representative_phone, representative_email,
-   company_phone, company_website, children_count, children_info (array of {name, birth_date, gender}),
-   reference_source, reference_person, marsol_representative, package (Premium/Business/Business+/Sponsor),
-   contract_start_date, contract_end_date, total_amount, paid_amount, debt_amount, last_payment_date,
-   status (Aktiv/Passiv/Ləğv edilib)
+   contact_first_name, contact_last_name, contact_phone, contact_email, contact_position,
+   marsol_representative, reference_source, reference_person_name, reference_person_surname,
+   reference_person_position, reference_company_name, joined_project, join_date,
+   package (Premium/Business/Business+/Sponsor),
+   contract_start_date, contract_end_date, contract_file, contracts (array),
+   total_amount, paid_amount, debt_amount, last_payment_date, payment_due_date,
+   employee_count,
+   children_count (LEGACY – tez-tez 0 və ya boş), children_info (LEGACY – demək olar ki, həmişə boş array),
+
+   **owners** (ƏSAS MƏLUMAT BURDADIR) — array of owner objects, hər elementdə:
+      first_name, last_name, father_name, position, phone, email, birth_date (YYYY-MM-DD),
+      citizenship, education, specialty, university, social_links (array), desired_activities (array),
+      **children** — array of child objects: { name, surname, birth_date (YYYY-MM-DD), gender ("Oğlan"/"Qız") }
+
+   co_founders (tez-tez boş)
+
+   **VACİB**: Sahibkar(lar)ın adı və uşaqları `owners` array-dadır, köhnə `owner_name`/`children_info` sahələrinə GÜVƏNMƏ.
+   Sahibkar üçün adı göstərmək üçün: $concat: ["$owners.first_name", " ", "$owners.last_name"] ya da unwind sonrası. owners boş olsa fallback owner_name istifadə et.
+   Doğum günü və yaş sorğuları üçün `owners.birth_date` istifadə et.
+   Uşaqlar üçün sorğular `owners.children.birth_date` üzərindən gedir.
 
 2. employees — Marsol daxili əməkdaşlar
    fields: id, full_name, first_name, last_name, birth_date, gender, department, position,
    company_phone, personal_phone, email, contract_start_date, contract_end_date, probation_end_date,
-   gross_salary, net_salary, children_count, children_birth_dates, status, marital_status, education_level
+   gross_salary, net_salary, children_count, children_birth_dates (array of YYYY-MM-DD), status, marital_status, education_level
 
 3. meetings — görüşlər
    fields: id, date, time, employee, meeting_setter, company, contact_person, project, meeting_type,
@@ -3181,7 +3198,9 @@ MongoDB database with these collections (all documents use `id` field, `_id` is 
     fields: id, name, date, event_type, location
 
 Dates are stored as ISO strings (YYYY-MM-DD) or ISO datetimes. Birth dates follow YYYY-MM-DD.
-To match month (e.g., June birthdays): use {"$regex": "^\\\\d{4}-06-"} on date fields.
+Current reference date: {today}
+Age calculation: if someone should be older than N years, their birth_date should be BEFORE (currentYear - N)-01-01.
+For "daha böyük/yuxarı yaş" use $lt (before threshold). For "kiçik yaş" use $gt (after threshold).
 """
 
 AI_SYSTEM_PROMPT = """You are an AI data analyst for Marsol Group B2B networking ERP system.
@@ -3221,25 +3240,49 @@ SCHEMA:
 
 Examples:
 
-Q: "5 yaş üzəri uşağı olan sahibkarlar"
+Q: "3 yaşdan yuxarı uşağı olan sahibkarlar" (today is 2026-02-19, so child born before 2023-02-19)
 A: {
-  "title": "5 yaş üzəri uşağı olan sahibkarlar",
+  "title": "3 yaşdan yuxarı uşağı olan sahibkarlar",
   "collection": "companies",
   "pipeline": [
-    {"$match": {"children_info": {"$elemMatch": {"birth_date": {"$lt": "2020-01-01", "$ne": ""}}}}},
-    {"$project": {"_id": 0, "Sahibkar": "$owner_name", "Şirkət": "$brand_name", "Telefon": "$owner_phone", "Email": "$owner_email", "Uşaq sayı": "$children_count", "Paket": "$package"}},
+    {"$match": {"owners.children.birth_date": {"$exists": true, "$ne": "", "$lt": "2023-02-19"}}},
+    {"$unwind": {"path": "$owners", "preserveNullAndEmptyArrays": false}},
+    {"$match": {"owners.children": {"$elemMatch": {"birth_date": {"$lt": "2023-02-19", "$ne": ""}}}}},
+    {"$project": {
+      "_id": 0,
+      "Sahibkar": {"$trim": {"input": {"$concat": [{"$ifNull": ["$owners.first_name", ""]}, " ", {"$ifNull": ["$owners.last_name", ""]}]}}},
+      "Şirkət": "$brand_name",
+      "Telefon": {"$ifNull": ["$owners.phone", "$owner_phone"]},
+      "Email": {"$ifNull": ["$owners.email", "$owner_email"]},
+      "Uşaqlar": {
+        "$reduce": {
+          "input": {"$filter": {"input": "$owners.children", "as": "c", "cond": {"$and": [{"$ne": ["$$c.birth_date", ""]}, {"$lt": ["$$c.birth_date", "2023-02-19"]}]}}},
+          "initialValue": "",
+          "in": {"$concat": ["$$value", {"$cond": [{"$eq": ["$$value", ""]}, "", ", "]}, {"$ifNull": ["$$this.name", ""]}, " (", {"$ifNull": ["$$this.birth_date", ""]}, ")"]}
+        }
+      },
+      "Paket": "$package"
+    }},
     {"$sort": {"Sahibkar": 1}}
   ],
-  "list_mapping": {"name": "Sahibkar", "company": "Şirkət", "phone": "Telefon", "email": "Email", "position": null, "notes": "Paket"}
+  "list_mapping": {"name": "Sahibkar", "company": "Şirkət", "phone": "Telefon", "email": "Email", "position": null, "notes": "Uşaqlar"}
 }
 
 Q: "iyun ayında doğum günü olan sahibkarlar"
 A: {
-  "title": "İyun ayında doğum günləri",
+  "title": "İyun ayında doğum günləri (sahibkarlar)",
   "collection": "companies",
   "pipeline": [
-    {"$match": {"owner_birth_date": {"$regex": "^\\\\d{4}-06-"}}},
-    {"$project": {"_id": 0, "Sahibkar": "$owner_name", "Şirkət": "$brand_name", "Doğum tarixi": "$owner_birth_date", "Telefon": "$owner_phone", "Email": "$owner_email"}},
+    {"$unwind": {"path": "$owners", "preserveNullAndEmptyArrays": false}},
+    {"$match": {"owners.birth_date": {"$regex": "^\\\\d{4}-06-"}}},
+    {"$project": {
+      "_id": 0,
+      "Sahibkar": {"$trim": {"input": {"$concat": [{"$ifNull": ["$owners.first_name", ""]}, " ", {"$ifNull": ["$owners.last_name", ""]}]}}},
+      "Şirkət": "$brand_name",
+      "Doğum tarixi": "$owners.birth_date",
+      "Telefon": "$owners.phone",
+      "Email": "$owners.email"
+    }},
     {"$sort": {"Doğum tarixi": 1}}
   ],
   "list_mapping": {"name": "Sahibkar", "company": "Şirkət", "phone": "Telefon", "email": "Email", "position": null, "notes": "Doğum tarixi"}
@@ -3268,6 +3311,29 @@ A: {
     {"$sort": {"Say": -1}}
   ],
   "list_mapping": {"name": null, "company": null, "phone": null, "email": null, "position": null, "notes": null}
+}
+
+Q: "aktiv üzv şirkətlər ad və telefon ilə"
+A: {
+  "title": "Aktiv üzv şirkətlər",
+  "collection": "companies",
+  "pipeline": [
+    {"$match": {"status": "Aktiv"}},
+    {"$project": {
+      "_id": 0,
+      "Şirkət": "$brand_name",
+      "Sahibkar": {"$cond": [
+        {"$gt": [{"$size": {"$ifNull": ["$owners", []]}}, 0]},
+        {"$trim": {"input": {"$concat": [{"$ifNull": [{"$arrayElemAt": ["$owners.first_name", 0]}, ""]}, " ", {"$ifNull": [{"$arrayElemAt": ["$owners.last_name", 0]}, ""]}]}}},
+        "$owner_name"
+      ]},
+      "Telefon": {"$ifNull": [{"$arrayElemAt": ["$owners.phone", 0]}, "$owner_phone"]},
+      "Email": {"$ifNull": [{"$arrayElemAt": ["$owners.email", 0]}, "$owner_email"]},
+      "Paket": "$package"
+    }},
+    {"$sort": {"Şirkət": 1}}
+  ],
+  "list_mapping": {"name": "Sahibkar", "company": "Şirkət", "phone": "Telefon", "email": "Email", "position": null, "notes": "Paket"}
 }
 
 Return ONLY the JSON object, no markdown, no commentary.
@@ -3320,7 +3386,9 @@ async def ai_analyze(data: dict, current_user: dict = Depends(get_current_user))
     # Model is configurable via env; defaults to Claude Sonnet 4.5 (OpenAI GPT-5.2 experiencing timeouts)
     ai_provider = os.environ.get("AI_ANALYST_PROVIDER", "anthropic")
     ai_model = os.environ.get("AI_ANALYST_MODEL", "claude-sonnet-4-5-20250929")
-    chat = LlmChat(api_key=emergent_key, session_id=session_id, system_message=AI_SYSTEM_PROMPT).with_model(ai_provider, ai_model)
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    system_prompt = AI_SYSTEM_PROMPT.replace("{today}", today_str)
+    chat = LlmChat(api_key=emergent_key, session_id=session_id, system_message=system_prompt).with_model(ai_provider, ai_model)
 
     try:
         ai_text = await chat.send_message(UserMessage(text=prompt))
