@@ -38,8 +38,6 @@ const salesSubItems = [
   { path: '/sales/members', label: 'Üzvlər', icon: Users2, module: 'members' },
   { path: '/sales/obligations', label: 'Öhdəliklər', icon: FileCheck, module: 'obligations' },
   { path: '/sales/obligation-history', label: 'Öhdəlik tarixçəsi', icon: History, module: 'obligations' },
-  { path: '/sales/membership-forum', label: 'Üzvlük forumu', icon: MessageCircle, module: 'sales' },
-  { path: '/sales/proposals', label: 'Təkliflər', icon: Lightbulb, module: 'sales' },
   { path: '/sales/invitations', label: 'Dəvətlər', icon: Send, module: 'sales' },
 ];
 
