@@ -1371,12 +1371,18 @@ async def update_forum_fields(data: dict, current_user: dict = Depends(check_per
 
 
 async def _get_all_options():
-    """Helper: get dynamic options for forms - from actual DB, no hardcoded fallbacks"""
-    positions_db = await db.positions.find({}, {"_id": 0}).to_list(500)
+    """Helper: get dynamic options for forms - mirrors settings endpoints with fallbacks"""
     regions_db = await db.regions.find({}, {"_id": 0}).to_list(500)
+    if not regions_db:
+        regions_db = [{"name": n} for n in ["Bakı", "Sumqayıt", "Gəncə", "Lənkəran", "Mingəçevir", "Şəki", "Şirvan", "Naxçıvan", "Abşeron", "Digər"]]
+    positions_db = await db.positions.find({}, {"_id": 0}).to_list(500)
+    if not positions_db:
+        positions_db = [{"name": n} for n in ["Direktor", "Təsisçi", "Baş direktor", "İcraçı direktor", "Kommersiya direktoru", "Maliyyə direktoru"]]
     activities_db = await db.activities.find({}, {"_id": 0}).to_list(500)
-    company_sizes = await _get_setting_list("company_sizes", [])
-    education_levels = await _get_setting_list("education_levels", [])
+    if not activities_db:
+        activities_db = [{"name": n} for n in ["Networking", "Təlim", "Sərgi", "Forum", "Mentorluq", "İş birliyi"]]
+    company_sizes = await _get_setting_list("company_sizes", ["Böyük", "Orta", "Kiçik", "Mikro"])
+    education_levels = await _get_setting_list("education_levels", ["Orta təhsil", "Sub bakalavr", "Bakalavr", "Magistratura", "Doktorantura"])
     return {
         "company_sizes": company_sizes,
         "regions": [r["name"] for r in regions_db],
