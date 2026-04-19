@@ -42,6 +42,7 @@ Marsol Group — 500+ üzvü olan B2B netvörkinq şirkətidir. Sahibkarları g�
 | 20 | Bildirişlər | ✅ |
 | 21 | RBAC (dynamic roles, check_permission, PermissionContext) | ✅ |
 | 22 | Public Form (/form/:token — dinamik dropdown + upload) | ✅ |
+| 23 | **Hesabatlar: AI Data Analyst** (Azərbaycan dilində prompt, GPT/Claude-driven MongoDB aggregation, cədvəl, Excel export, Siyahıya 1-kliklə əlavə) | ✅ Iter 23 |
 
 ### Placeholder Modullar (ComingSoon)
 Marketinq, Hesabatlar, Fayllar, Qeydlər
@@ -66,6 +67,7 @@ Marketinq, Hesabatlar, Fayllar, Qeydlər
 - [x] Projects/Invitations/ContactLists modulları — ✅ Iter 21
 - [x] Davamiyyət modulu — ✅ Iter 22
 - [x] Barter Əməliyyatları — ✅ Iter 22
+- [x] **AI Data Analyst (Hesabatlar)** — təbii dil sorğuları, cədvəl, Excel export, Siyahıya əlavə — ✅ Iter 23
 
 ### P1
 - [ ] PDF Reports generation (Hesabatlar modulu)
