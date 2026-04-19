@@ -1317,6 +1317,108 @@ async def delete_assembly(assembly_id: str, current_user: dict = Depends(check_p
 
 # ==================== OPTIONS ====================
 
+# ==================== MEMBERSHIP FORUM ====================
+
+COMPANY_FORM_FIELDS = [
+    {"key": "legal_name", "label": "Hüquqi ad"},
+    {"key": "sector", "label": "Sektor"},
+    {"key": "sub_sector", "label": "Alt sektor"},
+    {"key": "company_size", "label": "Şirkət ölçüsü"},
+    {"key": "registration_date", "label": "Qeydiyyat tarixi"},
+    {"key": "address", "label": "Ünvan"},
+    {"key": "bank_details", "label": "Bank rekvizitləri"},
+    {"key": "owner_email", "label": "Sahibkar email"},
+    {"key": "owner_social_links", "label": "Sahibkar sosial linklər"},
+    {"key": "co_founders", "label": "Həmtəsisçilər"},
+    {"key": "representative_name", "label": "Əlaqədar şəxs"},
+    {"key": "representative_phone", "label": "Əlaqədar şəxs telefon"},
+    {"key": "representative_email", "label": "Əlaqədar şəxs email"},
+    {"key": "company_phone", "label": "Şirkət telefonu"},
+    {"key": "company_email", "label": "Şirkət email"},
+    {"key": "website", "label": "Veb sayt"},
+    {"key": "company_website", "label": "Veb sayt"},
+    {"key": "company_social_links", "label": "Şirkət sosial linklər"},
+    {"key": "children_count", "label": "İşçi sayı"},
+    {"key": "children_info", "label": "İşçi məlumatları"},
+    {"key": "reference_source", "label": "Referans mənbəsi"},
+    {"key": "reference_person", "label": "Referans şəxs"},
+    {"key": "reference_company", "label": "Referans şirkət"},
+]
+
+@api_router.get("/forum/fields")
+async def get_forum_fields(current_user: dict = Depends(get_current_user)):
+    """Get available form fields and which are enabled"""
+    settings = await db.setting_lists.find_one({"key": "forum_enabled_fields"}, {"_id": 0})
+    enabled = settings.get("values", []) if settings else [f["key"] for f in COMPANY_FORM_FIELDS]
+    # Also get custom fields for companies
+    custom_fields = await db.custom_fields.find({"module": "companies"}, {"_id": 0}).to_list(100)
+    all_fields = COMPANY_FORM_FIELDS.copy()
+    for cf in custom_fields:
+        all_fields.append({"key": f"custom_{cf['id']}", "label": cf.get("label", cf.get("name", "")), "custom": True})
+    return {"fields": all_fields, "enabled": enabled}
+
+@api_router.put("/forum/fields")
+async def update_forum_fields(data: dict, current_user: dict = Depends(check_permission("settings", "write"))):
+    enabled = data.get("enabled", [])
+    await db.setting_lists.update_one({"key": "forum_enabled_fields"}, {"$set": {"values": enabled}}, upsert=True)
+    return {"message": "Forum sahələri yeniləndi", "enabled": enabled}
+
+@api_router.post("/forum/generate-link/{company_id}")
+async def generate_forum_link(company_id: str, current_user: dict = Depends(get_current_user)):
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
+    token = str(uuid.uuid4())[:12]
+    await db.forum_tokens.update_one(
+        {"company_id": company_id},
+        {"$set": {"token": token, "company_id": company_id, "created_at": datetime.now(timezone.utc).isoformat(), "created_by": current_user.get("name", "")}},
+        upsert=True
+    )
+    return {"token": token, "company_id": company_id}
+
+# PUBLIC endpoints - no auth required
+@api_router.get("/public/form/{token}")
+async def get_public_form(token: str):
+    form_token = await db.forum_tokens.find_one({"token": token}, {"_id": 0})
+    if not form_token:
+        raise HTTPException(status_code=404, detail="Form tapılmadı və ya vaxtı keçib")
+    company = await db.companies.find_one({"id": form_token["company_id"]}, {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
+    settings = await db.setting_lists.find_one({"key": "forum_enabled_fields"}, {"_id": 0})
+    enabled = settings.get("values", []) if settings else [f["key"] for f in COMPANY_FORM_FIELDS]
+    fields_info = {f["key"]: f["label"] for f in COMPANY_FORM_FIELDS}
+    custom_fields = await db.custom_fields.find({"module": "companies"}, {"_id": 0}).to_list(100)
+    for cf in custom_fields:
+        fields_info[f"custom_{cf['id']}"] = cf.get("label", cf.get("name", ""))
+    enabled_fields = [{"key": k, "label": fields_info.get(k, k)} for k in enabled if k in fields_info]
+    return {
+        "company_name": company.get("brand_name", ""),
+        "owner_phone": company.get("owner_phone", ""),
+        "owner_name": company.get("owner_name", ""),
+        "fields": enabled_fields,
+        "current_values": {k: company.get(k, "") for k in enabled}
+    }
+
+@api_router.post("/public/form/{token}")
+async def submit_public_form(token: str, data: dict):
+    form_token = await db.forum_tokens.find_one({"token": token}, {"_id": 0})
+    if not form_token:
+        raise HTTPException(status_code=404, detail="Form tapılmadı")
+    company_id = form_token["company_id"]
+    settings = await db.setting_lists.find_one({"key": "forum_enabled_fields"}, {"_id": 0})
+    enabled = settings.get("values", []) if settings else [f["key"] for f in COMPANY_FORM_FIELDS]
+    update_data = {}
+    for key in enabled:
+        if key in data:
+            update_data[key] = data[key]
+    if update_data:
+        update_data["form_submitted_at"] = datetime.now(timezone.utc).isoformat()
+        await db.companies.update_one({"id": company_id}, {"$set": update_data})
+    return {"message": "Məlumatlar uğurla göndərildi. Təşəkkür edirik!"}
+
+
+
 # ==================== ROLES ====================
 
 @api_router.get("/roles")

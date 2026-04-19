@@ -317,6 +317,14 @@ export default function Companies() {
             <div className="ml-auto flex gap-2">
               <Badge className={v.status === 'Aktiv' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}>{v.status}</Badge>
               <Button size="sm" variant="outline" onClick={() => { setViewingCompany(null); handleEdit(v); }}><Pencil className="w-4 h-4 mr-1" />Redaktə</Button>
+              <Button size="sm" variant="outline" className="text-purple-600 border-purple-200 hover:bg-purple-50" onClick={async () => {
+                try {
+                  const res = await axios.post(`${API}/forum/generate-link/${v.id}`, {}, { headers });
+                  const link = `${window.location.origin}/form/${res.data.token}`;
+                  await navigator.clipboard.writeText(link);
+                  toast.success('Forum linki kopyalandı!');
+                } catch { toast.error('Xəta baş verdi'); }
+              }} data-testid="forum-link-btn"><Link className="w-4 h-4 mr-1" />Forum linki</Button>
             </div>
           </div>
           <Tabs defaultValue="company">

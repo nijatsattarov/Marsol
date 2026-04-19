@@ -26,6 +26,7 @@ import ObligationHistory from "./pages/ObligationHistory";
 import MembershipForum from "./pages/MembershipForum";
 import Proposals from "./pages/Proposals";
 import Invitations from "./pages/Invitations";
+import PublicForm from "./pages/PublicForm";
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/form/:token" element={<PublicForm />} />
           
           {/* Protected Routes */}
           <Route path="/" element={<DashboardLayout />}>

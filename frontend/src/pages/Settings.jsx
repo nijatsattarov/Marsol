@@ -95,6 +95,8 @@ export default function Settings() {
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
   const [roleForm, setRoleForm] = useState({ name: '', permissions: {} });
+  const [forumFields, setForumFields] = useState([]);
+  const [forumEnabled, setForumEnabled] = useState([]);
 
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0, invitation_count: 0 });
@@ -130,7 +132,7 @@ export default function Settings() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes, mcRes, mtRes, lsRes, stRes, wdRes, rolesRes] = await Promise.all([
+      const [pkgRes, prjRes, cfRes, usrRes, secRes, subSecRes, posRes, actRes, regRes, mcRes, mtRes, lsRes, stRes, wdRes, rolesRes, ffRes] = await Promise.all([
         axios.get(`${API}/settings/packages`, { headers }),
         axios.get(`${API}/settings/projects`, { headers }),
         axios.get(`${API}/settings/custom-fields`, { headers }),
@@ -146,6 +148,7 @@ export default function Settings() {
         axios.get(`${API}/settings/lists/sale_types`, { headers }),
         axios.get(`${API}/settings/lists/membership_warning_days`, { headers }),
         axios.get(`${API}/roles`, { headers }),
+        axios.get(`${API}/forum/fields`, { headers }),
       ]);
       setPackages(pkgRes.data);
       setProjects(prjRes.data);
@@ -162,6 +165,8 @@ export default function Settings() {
       setSaleTypes(stRes.data || []);
       setWarningDays((wdRes.data && wdRes.data[0]) || '10');
       setRoles(rolesRes.data || []);
+      setForumFields(ffRes.data.fields || []);
+      setForumEnabled(ffRes.data.enabled || []);
     } catch (err) {
       console.error('Error fetching settings:', err);
     } finally {
@@ -486,6 +491,7 @@ export default function Settings() {
           <TabsTrigger value="lead-sources" className="text-xs sm:text-sm" data-testid="tab-lead-sources"><Target className="w-4 h-4 mr-1 hidden sm:inline" />Lead mənbələri</TabsTrigger>
           <TabsTrigger value="sale-types" className="text-xs sm:text-sm" data-testid="tab-sale-types"><TrendingUp className="w-4 h-4 mr-1 hidden sm:inline" />Satış növləri</TabsTrigger>
           <TabsTrigger value="warning-days" className="text-xs sm:text-sm" data-testid="tab-warning-days"><Calendar className="w-4 h-4 mr-1 hidden sm:inline" />Xəbərdarlıq</TabsTrigger>
+          <TabsTrigger value="forum-fields" className="text-xs sm:text-sm" data-testid="tab-forum-fields"><Eye className="w-4 h-4 mr-1 hidden sm:inline" />Forum sahələri</TabsTrigger>
           <TabsTrigger value="custom-fields" className="text-xs sm:text-sm" data-testid="tab-custom-fields"><Columns3 className="w-4 h-4 mr-1 hidden sm:inline" />Xüsusi sahələr</TabsTrigger>
           <TabsTrigger value="roles" className="text-xs sm:text-sm" data-testid="tab-roles"><Shield className="w-4 h-4 mr-1 hidden sm:inline" />Rollar</TabsTrigger>
           <TabsTrigger value="users" className="text-xs sm:text-sm" data-testid="tab-users"><Users className="w-4 h-4 mr-1 hidden sm:inline" />İstifadəçilər</TabsTrigger>
@@ -947,6 +953,47 @@ export default function Settings() {
             </div>
           </div>
         </TabsContent>
+
+
+        {/* ========= FORUM FIELDS TAB ========= */}
+        <TabsContent value="forum-fields">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold" style={{ color: '#3D4F6F' }}>Üzvlük Forum Sahələri</h2>
+                <p className="text-xs text-slate-500 mt-1">Xarici formda hansı sahələrin görünəcəyini seçin</p>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setForumEnabled(forumFields.map(f => f.key))} data-testid="select-all-fields">Hamısını seç</Button>
+                <Button size="sm" variant="outline" onClick={() => setForumEnabled([])} data-testid="deselect-all-fields">Heç birini</Button>
+                <Button size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125]" onClick={async () => {
+                  try {
+                    await axios.put(`${API}/forum/fields`, { enabled: forumEnabled }, { headers });
+                    toast.success('Forum sahələri yadda saxlandı');
+                  } catch { toast.error('Xəta baş verdi'); }
+                }} data-testid="save-forum-fields-btn">Yadda saxla</Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              {forumFields.map(field => (
+                <label key={field.key} className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${forumEnabled.includes(field.key) ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-100'}`} data-testid={`forum-field-${field.key}`}>
+                  <input
+                    type="checkbox"
+                    checked={forumEnabled.includes(field.key)}
+                    onChange={(e) => {
+                      if (e.target.checked) setForumEnabled([...forumEnabled, field.key]);
+                      else setForumEnabled(forumEnabled.filter(k => k !== field.key));
+                    }}
+                    className="w-4 h-4 accent-[#9ACD32]"
+                  />
+                  <span className="text-sm text-slate-700">{field.label}</span>
+                  {field.custom && <span className="text-[10px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded">Xüsusi</span>}
+                </label>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
+
 
 
         {/* ========= ROLES TAB ========= */}
