@@ -39,6 +39,7 @@ const salesSubItems = [
   { path: '/sales/obligations', label: 'Öhdəliklər', icon: FileCheck, module: 'obligations' },
   { path: '/sales/obligation-history', label: 'Öhdəlik tarixçəsi', icon: History, module: 'obligations' },
   { path: '/sales/invitations', label: 'Dəvətlər', icon: Send, module: 'sales' },
+  { path: '/sales/contact-lists', label: 'Siyahılar', icon: ClipboardList, module: 'sales' },
 ];
 
 const menuItems = [

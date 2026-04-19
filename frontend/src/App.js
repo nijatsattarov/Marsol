@@ -26,6 +26,7 @@ import ObligationHistory from "./pages/ObligationHistory";
 import MembershipForum from "./pages/MembershipForum";
 import Proposals from "./pages/Proposals";
 import Invitations from "./pages/Invitations";
+import ContactLists from "./pages/ContactLists";
 import PublicForm from "./pages/PublicForm";
 
 function App() {
@@ -52,6 +53,7 @@ function App() {
             <Route path="sales/membership-forum" element={<MembershipForum />} />
             <Route path="sales/proposals" element={<Proposals />} />
             <Route path="sales/invitations" element={<Invitations />} />
+            <Route path="sales/contact-lists" element={<ContactLists />} />
             <Route path="marketing" element={<Marketing />} />
             <Route path="projects" element={<Projects />} />
             <Route path="organization" element={<Organization />} />

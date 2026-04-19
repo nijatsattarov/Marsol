@@ -1,0 +1,83 @@
+{
+  "summary": "Iteration 21 — Full E2E testing of Projects/Events, Event Invitations, and Contact Lists modules for Marsol B2B networking ERP. Backend: 25/25 tests passed (project_events CRUD, event_invitations CRUD + status transitions + convert-to-lead, contact_lists CRUD + contacts + Excel import + convert-to-lead, cascade delete, guest_count/attended_count aggregation, RBAC for sales/accountant, regression for old Obligations /api/invitations and /api/obligations/dashboard). Frontend: sidebar menus (menu-sales-contact-lists, menu-sales-invitations) render under Satış group, all three pages (contact-lists-page, invitations-page, projects-page) load, Add modals open with correct field structure, RBAC hides write buttons for Mühasib (accountant) on both /sales/contact-lists and /projects.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "App globally", "issues": ["On fresh page load a couple of background /api calls return 401 before token is attached (AxiosError logged). Non-blocking, but UI should gate API calls behind token presence or silently retry after auth context resolves."]}
+    ]
+  },
+
+  "passed_tests": [
+    "POST /api/auth/login — admin/sales/accountant all succeed",
+    "GET /api/project-events — returns list with guest_count and attended_count fields",
+    "POST /api/project-events — admin creates event, initial guest_count=0/attended_count=0",
+    "PUT /api/project-events/{id} — status update persists (verified via GET)",
+    "DELETE /api/project-events/{id} — cascade deletes related event_invitations (verified event_id filter returns [])",
+    "GET /api/event-invitations?event_id=X — filter works",
+    "POST /api/event-invitations — creates guest with default status 'Dəvət edilib'",
+    "PUT /api/event-invitations/{id} — status transitions Gələcəm → Gəlməyəcəm → İştirak etdi all work",
+    "POST /api/event-invitations/{id}/convert-to-lead — creates sales_lead with SB-XXX code and writes converted_to_lead flag back",
+    "guest_count = count of event_invitations matching event_id; attended_count = status 'İştirak etdi' — verified after 3 guests + 1 attended",
+    "GET /api/contact-lists — returns lists with contact_count aggregate",
+    "POST /api/contact-lists — creates list with initial contact_count=0",
+    "POST /api/contact-lists/{id}/contacts — adds contact; contact_count increments",
+    "POST /api/contact-lists/{id}/import — accepts JSON {contacts:[{Ad,Soyad,Şirkət,...}]} AZ-column mapping and English keys; bulk inserts",
+    "POST /api/contact-lists/{id}/import with empty contacts → 400",
+    "POST /api/contacts/{id}/convert-to-lead — creates lead with SB-XXX code",
+    "RBAC: Satış meneceri CAN POST event-invitations and contact-lists",
+    "RBAC: Mühasib is 401/403 on POST /api/event-invitations and /api/contact-lists",
+    "Regression: GET /api/obligations/dashboard still works (Obligations module untouched)",
+    "Regression: GET /api/invitations (old Obligations-based endpoint) still works and is separate from /api/event-invitations",
+    "Frontend: Sidebar shows 'Satış > Siyahılar' (menu-sales-contact-lists) and 'Satış > Dəvətlər' (menu-sales-invitations) for admin",
+    "Frontend: /sales/contact-lists renders [data-testid=contact-lists-page], 'Yeni Siyahı' modal opens with Başlıq + Açıqlama fields",
+    "Frontend: /sales/invitations renders [data-testid=invitations-page], Excel button + 'Qonaq əlavə et' button visible, modal contains Tədbir Select + Qonaq adı + Şirkət + Vəzifə + Telefon + Email + Qeyd",
+    "Frontend: /projects renders [data-testid=projects-page], 'Yeni Layihə' (add-event-btn) creates modal opens",
+    "Frontend RBAC: Mühasib sidebar does NOT show Satış or Layihələr groups at all (module-level hide); when navigated directly to /sales/contact-lists the 'Yeni Siyahı' button is hidden; on /projects the add-event-btn is hidden"
+  ],
+
+  "failed_tests": [],
+
+  "test_report_links": [
+    "/app/backend/tests/test_iteration21_events_invitations_contactlists.py",
+    "/app/test_reports/pytest/pytest_results_iter21.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "lead_code generation uses db.sales_leads.count_documents({}) which is not concurrency-safe and will collide under parallel conversion. Consider an atomic counter (findOneAndUpdate on a counters doc) or UUID-based code.",
+    "convert_contact_to_lead does NOT write converted=True/lead_id back to the contact (unlike convert_event_invitation_to_lead which does). Inconsistency — contacts can be converted multiple times and produce duplicate leads.",
+    "/api/contact-lists/{list_id}/import silently ignores list_id validation: non-existent list still returns 200 with inserted rows that become orphan contacts. Add a pre-check that the list exists (404) before insert.",
+    "update_project_event and update_event_invitation do not return 404 when id doesn't exist — update_one matchedCount=0 still returns the (None) doc. Should raise HTTPException on missing.",
+    "server.py is 2800+ lines — consider splitting into routers (projects.py, invitations.py, contact_lists.py) for maintainability (triggers the >700-line rule in review guidelines)."
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_iteration21_events_invitations_contactlists.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (25/25 tests passed)",
+    "frontend": "100% (all data-testid selectors present, pages load, modals open, RBAC hides write controls correctly)"
+  },
+
+  "test_credentials": {
+    "admin": "settings@marsol.az / marsol123",
+    "sales": "satis@marsol.az / marsol123",
+    "accountant": "muhasib@marsol.az / marsol123"
+  },
+
+  "seed_data_creation": "All TEST_-prefixed data (events, invitations, contact lists, contacts, leads) cleaned up in the final test_z_cleanup_created_data step. A couple of TEST_ leads may persist if DELETE /api/sales-leads/{id} endpoint is not implemented — main agent can verify.",
+
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Iteration 21 verified the new B2B networking stack end-to-end. Key endpoints live under /api/project-events (replaces old /api/projects where applicable), /api/event-invitations (NEW — separate from legacy /api/invitations which is kept for Obligations module), and /api/contact-lists. Cascade: deleting a project-event also deletes its event_invitations. Aggregation: GET /api/project-events enriches each doc with guest_count+attended_count on the fly. Convert flows: invitation→lead adds {converted_to_lead:true, lead_id} back to invitation; contact→lead does NOT (potential bug). RBAC permission key is 'sales' for both contact_lists and event_invitations; 'projects' for project_events. All frontend pages use data-testid contact-lists-page / invitations-page / projects-page / add-event-btn and sidebar menu-sales-contact-lists / menu-sales-invitations."
+}

@@ -33,7 +33,7 @@ export default function Invitations() {
   const fetchData = useCallback(async () => {
     try {
       const [iRes, eRes] = await Promise.all([
-        axios.get(`${API}/invitations`, { headers }),
+        axios.get(`${API}/event-invitations`, { headers }),
         axios.get(`${API}/project-events`, { headers }),
       ]);
       setInvitations(iRes.data); setEvents(eRes.data);
@@ -46,8 +46,8 @@ export default function Invitations() {
     try {
       const payload = { ...form };
       if (!payload.event_name) { const ev = events.find(x => x.id === payload.event_id); if (ev) payload.event_name = ev.name; }
-      if (editing) { await axios.put(`${API}/invitations/${editing.id}`, payload, { headers }); toast.success('Yeniləndi'); }
-      else { await axios.post(`${API}/invitations`, payload, { headers }); toast.success('Qonaq əlavə edildi'); }
+      if (editing) { await axios.put(`${API}/event-invitations/${editing.id}`, payload, { headers }); toast.success('Yeniləndi'); }
+      else { await axios.post(`${API}/event-invitations`, payload, { headers }); toast.success('Qonaq əlavə edildi'); }
       setShowModal(false); fetchData();
     } catch { toast.error('Xəta'); }
   };
@@ -56,12 +56,12 @@ export default function Invitations() {
     try {
       const data = { status };
       if (status === 'Gəlməyəcəm') { const r = prompt('Səbəb:'); if (r) data.decline_reason = r; }
-      await axios.put(`${API}/invitations/${id}`, data, { headers }); toast.success('Status yeniləndi'); fetchData();
+      await axios.put(`${API}/event-invitations/${id}`, data, { headers }); toast.success('Status yeniləndi'); fetchData();
     } catch { toast.error('Xəta'); }
   };
 
   const handleConvert = async (id) => {
-    try { const res = await axios.post(`${API}/invitations/${id}/convert-to-lead`, {}, { headers }); toast.success(`Lead yaradıldı: ${res.data.lead_code}`); fetchData(); }
+    try { const res = await axios.post(`${API}/event-invitations/${id}/convert-to-lead`, {}, { headers }); toast.success(`Lead yaradıldı: ${res.data.lead_code}`); fetchData(); }
     catch { toast.error('Xəta'); }
   };
 
@@ -149,7 +149,7 @@ export default function Invitations() {
                       {!inv.converted_to_lead && <button onClick={() => handleConvert(inv.id)} className="p-1.5 hover:bg-green-50 rounded-lg" title="Lead-ə çevir"><ArrowRight className="w-3.5 h-3.5 text-green-500" /></button>}
                       {inv.converted_to_lead && <Badge className="bg-green-50 text-green-600 text-[10px]">Lead</Badge>}
                       <button onClick={() => { setEditing(inv); setForm({...inv}); setShowModal(true); }} className="p-1.5 hover:bg-slate-100 rounded-lg"><Pencil className="w-3.5 h-3.5 text-slate-400" /></button>
-                      <button onClick={async () => { if (!window.confirm('Silmək?')) return; await axios.delete(`${API}/invitations/${inv.id}`, { headers }); toast.success('Silindi'); fetchData(); }} className="p-1.5 hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
+                      <button onClick={async () => { if (!window.confirm('Silmək?')) return; await axios.delete(`${API}/event-invitations/${inv.id}`, { headers }); toast.success('Silindi'); fetchData(); }} className="p-1.5 hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
                     </div>}
                   </td>
                 </tr>

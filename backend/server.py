@@ -927,8 +927,8 @@ async def delete_meeting(meeting_id: str, current_user: dict = Depends(check_per
 async def get_project_events(current_user: dict = Depends(get_current_user)):
     events = await db.project_events.find({}, {"_id": 0}).sort("date", -1).to_list(500)
     for e in events:
-        e["guest_count"] = await db.invitations.count_documents({"event_id": e["id"]})
-        e["attended_count"] = await db.invitations.count_documents({"event_id": e["id"], "status": "İştirak etdi"})
+        e["guest_count"] = await db.event_invitations.count_documents({"event_id": e["id"]})
+        e["attended_count"] = await db.event_invitations.count_documents({"event_id": e["id"], "status": "İştirak etdi"})
     return events
 
 @api_router.post("/project-events")
@@ -961,13 +961,13 @@ async def update_project_event(event_id: str, data: dict, current_user: dict = D
 @api_router.delete("/project-events/{event_id}")
 async def delete_project_event(event_id: str, current_user: dict = Depends(check_permission("projects", "write"))):
     await db.project_events.delete_one({"id": event_id})
-    await db.invitations.delete_many({"event_id": event_id})
+    await db.event_invitations.delete_many({"event_id": event_id})
     return {"message": "Layihə silindi"}
 
-# ==================== INVITATIONS (DƏVƏTLƏR/QONAQLAR) ====================
+# ==================== EVENT INVITATIONS (QONAQLAR / DƏVƏTLƏR) ====================
 
-@api_router.get("/invitations")
-async def get_invitations(
+@api_router.get("/event-invitations")
+async def get_event_invitations(
     event_id: Optional[str] = None,
     status: Optional[str] = None,
     invited_by: Optional[str] = None,
@@ -980,11 +980,11 @@ async def get_invitations(
         query["status"] = status
     if invited_by and invited_by != "all":
         query["invited_by"] = invited_by
-    invitations = await db.invitations.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    invitations = await db.event_invitations.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
     return invitations
 
-@api_router.post("/invitations")
-async def create_invitation(data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
+@api_router.post("/event-invitations")
+async def create_event_invitation(data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
     doc = {
         "id": str(uuid.uuid4()),
         "event_id": data.get("event_id", ""),
@@ -1000,25 +1000,25 @@ async def create_invitation(data: dict, current_user: dict = Depends(check_permi
         "invited_by": current_user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
-    await db.invitations.insert_one(doc)
+    await db.event_invitations.insert_one(doc)
     doc.pop("_id", None)
     return doc
 
-@api_router.put("/invitations/{inv_id}")
-async def update_invitation(inv_id: str, data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
+@api_router.put("/event-invitations/{inv_id}")
+async def update_event_invitation(inv_id: str, data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
     update = {k: v for k, v in data.items() if k not in ("id",)}
-    await db.invitations.update_one({"id": inv_id}, {"$set": update})
-    doc = await db.invitations.find_one({"id": inv_id}, {"_id": 0})
+    await db.event_invitations.update_one({"id": inv_id}, {"$set": update})
+    doc = await db.event_invitations.find_one({"id": inv_id}, {"_id": 0})
     return doc
 
-@api_router.delete("/invitations/{inv_id}")
-async def delete_invitation(inv_id: str, current_user: dict = Depends(check_permission("sales", "write"))):
-    await db.invitations.delete_one({"id": inv_id})
+@api_router.delete("/event-invitations/{inv_id}")
+async def delete_event_invitation(inv_id: str, current_user: dict = Depends(check_permission("sales", "write"))):
+    await db.event_invitations.delete_one({"id": inv_id})
     return {"message": "Dəvət silindi"}
 
-@api_router.post("/invitations/{inv_id}/convert-to-lead")
-async def convert_invitation_to_lead(inv_id: str, current_user: dict = Depends(check_permission("sales", "write"))):
-    inv = await db.invitations.find_one({"id": inv_id}, {"_id": 0})
+@api_router.post("/event-invitations/{inv_id}/convert-to-lead")
+async def convert_event_invitation_to_lead(inv_id: str, current_user: dict = Depends(check_permission("sales", "write"))):
+    inv = await db.event_invitations.find_one({"id": inv_id}, {"_id": 0})
     if not inv:
         raise HTTPException(status_code=404, detail="Dəvət tapılmadı")
     count = await db.sales_leads.count_documents({})
@@ -1039,7 +1039,7 @@ async def convert_invitation_to_lead(inv_id: str, current_user: dict = Depends(c
     }
     await db.sales_leads.insert_one(lead)
     lead.pop("_id", None)
-    await db.invitations.update_one({"id": inv_id}, {"$set": {"converted_to_lead": True, "lead_id": lead["id"]}})
+    await db.event_invitations.update_one({"id": inv_id}, {"$set": {"converted_to_lead": True, "lead_id": lead["id"]}})
     return lead
 
 # ==================== CONTACT LISTS (SİYAHILAR) ====================
