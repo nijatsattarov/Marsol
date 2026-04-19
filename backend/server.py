@@ -920,6 +920,224 @@ async def delete_meeting(meeting_id: str, current_user: dict = Depends(check_per
     return {"message": "Görüş silindi"}
 
 
+
+# ==================== PROJECT EVENTS (LAYİHƏLƏR/TƏDBİRLƏR) ====================
+
+@api_router.get("/project-events")
+async def get_project_events(current_user: dict = Depends(get_current_user)):
+    events = await db.project_events.find({}, {"_id": 0}).sort("date", -1).to_list(500)
+    for e in events:
+        e["guest_count"] = await db.invitations.count_documents({"event_id": e["id"]})
+        e["attended_count"] = await db.invitations.count_documents({"event_id": e["id"], "status": "İştirak etdi"})
+    return events
+
+@api_router.post("/project-events")
+async def create_project_event(data: dict, current_user: dict = Depends(check_permission("projects", "write"))):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": data.get("name", ""),
+        "type": data.get("type", ""),
+        "date": data.get("date", ""),
+        "end_date": data.get("end_date", ""),
+        "location": data.get("location", ""),
+        "description": data.get("description", ""),
+        "status": data.get("status", "Planlaşdırılır"),
+        "created_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.project_events.insert_one(doc)
+    doc.pop("_id", None)
+    doc["guest_count"] = 0
+    doc["attended_count"] = 0
+    return doc
+
+@api_router.put("/project-events/{event_id}")
+async def update_project_event(event_id: str, data: dict, current_user: dict = Depends(check_permission("projects", "write"))):
+    update = {k: v for k, v in data.items() if k not in ("id",)}
+    await db.project_events.update_one({"id": event_id}, {"$set": update})
+    doc = await db.project_events.find_one({"id": event_id}, {"_id": 0})
+    return doc
+
+@api_router.delete("/project-events/{event_id}")
+async def delete_project_event(event_id: str, current_user: dict = Depends(check_permission("projects", "write"))):
+    await db.project_events.delete_one({"id": event_id})
+    await db.invitations.delete_many({"event_id": event_id})
+    return {"message": "Layihə silindi"}
+
+# ==================== INVITATIONS (DƏVƏTLƏR/QONAQLAR) ====================
+
+@api_router.get("/invitations")
+async def get_invitations(
+    event_id: Optional[str] = None,
+    status: Optional[str] = None,
+    invited_by: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    query = {}
+    if event_id and event_id != "all":
+        query["event_id"] = event_id
+    if status and status != "all":
+        query["status"] = status
+    if invited_by and invited_by != "all":
+        query["invited_by"] = invited_by
+    invitations = await db.invitations.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    return invitations
+
+@api_router.post("/invitations")
+async def create_invitation(data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "event_id": data.get("event_id", ""),
+        "event_name": data.get("event_name", ""),
+        "guest_name": data.get("guest_name", ""),
+        "guest_company": data.get("guest_company", ""),
+        "guest_position": data.get("guest_position", ""),
+        "guest_phone": data.get("guest_phone", ""),
+        "guest_email": data.get("guest_email", ""),
+        "status": "Dəvət edilib",
+        "decline_reason": "",
+        "notes": data.get("notes", ""),
+        "invited_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.invitations.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/invitations/{inv_id}")
+async def update_invitation(inv_id: str, data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
+    update = {k: v for k, v in data.items() if k not in ("id",)}
+    await db.invitations.update_one({"id": inv_id}, {"$set": update})
+    doc = await db.invitations.find_one({"id": inv_id}, {"_id": 0})
+    return doc
+
+@api_router.delete("/invitations/{inv_id}")
+async def delete_invitation(inv_id: str, current_user: dict = Depends(check_permission("sales", "write"))):
+    await db.invitations.delete_one({"id": inv_id})
+    return {"message": "Dəvət silindi"}
+
+@api_router.post("/invitations/{inv_id}/convert-to-lead")
+async def convert_invitation_to_lead(inv_id: str, current_user: dict = Depends(check_permission("sales", "write"))):
+    inv = await db.invitations.find_one({"id": inv_id}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Dəvət tapılmadı")
+    count = await db.sales_leads.count_documents({})
+    lead_code = f"SB-{str(count + 1).zfill(3)}"
+    lead = {
+        "id": str(uuid.uuid4()), "lead_code": lead_code,
+        "company_name": inv.get("guest_company", ""),
+        "contact_name": inv.get("guest_name", ""),
+        "position": inv.get("guest_position", ""),
+        "phone": inv.get("guest_phone", ""),
+        "email": inv.get("guest_email", ""),
+        "source": f"Dəvət - {inv.get('event_name', '')}",
+        "sale_type": "Üzvlük", "status": "Yeni",
+        "notes": inv.get("notes", ""),
+        "curator": current_user.get("name", ""),
+        "created_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.sales_leads.insert_one(lead)
+    lead.pop("_id", None)
+    await db.invitations.update_one({"id": inv_id}, {"$set": {"converted_to_lead": True, "lead_id": lead["id"]}})
+    return lead
+
+# ==================== CONTACT LISTS (SİYAHILAR) ====================
+
+@api_router.get("/contact-lists")
+async def get_contact_lists(current_user: dict = Depends(get_current_user)):
+    lists = await db.contact_lists.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    for l in lists:
+        l["contact_count"] = await db.contacts.count_documents({"list_id": l["id"]})
+    return lists
+
+@api_router.post("/contact-lists")
+async def create_contact_list(data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "title": data.get("title", ""),
+        "description": data.get("description", ""),
+        "created_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.contact_lists.insert_one(doc)
+    doc.pop("_id", None)
+    doc["contact_count"] = 0
+    return doc
+
+@api_router.put("/contact-lists/{list_id}")
+async def update_contact_list(list_id: str, data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
+    await db.contact_lists.update_one({"id": list_id}, {"$set": {k: v for k, v in data.items() if k not in ("id",)}})
+    doc = await db.contact_lists.find_one({"id": list_id}, {"_id": 0})
+    return doc
+
+@api_router.delete("/contact-lists/{list_id}")
+async def delete_contact_list(list_id: str, current_user: dict = Depends(check_permission("sales", "write"))):
+    await db.contact_lists.delete_one({"id": list_id})
+    await db.contacts.delete_many({"list_id": list_id})
+    return {"message": "Siyahı silindi"}
+
+@api_router.get("/contact-lists/{list_id}/contacts")
+async def get_list_contacts(list_id: str, current_user: dict = Depends(get_current_user)):
+    contacts = await db.contacts.find({"list_id": list_id}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    return contacts
+
+@api_router.post("/contact-lists/{list_id}/contacts")
+async def add_contact_to_list(list_id: str, data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
+    doc = {
+        "id": str(uuid.uuid4()), "list_id": list_id,
+        "name": data.get("name", ""), "surname": data.get("surname", ""),
+        "company": data.get("company", ""), "position": data.get("position", ""),
+        "phone": data.get("phone", ""), "email": data.get("email", ""),
+        "notes": data.get("notes", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.contacts.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.post("/contact-lists/{list_id}/import")
+async def import_contacts(list_id: str, data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
+    contacts = data.get("contacts", [])
+    if not contacts:
+        raise HTTPException(status_code=400, detail="Boş siyahı")
+    docs = []
+    for c in contacts:
+        docs.append({
+            "id": str(uuid.uuid4()), "list_id": list_id,
+            "name": c.get("name", c.get("Ad", "")), "surname": c.get("surname", c.get("Soyad", "")),
+            "company": c.get("company", c.get("Şirkət", "")), "position": c.get("position", c.get("Vəzifə", "")),
+            "phone": c.get("phone", c.get("Telefon", "")), "email": c.get("email", c.get("Email", "")),
+            "notes": c.get("notes", c.get("Qeyd", "")),
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+    await db.contacts.insert_many(docs)
+    return {"message": f"{len(docs)} kontakt import edildi"}
+
+@api_router.delete("/contact-lists/{list_id}/contacts/{contact_id}")
+async def delete_contact(list_id: str, contact_id: str, current_user: dict = Depends(check_permission("sales", "write"))):
+    await db.contacts.delete_one({"id": contact_id, "list_id": list_id})
+    return {"message": "Kontakt silindi"}
+
+@api_router.post("/contacts/{contact_id}/convert-to-lead")
+async def convert_contact_to_lead(contact_id: str, current_user: dict = Depends(check_permission("sales", "write"))):
+    contact = await db.contacts.find_one({"id": contact_id}, {"_id": 0})
+    if not contact:
+        raise HTTPException(status_code=404, detail="Kontakt tapılmadı")
+    count = await db.sales_leads.count_documents({})
+    lead = {
+        "id": str(uuid.uuid4()), "lead_code": f"SB-{str(count+1).zfill(3)}",
+        "company_name": contact.get("company", ""), "contact_name": f"{contact.get('name','')} {contact.get('surname','')}".strip(),
+        "position": contact.get("position", ""), "phone": contact.get("phone", ""), "email": contact.get("email", ""),
+        "source": "Siyahıdan", "sale_type": "Üzvlük", "status": "Yeni", "notes": contact.get("notes", ""),
+        "curator": current_user.get("name", ""), "created_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.sales_leads.insert_one(lead)
+    lead.pop("_id", None)
+    return lead
+
+
 # ==================== SALES LEADS (ŞİRKƏT BAZASI) ====================
 
 LEAD_STATUSES = ["Yeni", "Əlaqə quruldu", "Görüş təyin edildi", "Təklif göndərildi", "Danışıqda", "Üzv oldu", "Satıldı", "İmtina"]

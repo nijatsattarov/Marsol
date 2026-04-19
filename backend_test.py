@@ -11,7 +11,7 @@ from datetime import datetime
 import uuid
 
 class MarsolAPITester:
-    def __init__(self, base_url="https://marsol-dev-stage.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://marsol-event-gateway.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.session = requests.Session()
         self.token = None

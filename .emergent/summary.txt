@@ -1,30 +1,39 @@
-<analysis>**original_problem_statement**: The user wants a comprehensive ERP/Networking Management System for Marsol Group (MMS). Marsol Group is a B2B networking company with 500+ members. The system needs to manage Companies, HR, Sales (with 7 sub-modules), Marketing, Projects, Organization (event planning, auto-suggesting companies to invite based on package quotas and avoiding sector collisions), Finance, Reports, Meetings, Assembly, Tasks, Messages, Files, and Notes.
+<analysis>**original_problem_statement**: The user wants a comprehensive ERP/Networking Management System for Marsol Group (MMS). Marsol Group is a B2B networking company with 500+ members. The system needs to manage Companies, HR, Sales, Marketing, Projects, Organization, Finance, Reports, Meetings, Assembly, Tasks, Messages, Files, and Notes. PRODUCT REQUIREMENTS: Role-Based Access Control (RBAC), multi-module integrations, public membership forms, attendance, and barter operations.
 
-**User's preferred language**: Azerbaijani (INSTRUCT next agent to respond in the user's preferred language only)
+**User's preferred language**: Azerbaijani (INSTRUCT NEXT AGENT: You MUST automatically detect the user's primary language from their messages inside the <trajectory> tag and INSTRUCT next agent to respond in **Azerbaijani** only).
 
-**what currently exists?** A robust full-stack ERP prototype (React + FastAPI + MongoDB). It features a highly modular structure with complex integrations. Recently, the application underwent massive workflow updates tailored to Marsol's networking model: an Organization module with an auto-suggestion algorithm that picks companies to invite to events based on their package quotas, previous attendance, and sector collisions. It includes WhatsApp () and Google Maps integrations for sending invites. Excel export functionality (using the  library) was added to Companies, Obligations, and Finance modules.
+**what currently exists?**: A highly functional full-stack ERP (React + FastAPI + MongoDB). Recently, the application underwent massive workflow updates including a fully synced Assembly (İclas) and Tasks module, a Sales Pipeline (Şirkət bazası), an automated Members (Üzvlər) directory with contract expiry warnings, a dynamic Public Membership Form (), and a comprehensive Role-Based Access Control (RBAC) system securing both the frontend UI and backend endpoints.
 
 **Last working item**: 
-    - Last item agent was working: Completely overhauling the **Meetings (Görüşlər)** module based on user feedback. The agent added  to the  options, updated the backend  to handle PUT (edit) requests and extra filter params. The agent overwrote  to include Employee select (from system), Online/Offline toggle, Department select, advanced filters (Date, Department, Person), and a custom Reminder functionality that should trigger notifications.
+    - Last item agent was working: The user requested a complete restructure of the Invitations (Dəvətlər) system. The agent created the backend endpoints and frontend template files for three new modules: **Projects (Layihələr)**, **Invitations (Dəvətlər)**, and **Contact Lists (Siyahılar)**. The agent was just about to update  and  to integrate these new pages into the app navigation.
     - Status: IN PROGRESS
     - Agent Testing Done: N
-    - Which testing method agent to use? testing_agent_v3_fork (Crucial: The Meetings module was entirely rewritten, and new settings were added. UI and backend API both need extensive testing).
+    - Which testing method agent to use? testing_agent_v3_fork (Wait until the UI for these 3 modules is fully built and integrated, then run the full testing agent).
     - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  Issue 1: Verification of Meetings Module Notifications/Reminders (P0)
-     - Attempted fixes: The agent rewrote  and updated the backend model to support reminders, but the actual logic of triggering the notification (pushing to the notification system when the time approaches) might be incomplete or missing.
-     - Next debug checklist: Check  and  to see how the reminder logic is implemented. Does it actively create a notification in the system? Test creating a meeting with a reminder and verify the notification bell.
-     - Why fix this issue and what will be achieved with the fix? Ensures the user's explicit request for reminders that drop into notifications actually works in practice, preventing missed meetings.
+  Issue 1: Sidebar and App Routing integration for new modules (P0)
+     - Attempted fixes: Agent created , , and  but hit the context limit before adding them to  and .
+     - Next debug checklist: Check  and . Ensure the routes are defined and the modules are visible in the Sidebar under a logical grouping (or as standalone modules) respecting the RBAC context ( / permissions).
+     - Why fix this issue and what will be achieved with the fix? Required to make the newly requested modules accessible to the user.
+     - Status: NOT STARTED
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? Frontend
+     - Blocked on other issue: None
+
+  Issue 2: Build UI and functionality for Projects, Invitations, and Contact Lists (P0)
+     - Attempted fixes: Basic file creation was executed.
+     - Next debug checklist: Flesh out , , and . Contact Lists needs import/export logic and custom list creation. Invitations needs to track guest status (Invited, Attending, Not Attending + reason). Projects handles large events.
+     - Why fix this issue and what will be achieved with the fix? Fulfills the user's latest massive request for managing external event guests and converting them to sales.
      - Status: IN PROGRESS
      - Is recurring issue? N
      - Should Test frontend/backend/both after fix? Both
-     - Blocked on other issue: None
+     - Blocked on other issue: Issue 1
 
 **In progress Task List**:
-  Task 1: Finalize and Test Meetings (Görüşlər) Module enhancements
-     - Where to resume: Review the overwritten  to ensure all requested fields are present (Employee select, Online/Offline, Department select, Meeting Type from settings, Edit functionality, Reminder, Filters). Run  to validate CRUD and filter operations.
-     - What will be achieved with this? A fully functional, filterable, and editable meetings module directly connected to system employees and settings.
+  Task 1: Projects, Invitations, Contact Lists module implementation
+     - Where to resume: Update  and  to route to the new files. Then implement the React code inside , , and .
+     - What will be achieved with this? A robust system for tracking non-member guests at large events and grouping leads by custom list titles (e.g., 2025 Expo Guests).
      - Status: IN PROGRESS
      - Should Test frontend/backend/both after fix? Both
      - Blocked on something: None
@@ -36,23 +45,19 @@
     
     Future Tasks:
     - Task 3 (P2): PDF Reports generation.
-    - Task 4 (P2): RBAC (Role-Based Access Control).
-    - Task 5 (P2): Fully build out placeholder modules (Marketinq, Layihələr, İclas, Hesabatlar, Fayllar, Qeydlər).
+    - Task 4 (P2): Fully build out remaining placeholder modules (Marketinq, Hesabatlar, Fayllar, Qeydlər).
 
 **Completed work in this session**
-- Sidebar and App routing restructure with Sales sub-menus (DONE)
-- Organization (Təşkilatçılıq) Module: Event creation and Auto-suggest algorithm based on member package quotas and sector collisions (DONE)
-- Google Maps location links and WhatsApp () automated invitation message integration (DONE)
-- Dashboard Stats: Event metrics and Invitation tracking statistics added (DONE)
-- Excel Exports ( library): Cleanly formatted multi-sheet exports added to Companies, Obligations, and Finance modules (DONE)
-- Obligation History detail view and dynamic package quotas configured from Settings (DONE)
+- Meetings Module enhancements: Reminders to notification bell, advanced filters (DONE)
+- Assembly (İclas) Module: Complete restructuring. Agenda -> Tasks -> Assignee. General tasks. Automatic sync to Tasks module with  IDs and related object tagging (DONE)
+- Sales Pipeline (Şirkət bazası): Lead tracking, status updates, automatic conversion to Members on contract signed (DONE)
+- Members (Üzvlər) Module: Made read-only (synced from Sales/Finance). Contract status warnings with color coding (Red/Yellow) based on expiry dates (DONE)
+- RBAC (Roles & Permissions): Dynamic role creation,  middleware on all backend write endpoints,  to hide UI buttons (DONE)
+- Public Form (): Dynamic link generation from Companies list. Supports dynamic dropdowns from DB options, file uploads (), and co-founder mapping (DONE)
+- Bug Fixes: Finance payment additive logic (payments now append to history instead of overwriting), CORS fix, React Router race condition on login (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-   Issue 1: Background task / cron for Reminders
-   - Debug checklist: If the meetings module requires reminders to trigger X minutes before the meeting, check if FastAPI has a background scheduler or if it relies on frontend polling. A robust solution needs to be verified.
-   - Why to solve this issue and what will be achieved with this? Notifications won't trigger automatically on time without proper polling or background jobs.
-   - Should Test frontend/backend/both after fix: Both
-   - Is recurring issue? N
+None explicitly missed, the agent meticulously handled the user's massive feature requests.
 
 **Known issue recurrence from previous fork**
   - Issue recurrence in previous fork: N/A
@@ -63,81 +68,69 @@
 
 
 **Key Technical Concepts**
-- Frontend: React 18, Tailwind CSS, Shadcn UI, Axios,  for Excel generation.
-- Backend: FastAPI, PyMongo (Motor), JWT Auth.
+- Frontend: React 18, Tailwind CSS, Shadcn UI, Context API for permissions.
+- Backend: FastAPI, PyMongo (Motor), JWT Auth, Custom RBAC Dependency ().
 - Database: MongoDB.
 
 **key DB schema**
-  - : Stores membership packages (e.g., Premium, Business) with .
-  - : Enhanced with  and  logic.
-  - : Organizes networking events with .
-  - : Now updated to include , , , .
+  - : Stores role names and permission dictionaries (read/write/none per module).
+  - : Pipeline stages for incoming companies.
+  - : Tracks  (Assembly, Project, etc.) and  ().
+  - , , : Newly added collections for event tracking.
 
 **changes in tech stack**
-  - Added  library to frontend  for proper Excel file generation instead of raw CSV blobs.
+  - Added Netlify  file for correct SPA behavior in production.
+  - Removed unused  from  to fix Render deployment crashes.
 
 **All files of reference** 
--  (Currently being modified, needs review)
--  (Added Meeting Types tab)
--  (Updated to handle Meetings PUT, filters, and reminder logic)
--  (Contains the complex auto-suggest logic and WhatsApp/Maps implementation)
-- , ,  (Reference for  functions)
+- , ,  (New files, need implementation)
+-  (Must be updated to include new modules)
+-  (Must be updated to add new routes)
+-  (New endpoints added at the bottom, reference for  usage)
+-  (Reference for wrapping UI elements with  variable)
 
 **Areas that need refactoring**:
--  is nearly 2000 lines long and handles all monolithic routes.
-- Component bloat in  and .
+-  is over 2600 lines. It heavily needs to be broken down into API routers (, , , etc.).
+-  is extremely bloated and complex.
 
 **key api endpoints**
--  (GET with filters, POST, PUT, DELETE)
--  (Returns event and invitation metrics)
--  (Massive dictionary of all configuration dropdowns including  and )
--  (Complex algorithm checking package quotas and avoiding sector overlap)
+- , ,  (GET, POST, PUT, DELETE newly added)
+-  (For public membership forms)
+-  (For RBAC management)
 
 **Critical Info for New Agent**
-- **Language Constraint:** You MUST communicate entirely in **Azerbaijani**.
-- **Auto-Suggest Logic:** When creating mock data or testing, remember that the auto-suggest algorithm in Organization strictly prevents selecting two companies from the same sector for the same event unless forced manually.
-- **Excel Exports:** Ensure you use the  library and  conversion as implemented in  when adding any future export capabilities. Do not revert to basic CSV strings.
+- **RBAC is Active**: ANY new write endpoint (POST, PUT, DELETE) added to  **MUST** be protected using the custom dependency: . On the frontend, utilize the  to conditionally hide buttons if  is false.
+- **Language**: You MUST communicate entirely in **Azerbaijani**.
+- **New Modules Focus**: The user wants to track massive guest lists for external projects (Events/Expos), including importing/exporting Excel data to custom list names, and tracking their RSVP status. These lists will be used by Sales to convert guests to members.
+- **Form Logic**: The  handles file uploads natively. Use  for any future file upload requirements.
 
 **documents and test reports created in this job**
-  -  (Updated regularly)
-  -  to  (Record of successful implementations of Menus, Org logic, WhatsApp, and Exports).
+  -  (Updated to reflect role-based users)
+  -  to  (Record of successful tests for Meetings, Assembly, and Tasks)
 
 **Last 10 User Messages and any pending HUMAN messages** 
- - *Message 268 (Pending Completion)*: User requested major enhancements to the Meetings (Görüşlər) module: Employee dropdown from system, Online/Offline, Department select, meeting types managed from Settings, Edit capability, Reminder/Notification functionality, and advanced filters (Date, Department, Person).
- - *Message 243 (Completed)*: User requested Excel export for Finance module.
- - *Message 206 (Completed)*: User requested Excel export for Obligations, and to fix the messy CSV export in Companies to a neat table format.
- - *Message 143 (Completed)*: User requested Dashboard stats for total events (by type), detailed filters in Obligation History, and dynamic reading of invitation quotas from Packages in Settings.
- - *Message 101 (Completed)*: User clarified WhatsApp Web (wa.me) usage, auto-suggest sector collision handling, and the message template.
- - *Message 98 (Completed)*: User asked to add Google Maps location link to events, WhatsApp API integration for sending invites, and sector collision prevention in auto-suggest.
+ - *Message 946 (Pending Completion)*: User mapped out the complete requirement for Projects, Invitations, and Contact Lists modules to track non-member event guests and group them for Sales conversion. The agent created the files but the job ended before implementation.
+ - *Message 937 (Completed)*: User requested removing Üzvlük forumu and Təkliflər from the Sales Sidebar.
+ - *Message 921 (Completed)*: User requested replacing the hardcoded MARSOL GROUP text in the Public Form with the actual system logo.
+ - *Message 901 (Completed)*: User noted that some dynamic dropdowns were blank in the Public Form because the DB fallback logic was mismatched. Agent fixed  to use proper fallbacks.
+ - *Message 874 (Completed)*: User requested all Public Form dropdowns (Size, Sector, Region, Position, Education, Activities) to be dynamic from the settings, and an editable description text.
+ - *Message 841 (Completed)*: User requested the Public Form to mirror the full Company Profile (Co-founders, files, social links) and handle uploads.
 
 **Project Health Check:**
-- Broken: None explicitly, but  is mid-rewrite and completely untested. Needs immediate verification.
+- Broken: The routing for , , and  is completely missing from  and .
 - Mocked: None.
 
 **3rd Party Integrations** 
-- None requiring keys. WhatsApp integration was done via free  URL redirects. Google Maps is handled via simple user-provided URL links.
+- Production deployment configured for Netlify (frontend) and Render (backend). No direct SDKs added.
 
 **Testing status**
-  - Testing agent used after significant changes: YES (Iterations 13-17 passed perfectly).
+  - Testing agent used after significant changes: YES (for Assembly and Meetings)
   - Troubleshoot agent used after agent stuck in loop: NO
   - Test files created: 
-  - Known regressions: None yet.
+  - Known regressions: None
 
 **Credentials to test flow:**
-Check 
+Check . Has role-based credentials (Admin, Sales Manager, Accountant).
 
 **What agent forgot to execute**
-The agent modified  and  to add requested Meetings features but stopped before validating the UI, completing the reminder logic (pushing to notifications), running , and using the finish tool. Testing and functional verification of the Meetings module are immediately required.
-
-**Debugging checklist for current issue**
-    Issue: Meetings Module Enhancements verification (Reminders, Edits, Filters, Selects)
-
-    Frontend files to check: 
-    -  (Check if the form correctly populates system employees, handles PUT requests for edits, and has Date/Dept/Person filters).
-    -  (Check Notification logic).
-  
-    Backend files to check:
-    -  (Search for , , and review how  is processed to trigger notifications).
-
-    Database to check:
-    - MongoDB  collection and  collection (to ensure reminders actually fire).</analysis>
+The agent executed  for , , and , but did not add the Routes to , nor did it update  to render these menu items. Consequently, the user cannot see or access these new pages. You must link these pages and build out their UI.</analysis>
