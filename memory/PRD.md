@@ -36,7 +36,7 @@ Marsol Group — 500+ üzvü olan B2B netvörkinq şirkətidir. Sahibkarları g�
 | 14 | Görüşlər (xatırlatma, filtr, bildiriş) | ✅ |
 | 15 | İclas (Gündəm→Tapşırıq→Məsul sinxron, Task T-XXX, Excel export) | ✅ |
 | 16 | Tapşırıqlar (T-XXX, related_object_type, filter) | ✅ |
-| 17 | Təşkilatçılıq (event + auto-suggest + WhatsApp + Maps) | ✅ |
+| 17 | **Fəaliyyətlər (Təşkilatçılıq)** — Dashboard + 7 vendor alt-modul (Məkanlar, Catering, Dekor/texniki, Musiqiçilər, Foto/Video, Nəqliyyat, Materiallar) + Reytinq (tarixçə + aqreqasiya + tövsiyə statusu) | ✅ Iter 24 |
 | 18 | Mesajlar | ✅ |
 | 19 | Tənzimləmələr (Roles, paketdə dəvət sayı, forum fields) | ✅ |
 | 20 | Bildirişlər | ✅ |
@@ -68,6 +68,7 @@ Marketinq, Hesabatlar, Fayllar, Qeydlər
 - [x] Davamiyyət modulu — ✅ Iter 22
 - [x] Barter Əməliyyatları — ✅ Iter 22
 - [x] **AI Data Analyst (Hesabatlar)** — təbii dil sorğuları, cədvəl, Excel export, Siyahıya əlavə — ✅ Iter 23
+- [x] **Fəaliyyətlər modulu tam yenidən qurulub** — 8 alt-modul + reytinq aqreqasiyası — ✅ Iter 24
 
 ### P1
 - [ ] PDF Reports generation (Hesabatlar modulu)
