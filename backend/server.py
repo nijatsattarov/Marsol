@@ -1320,29 +1320,35 @@ async def delete_assembly(assembly_id: str, current_user: dict = Depends(check_p
 # ==================== MEMBERSHIP FORUM ====================
 
 COMPANY_FORM_FIELDS = [
-    {"key": "legal_name", "label": "Hüquqi ad"},
-    {"key": "sector", "label": "Sektor"},
-    {"key": "sub_sector", "label": "Alt sektor"},
-    {"key": "company_size", "label": "Şirkət ölçüsü"},
-    {"key": "registration_date", "label": "Qeydiyyat tarixi"},
-    {"key": "address", "label": "Ünvan"},
-    {"key": "bank_details", "label": "Bank rekvizitləri"},
-    {"key": "owner_email", "label": "Sahibkar email"},
-    {"key": "owner_social_links", "label": "Sahibkar sosial linklər"},
-    {"key": "co_founders", "label": "Həmtəsisçilər"},
-    {"key": "representative_name", "label": "Əlaqədar şəxs"},
-    {"key": "representative_phone", "label": "Əlaqədar şəxs telefon"},
-    {"key": "representative_email", "label": "Əlaqədar şəxs email"},
-    {"key": "company_phone", "label": "Şirkət telefonu"},
-    {"key": "company_email", "label": "Şirkət email"},
-    {"key": "website", "label": "Veb sayt"},
-    {"key": "company_website", "label": "Veb sayt"},
-    {"key": "company_social_links", "label": "Şirkət sosial linklər"},
-    {"key": "children_count", "label": "İşçi sayı"},
-    {"key": "children_info", "label": "İşçi məlumatları"},
-    {"key": "reference_source", "label": "Referans mənbəsi"},
-    {"key": "reference_person", "label": "Referans şəxs"},
-    {"key": "reference_company", "label": "Referans şirkət"},
+    # Şirkət məlumatları
+    {"key": "legal_name", "label": "Hüquqi ad", "type": "text"},
+    {"key": "voen", "label": "VÖEN", "type": "text"},
+    {"key": "sector", "label": "Sektor", "type": "select"},
+    {"key": "sub_sector", "label": "Alt sektor", "type": "select"},
+    {"key": "company_size", "label": "Şirkət ölçüsü", "type": "select"},
+    {"key": "employee_count", "label": "İşçi sayı", "type": "text"},
+    {"key": "region", "label": "Region", "type": "text"},
+    {"key": "registration_date", "label": "Şirkətin yaranma tarixi", "type": "date"},
+    {"key": "address", "label": "Ünvan", "type": "textarea"},
+    {"key": "company_phone", "label": "Şirkət telefonu", "type": "text"},
+    {"key": "company_website", "label": "Veb sayt", "type": "text"},
+    {"key": "social_links", "label": "Şirkət sosial media hesabları", "type": "array"},
+    {"key": "bank_files", "label": "Bank rekvizitləri (fayl)", "type": "file"},
+    {"key": "logo_url", "label": "Şirkət logosu", "type": "file"},
+    # Referans
+    {"key": "reference_source", "label": "Referans mənbəsi", "type": "text"},
+    {"key": "reference_person_name", "label": "Referans şəxsin adı", "type": "text"},
+    {"key": "reference_person_surname", "label": "Referans şəxsin soyadı", "type": "text"},
+    {"key": "reference_person_position", "label": "Referans şəxsin vəzifəsi", "type": "text"},
+    {"key": "reference_note", "label": "Referans qeydi", "type": "textarea"},
+    # Sahibkar
+    {"key": "owners", "label": "Sahibkarlar (ad, soyad, ata adı, vəzifə, telefon, email, doğum tarixi, vətəndaşlıq, təhsil, ixtisas, universitet, sosial media, uşaqlar, fəaliyyət sahələri)", "type": "owners"},
+    # Əlaqədar şəxs
+    {"key": "contact_first_name", "label": "Əlaqədar şəxs adı", "type": "text"},
+    {"key": "contact_last_name", "label": "Əlaqədar şəxs soyadı", "type": "text"},
+    {"key": "contact_position", "label": "Əlaqədar şəxs vəzifəsi", "type": "text"},
+    {"key": "contact_phone", "label": "Əlaqədar şəxs telefonu", "type": "text"},
+    {"key": "contact_email", "label": "Əlaqədar şəxs emaili", "type": "text"},
 ]
 
 @api_router.get("/forum/fields")
@@ -1387,11 +1393,11 @@ async def get_public_form(token: str):
         raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
     settings = await db.setting_lists.find_one({"key": "forum_enabled_fields"}, {"_id": 0})
     enabled = settings.get("values", []) if settings else [f["key"] for f in COMPANY_FORM_FIELDS]
-    fields_info = {f["key"]: f["label"] for f in COMPANY_FORM_FIELDS}
+    fields_info = {f["key"]: {"label": f["label"], "type": f.get("type", "text")} for f in COMPANY_FORM_FIELDS}
     custom_fields = await db.custom_fields.find({"module": "companies"}, {"_id": 0}).to_list(100)
     for cf in custom_fields:
-        fields_info[f"custom_{cf['id']}"] = cf.get("label", cf.get("name", ""))
-    enabled_fields = [{"key": k, "label": fields_info.get(k, k)} for k in enabled if k in fields_info]
+        fields_info[f"custom_{cf['id']}"] = {"label": cf.get("label", cf.get("name", "")), "type": "text"}
+    enabled_fields = [{"key": k, "label": fields_info[k]["label"], "type": fields_info[k]["type"]} for k in enabled if k in fields_info]
     return {
         "company_name": company.get("brand_name", ""),
         "owner_phone": company.get("owner_phone", ""),
@@ -1412,6 +1418,9 @@ async def submit_public_form(token: str, data: dict):
     for key in enabled:
         if key in data:
             update_data[key] = data[key]
+    # Also accept owners as a full array
+    if "owners" in data and "owners" in enabled:
+        update_data["owners"] = data["owners"]
     if update_data:
         update_data["form_submitted_at"] = datetime.now(timezone.utc).isoformat()
         await db.companies.update_one({"id": company_id}, {"$set": update_data})
@@ -1662,6 +1671,18 @@ async def upload_file(file: UploadFile = File(...), current_user: dict = Depends
         f.write(content)
     url = f"/uploads/{filename}"
     return {"url": url, "filename": file.filename, "stored_name": filename}
+
+@api_router.post("/public/upload")
+async def public_upload_file(file: UploadFile = File(...)):
+    ext = Path(file.filename).suffix
+    filename = f"{uuid.uuid4()}{ext}"
+    filepath = UPLOAD_DIR / filename
+    with open(filepath, "wb") as f:
+        content = await file.read()
+        f.write(content)
+    url = f"/uploads/{filename}"
+    return {"url": url, "filename": file.filename}
+
 
 # ==================== SUB-SECTORS ====================
 
