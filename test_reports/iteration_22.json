@@ -1,0 +1,84 @@
+{
+  "summary": "Iteration 22 — Full E2E testing of new Attendance (Davamiyyət) and Barter modules for Marsol ERP. Backend: 31/31 pytest tests passed covering attendance upsert/bulk/stats, leave-requests CRUD + auto-attendance on approve, barter CRUD with auto barter_code generation and stats with net_balance, and RBAC (hr for attendance/leaves, finance for barters). Frontend: Attendance page (3 tabs daily/monthly/leaves), date navigation, leave modal, and Barter page (5 stat cards, add modal with blue/amber themed blocks) all render with expected data-testid selectors; sidebar and write-button RBAC correctly hides controls for accountant (no hr) and sales (no finance) users. Regression passes for Projects/Invitations/ContactLists/Finance/Employees/Meetings/Tasks.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/attendance/stats", "issue": "Month range uses '%Y-%m-01' to '%Y-%m-31' string comparison which incorrectly includes dates like 2026-02-31 that don't exist. Works for lexicographic string sort but fragile for cross-month queries; consider computing last-day-of-month explicitly."},
+      {"endpoint": "POST /api/barters", "issue": "barter_code generated with count_documents({})+1 is NOT concurrency-safe and collides if two codes are created in parallel or if a barter is deleted (next code reuses an existing one). Use an atomic counter document (findOneAndUpdate $inc) or UUID."},
+      {"endpoint": "PUT /api/leave-requests/{id}", "issue": "No 404 on missing id — update_one matched_count=0 still returns the (None) doc. Should raise HTTPException(404) when id doesn't exist."},
+      {"endpoint": "DELETE /api/attendance/{id} & DELETE /api/barters/{id} & DELETE /api/leave-requests/{id}", "issue": "Do not check deleted_count — silently return 200 even when record doesn't exist. Should 404."},
+      {"endpoint": "POST /api/attendance", "issue": "No validation that data['status'] is in ATTENDANCE_STATUSES; any arbitrary status string is accepted and later breaks the stats aggregation (bucket ignored silently)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Attendance + Barter modals", "issues": ["Radix Dialog console warning: 'Missing Description or aria-describedby for DialogContent'. Accessibility issue — add <DialogDescription> or aria-describedby to DialogContent in both Attendance.jsx and Barter.jsx."]}
+    ]
+  },
+  "passed_tests": [
+    "Auth: admin/sales/accountant login all 200",
+    "POST /api/attendance creates record with generated id",
+    "POST /api/attendance is idempotent upsert — same (employee_id, date) updates, does not insert duplicate",
+    "GET /api/attendance?date= and ?start&end&employee_id filters both work",
+    "POST /api/attendance/bulk saves multiple records",
+    "GET /api/attendance/stats?month=YYYY-MM returns per_employee + totals with all 6 statuses",
+    "POST /api/leave-requests creates with default status 'Gözləyir'",
+    "PUT /api/leave-requests/{id} status=Təsdiqlənib auto-fills attendance from start_date to end_date inclusive with status 'Məzuniyyət' (or 'Xəstəlik' for type=Xəstəlik)",
+    "DELETE /api/leave-requests works",
+    "POST /api/barters auto-generates barter_code in B-XXX format; floats coerced for our_value/their_value",
+    "PUT /api/barters/{id} updates status + values (persisted on GET)",
+    "GET /api/barters/stats returns total, active, by_status (all 5), total_our_value, total_their_value, net_balance (= their - our)",
+    "DELETE /api/barters works",
+    "RBAC: Accountant CAN POST /api/barters (finance write)",
+    "RBAC: Accountant CANNOT POST /api/attendance (no hr) — 401/403",
+    "RBAC: Sales CANNOT POST /api/attendance or /api/barters",
+    "Regression: /api/project-events, /api/event-invitations, /api/contact-lists, /api/finance/summary, /api/employees, /api/meetings, /api/tasks all return 200",
+    "Frontend /attendance renders [data-testid=attendance-page]; all 3 tabs (tab-daily/tab-monthly/tab-leaves) visible",
+    "Frontend date-picker + prev-day-btn + next-day-btn shift date correctly; 'Bu gün' resets to today",
+    "Frontend mark-all-btn visible for admin; status-select-{id} rendered per employee",
+    "Frontend tab-monthly renders month-picker",
+    "Frontend tab-leaves renders add-leave-btn; modal opens, submit-leave-btn present",
+    "Frontend /barter renders [data-testid=barter-page] + all 5 stat cards (stat-total/stat-active/stat-our-value/stat-their-value/stat-balance) + add-barter-btn + export-barter-btn",
+    "Frontend Barter modal shows our-service in bg-blue-50 block and their-service in bg-amber-50 block",
+    "Frontend Sidebar shows menu-attendance + menu-barter for admin",
+    "RBAC Frontend: Accountant sidebar — menu-attendance HIDDEN, menu-barter VISIBLE",
+    "RBAC Frontend: Accountant /barter — add-barter-btn VISIBLE (finance write)",
+    "RBAC Frontend: Accountant /attendance — mark-all-btn HIDDEN, add-leave-btn HIDDEN",
+    "RBAC Frontend: Sales /barter — add-barter-btn HIDDEN"
+  ],
+  "failed_tests": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iteration22_attendance_barter.py",
+    "/app/test_reports/pytest/pytest_results_iter22.xml"
+  ],
+  "action_items": [
+    "MINOR: Replace barter_code count_documents+1 with atomic counter to avoid duplicate codes on concurrent creates or after deletes",
+    "MINOR: Add 404 on missing id for PUT /api/leave-requests/{id}, DELETE /api/barters/{id}, DELETE /api/attendance/{id}, DELETE /api/leave-requests/{id}",
+    "MINOR: Validate ATTENDANCE_STATUSES on POST /api/attendance and LEAVE_STATUSES/BARTER_STATUSES on their writes",
+    "A11Y: Add DialogDescription (or aria-describedby) to DialogContent in Attendance.jsx and Barter.jsx to silence Radix warning",
+    "CODE QUALITY: /app/backend/server.py is 3121 lines — split into routers (attendance.py, leaves.py, barters.py, finance.py, etc.)"
+  ],
+  "critical_code_review_comments": [
+    "barter_code uniqueness is racy (count_documents + zfill). On delete, next insert reuses an existing code — can corrupt stats and foreign references.",
+    "Leave approve auto-fill overwrites existing attendance records unconditionally — if employee already had 'İşdə' on a day later covered by approved leave, it silently flips to 'Məzuniyyət' with no audit trail. Consider skipping already-populated days or logging the overwrite.",
+    "Attendance stats month filter uses string '%Y-%m-31' as upper bound which works due to ISO-date lex order but is semantically incorrect — use dateutil.relativedelta + next-month-01 exclusive.",
+    "No Pydantic models for attendance/leave/barter bodies — raw dicts accepted; all numeric coercion and field validation is ad-hoc. Add request models to match the style of IncomeCreate/ExpenseCreate.",
+    "server.py 3121 lines — exceeds 700-line guideline, split into FastAPI routers."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration22_attendance_barter.py"
+  ],
+  "success_rate": {"backend": "100% (31/31)", "frontend": "100% (all data-testid + RBAC checks passed)"},
+  "test_credentials": {
+    "admin": "settings@marsol.az / marsol123",
+    "sales": "satis@marsol.az / marsol123",
+    "accountant": "muhasib@marsol.az / marsol123"
+  },
+  "seed_data_creation": "Test suite creates: 1 TEST employee (auto-deleted in fixture teardown), TEST attendance rows on 2026-01-05/06/10/11/12 (deleted in TestCleanup), 1 TEST leave-request (deleted), 2 TEST barters (deleted). No residual TEST_-prefixed data should remain after suite.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Attendance upsert key is (employee_id, date) string. Leave approval auto-fills attendance with status 'Məzuniyyət' unless leave.type=='Xəstəlik' in which case 'Xəstəlik'. Barter stats exclude counts from 'Təklif'/'Müzakirədə'/'Ləğv edilib' for our/their value sums — only Aktiv + Tamamlandı contribute to totals. RBAC permission keys: 'hr' for attendance + leave-requests, 'finance' for barters. Frontend data-testid: attendance-page, tab-daily/monthly/leaves, date-picker, prev-day-btn, next-day-btn, mark-all-btn, export-daily-btn, month-picker, export-monthly-btn, add-leave-btn, submit-leave-btn, approve-{id}, status-select-{empId}, stat-{status}, att-row-{empId}; barter-page, add-barter-btn, export-barter-btn, submit-barter-btn, status-{barterId}, barter-{barterId}, stat-total/active/our-value/their-value/balance; sidebar menu-attendance, menu-barter.",
+  "rca of the issue": "No active bug. All flows green. Reported items are minor hardening recommendations and accessibility a11y warnings, not functional regressions."
+}

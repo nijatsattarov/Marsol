@@ -30,7 +30,8 @@ import {
   History,
   MessageCircle,
   Lightbulb,
-  Send
+  Send,
+  ArrowLeftRight
 } from 'lucide-react';
 
 const salesSubItems = [
@@ -45,11 +46,13 @@ const salesSubItems = [
 const menuItems = [
   { path: '/companies', label: 'Şirkət Məlumatları', icon: Building2, module: 'companies' },
   { path: '/hr', label: 'İnsan Resursları', icon: UserCog, module: 'hr' },
+  { path: '/attendance', label: 'Davamiyyət', icon: FileCheck, module: 'hr' },
   { path: '/sales', label: 'Satış', icon: TrendingUp, children: salesSubItems, module: 'sales' },
   { path: '/marketing', label: 'Marketinq', icon: Megaphone, module: 'marketing' },
   { path: '/projects', label: 'Layihələr', icon: FolderKanban, module: 'projects' },
   { path: '/organization', label: 'Təşkilatçılıq', icon: Users2, module: 'organization' },
   { path: '/finance', label: 'Maliyyə', icon: Wallet, module: 'finance' },
+  { path: '/barter', label: 'Barter', icon: ArrowLeftRight, module: 'finance' },
   { path: '/reports', label: 'Hesabatlar', icon: BarChart3, module: 'reports' },
   { path: '/meetings', label: 'Görüşlər', icon: Calendar, module: 'meetings' },
   { path: '/assembly', label: 'İclas', icon: Presentation, module: 'assembly' },

@@ -659,6 +659,198 @@ async def delete_employee(employee_id: str, current_user: dict = Depends(check_p
         raise HTTPException(status_code=404, detail="Əməkdaş tapılmadı")
     return {"message": "Əməkdaş silindi"}
 
+# ==================== ATTENDANCE (DAVAMİYYƏT) ====================
+
+ATTENDANCE_STATUSES = ["İşdə", "Gəlməyib", "Məzuniyyət", "Xəstəlik", "İcazəli", "Uzaq"]
+
+@api_router.get("/attendance")
+async def get_attendance(
+    date: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    employee_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    query = {}
+    if date:
+        query["date"] = date
+    elif start and end:
+        query["date"] = {"$gte": start, "$lte": end}
+    if employee_id:
+        query["employee_id"] = employee_id
+    records = await db.attendance.find(query, {"_id": 0}).sort("date", -1).to_list(5000)
+    return records
+
+@api_router.post("/attendance")
+async def upsert_attendance(data: dict, current_user: dict = Depends(check_permission("hr", "write"))):
+    employee_id = data.get("employee_id", "")
+    date = data.get("date", "")
+    if not employee_id or not date:
+        raise HTTPException(status_code=400, detail="employee_id və date tələb olunur")
+    emp = await db.employees.find_one({"id": employee_id}, {"_id": 0})
+    update = {
+        "employee_id": employee_id,
+        "employee_name": (emp.get("full_name") or f"{emp.get('first_name','')} {emp.get('last_name','')}".strip()) if emp else data.get("employee_name", ""),
+        "date": date,
+        "status": data.get("status", "İşdə"),
+        "check_in": data.get("check_in", ""),
+        "check_out": data.get("check_out", ""),
+        "notes": data.get("notes", ""),
+        "updated_by": current_user.get("name", ""),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    existing = await db.attendance.find_one({"employee_id": employee_id, "date": date})
+    if existing:
+        await db.attendance.update_one({"employee_id": employee_id, "date": date}, {"$set": update})
+        update["id"] = existing["id"]
+    else:
+        update["id"] = str(uuid.uuid4())
+        update["created_at"] = datetime.now(timezone.utc).isoformat()
+        await db.attendance.insert_one(dict(update))
+    update.pop("_id", None)
+    return update
+
+@api_router.post("/attendance/bulk")
+async def bulk_attendance(data: dict, current_user: dict = Depends(check_permission("hr", "write"))):
+    date = data.get("date", "")
+    records = data.get("records", [])
+    if not date or not records:
+        raise HTTPException(status_code=400, detail="date və records tələb olunur")
+    count = 0
+    for r in records:
+        emp = await db.employees.find_one({"id": r.get("employee_id", "")}, {"_id": 0})
+        doc = {
+            "employee_id": r.get("employee_id", ""),
+            "employee_name": (emp.get("full_name") or f"{emp.get('first_name','')} {emp.get('last_name','')}".strip()) if emp else "",
+            "date": date,
+            "status": r.get("status", "İşdə"),
+            "check_in": r.get("check_in", ""),
+            "check_out": r.get("check_out", ""),
+            "notes": r.get("notes", ""),
+            "updated_by": current_user.get("name", ""),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        existing = await db.attendance.find_one({"employee_id": doc["employee_id"], "date": date})
+        if existing:
+            await db.attendance.update_one({"employee_id": doc["employee_id"], "date": date}, {"$set": doc})
+        else:
+            doc["id"] = str(uuid.uuid4())
+            doc["created_at"] = datetime.now(timezone.utc).isoformat()
+            await db.attendance.insert_one(dict(doc))
+        count += 1
+    return {"message": f"{count} qeyd saxlanıldı"}
+
+@api_router.get("/attendance/stats")
+async def attendance_stats(month: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    if not month:
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+    start = f"{month}-01"
+    end = f"{month}-31"
+    records = await db.attendance.find({"date": {"$gte": start, "$lte": end}}, {"_id": 0}).to_list(10000)
+    employees = await db.employees.find({"status": "Aktiv"}, {"_id": 0}).to_list(1000)
+    per_employee = {}
+    for e in employees:
+        eid = e["id"]
+        per_employee[eid] = {
+            "employee_id": eid,
+            "employee_name": e.get("full_name") or f"{e.get('first_name','')} {e.get('last_name','')}".strip(),
+            "department": e.get("department", ""),
+            "position": e.get("position", ""),
+            **{s: 0 for s in ATTENDANCE_STATUSES}
+        }
+    for r in records:
+        eid = r.get("employee_id", "")
+        st = r.get("status", "")
+        if eid in per_employee and st in per_employee[eid]:
+            per_employee[eid][st] += 1
+    totals = {s: sum(p[s] for p in per_employee.values()) for s in ATTENDANCE_STATUSES}
+    return {"month": month, "per_employee": list(per_employee.values()), "totals": totals}
+
+@api_router.delete("/attendance/{record_id}")
+async def delete_attendance(record_id: str, current_user: dict = Depends(check_permission("hr", "write"))):
+    await db.attendance.delete_one({"id": record_id})
+    return {"message": "Qeyd silindi"}
+
+# ==================== LEAVE REQUESTS (MƏZUNİYYƏT SORĞULARI) ====================
+
+@api_router.get("/leave-requests")
+async def get_leave_requests(
+    employee_id: Optional[str] = None,
+    status: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    query = {}
+    if employee_id:
+        query["employee_id"] = employee_id
+    if status and status != "all":
+        query["status"] = status
+    items = await db.leave_requests.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return items
+
+@api_router.post("/leave-requests")
+async def create_leave_request(data: dict, current_user: dict = Depends(check_permission("hr", "write"))):
+    emp = await db.employees.find_one({"id": data.get("employee_id", "")}, {"_id": 0})
+    doc = {
+        "id": str(uuid.uuid4()),
+        "employee_id": data.get("employee_id", ""),
+        "employee_name": (emp.get("full_name") or f"{emp.get('first_name','')} {emp.get('last_name','')}".strip()) if emp else "",
+        "type": data.get("type", "Məzuniyyət"),
+        "start_date": data.get("start_date", ""),
+        "end_date": data.get("end_date", ""),
+        "reason": data.get("reason", ""),
+        "status": "Gözləyir",
+        "created_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.leave_requests.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/leave-requests/{req_id}")
+async def update_leave_request(req_id: str, data: dict, current_user: dict = Depends(check_permission("hr", "write"))):
+    update = {k: v for k, v in data.items() if k not in ("id",)}
+    update["updated_by"] = current_user.get("name", "")
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.leave_requests.update_one({"id": req_id}, {"$set": update})
+    # If approved, auto-fill attendance records for the period
+    if update.get("status") == "Təsdiqlənib":
+        req = await db.leave_requests.find_one({"id": req_id}, {"_id": 0})
+        if req and req.get("start_date") and req.get("end_date"):
+            try:
+                from datetime import date as _date, timedelta
+                s = datetime.strptime(req["start_date"], "%Y-%m-%d").date()
+                e = datetime.strptime(req["end_date"], "%Y-%m-%d").date()
+                att_status = "Xəstəlik" if req.get("type") == "Xəstəlik" else "Məzuniyyət"
+                cur = s
+                while cur <= e:
+                    ds = cur.strftime("%Y-%m-%d")
+                    existing = await db.attendance.find_one({"employee_id": req["employee_id"], "date": ds})
+                    att_doc = {
+                        "employee_id": req["employee_id"],
+                        "employee_name": req.get("employee_name", ""),
+                        "date": ds,
+                        "status": att_status,
+                        "notes": f"Sorğu: {req.get('reason', '')}",
+                        "updated_by": current_user.get("name", ""),
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    if existing:
+                        await db.attendance.update_one({"employee_id": req["employee_id"], "date": ds}, {"$set": att_doc})
+                    else:
+                        att_doc["id"] = str(uuid.uuid4())
+                        att_doc["created_at"] = datetime.now(timezone.utc).isoformat()
+                        await db.attendance.insert_one(dict(att_doc))
+                    cur += timedelta(days=1)
+            except (ValueError, TypeError):
+                pass
+    doc = await db.leave_requests.find_one({"id": req_id}, {"_id": 0})
+    return doc
+
+@api_router.delete("/leave-requests/{req_id}")
+async def delete_leave_request(req_id: str, current_user: dict = Depends(check_permission("hr", "write"))):
+    await db.leave_requests.delete_one({"id": req_id})
+    return {"message": "Sorğu silindi"}
+
 # ==================== FINANCE (MALİYYƏ) ====================
 
 @api_router.get("/finance/incomes")
@@ -733,6 +925,92 @@ async def delete_expense(expense_id: str, current_user: dict = Depends(check_per
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Xərc tapılmadı")
     return {"message": "Xərc silindi"}
+
+# ==================== BARTER ƏMƏLİYYATLARI ====================
+
+BARTER_STATUSES = ["Təklif", "Müzakirədə", "Aktiv", "Tamamlandı", "Ləğv edilib"]
+
+@api_router.get("/barters")
+async def get_barters(
+    status: Optional[str] = None,
+    partner_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    query = {}
+    if status and status != "all":
+        query["status"] = status
+    if partner_id:
+        query["partner_id"] = partner_id
+    items = await db.barters.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return items
+
+@api_router.post("/barters")
+async def create_barter(data: dict, current_user: dict = Depends(check_permission("finance", "write"))):
+    count = await db.barters.count_documents({})
+    doc = {
+        "id": str(uuid.uuid4()),
+        "barter_code": f"B-{str(count + 1).zfill(3)}",
+        "partner_id": data.get("partner_id", ""),
+        "partner_name": data.get("partner_name", ""),
+        "partner_contact": data.get("partner_contact", ""),
+        "partner_phone": data.get("partner_phone", ""),
+        "our_service": data.get("our_service", ""),
+        "their_service": data.get("their_service", ""),
+        "our_value": float(data.get("our_value", 0) or 0),
+        "their_value": float(data.get("their_value", 0) or 0),
+        "status": data.get("status", "Təklif"),
+        "start_date": data.get("start_date", ""),
+        "end_date": data.get("end_date", ""),
+        "notes": data.get("notes", ""),
+        "responsible": data.get("responsible", current_user.get("name", "")),
+        "created_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.barters.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/barters/{barter_id}")
+async def update_barter(barter_id: str, data: dict, current_user: dict = Depends(check_permission("finance", "write"))):
+    update = {k: v for k, v in data.items() if k not in ("id", "barter_code", "created_at", "created_by")}
+    if "our_value" in update:
+        update["our_value"] = float(update["our_value"] or 0)
+    if "their_value" in update:
+        update["their_value"] = float(update["their_value"] or 0)
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.barters.update_one({"id": barter_id}, {"$set": update})
+    doc = await db.barters.find_one({"id": barter_id}, {"_id": 0})
+    return doc
+
+@api_router.delete("/barters/{barter_id}")
+async def delete_barter(barter_id: str, current_user: dict = Depends(check_permission("finance", "write"))):
+    await db.barters.delete_one({"id": barter_id})
+    return {"message": "Barter silindi"}
+
+@api_router.get("/barters/stats")
+async def barter_stats(current_user: dict = Depends(get_current_user)):
+    items = await db.barters.find({}, {"_id": 0}).to_list(5000)
+    by_status = {s: 0 for s in BARTER_STATUSES}
+    total_our = 0
+    total_their = 0
+    active_count = 0
+    for b in items:
+        st = b.get("status", "Təklif")
+        if st in by_status:
+            by_status[st] += 1
+        if st in ("Aktiv", "Tamamlandı"):
+            total_our += b.get("our_value", 0) or 0
+            total_their += b.get("their_value", 0) or 0
+        if st == "Aktiv":
+            active_count += 1
+    return {
+        "total": len(items),
+        "active": active_count,
+        "by_status": by_status,
+        "total_our_value": round(total_our, 2),
+        "total_their_value": round(total_their, 2),
+        "net_balance": round(total_their - total_our, 2)
+    }
 
 @api_router.get("/finance/summary")
 async def get_finance_summary(current_user: dict = Depends(get_current_user)):

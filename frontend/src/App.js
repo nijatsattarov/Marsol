@@ -4,7 +4,9 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
 import HR from "./pages/HR";
+import Attendance from "./pages/Attendance";
 import Finance from "./pages/Finance";
+import Barter from "./pages/Barter";
 import Sales from "./pages/Sales";
 import Meetings from "./pages/Meetings";
 import Tasks from "./pages/Tasks";
@@ -44,7 +46,9 @@ function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="companies" element={<Companies />} />
             <Route path="hr" element={<HR />} />
+            <Route path="attendance" element={<Attendance />} />
             <Route path="finance" element={<Finance />} />
+            <Route path="barter" element={<Barter />} />
             <Route path="sales" element={<Sales />} />
             <Route path="sales/company-database" element={<CompanyDatabase />} />
             <Route path="sales/members" element={<Members />} />
