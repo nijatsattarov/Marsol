@@ -14,6 +14,43 @@ const emptyOwner = () => ({
   social_links: [], children: [], desired_activities: []
 });
 
+function DynSelect({ value, onChange, options, placeholder }) {
+  return (
+    <select value={value || ''} onChange={(e) => onChange(e.target.value)} className="w-full h-9 px-2 text-sm border rounded-lg bg-white">
+      <option value="">{placeholder || 'Seçin'}</option>
+      {options.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+}
+
+function MultiSelect({ selected, options, onChange, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const available = options.filter(o => !(selected || []).includes(o));
+  return (
+    <div className="relative">
+      <div className="flex flex-wrap gap-1 min-h-[36px] border rounded-lg px-2 py-1.5 cursor-pointer bg-white" onClick={() => setOpen(!open)}>
+        {(!selected || selected.length === 0) && <span className="text-xs text-slate-400 py-0.5">{placeholder}</span>}
+        {(selected || []).map((item, i) => (
+          <span key={i} className="bg-[#3D4F6F]/10 text-[#3D4F6F] text-[10px] px-2 py-0.5 rounded-full flex items-center gap-0.5">
+            {item}
+            <button type="button" onClick={(e) => { e.stopPropagation(); onChange(selected.filter((_, j) => j !== i)); }}><X className="w-2.5 h-2.5" /></button>
+          </span>
+        ))}
+      </div>
+      {open && available.length > 0 && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute z-50 top-full mt-1 left-0 w-full bg-white border rounded-lg shadow-lg max-h-[150px] overflow-y-auto">
+            {available.map(o => (
+              <button key={o} type="button" className="w-full text-left text-xs px-3 py-1.5 hover:bg-slate-50" onClick={() => { onChange([...(selected || []), o]); setOpen(false); }}>{o}</button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function PublicForm() {
   const { token } = useParams();
   const [loading, setLoading] = useState(true);
@@ -22,7 +59,7 @@ export default function PublicForm() {
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({});
   const [owners, setOwners] = useState([emptyOwner()]);
-  const [meta, setMeta] = useState({ company_name: '', owner_phone: '', owner_name: '', fields: [] });
+  const [meta, setMeta] = useState({ company_name: '', owner_phone: '', owner_name: '', fields: [], options: {}, description: '' });
 
   useEffect(() => {
     const fetchForm = async () => {
@@ -41,7 +78,7 @@ export default function PublicForm() {
   }, [token]);
 
   const hasField = (key) => meta.fields.some(f => f.key === key);
-  const getField = (key) => meta.fields.find(f => f.key === key);
+  const opts = meta.options || {};
 
   const handleFileUpload = async (field, e) => {
     const file = e.target.files[0];
@@ -58,7 +95,6 @@ export default function PublicForm() {
     } catch { alert('Fayl yüklənmədi'); }
   };
 
-  // Owner helpers
   const updateOwner = (idx, field, val) => { const o = [...owners]; o[idx] = { ...o[idx], [field]: val }; setOwners(o); };
   const addOwner = () => setOwners([...owners, emptyOwner()]);
   const removeOwner = (idx) => { if (owners.length <= 1) return; setOwners(owners.filter((_, i) => i !== idx)); };
@@ -68,7 +104,6 @@ export default function PublicForm() {
   const addChild = (oIdx) => { const o = [...owners]; o[oIdx] = { ...o[oIdx], children: [...(o[oIdx].children || []), emptyChild()] }; setOwners(o); };
   const updateChild = (oIdx, cIdx, field, val) => { const o = [...owners]; const ch = [...(o[oIdx].children || [])]; ch[cIdx] = { ...ch[cIdx], [field]: val }; o[oIdx] = { ...o[oIdx], children: ch }; setOwners(o); };
   const removeChild = (oIdx, cIdx) => { const o = [...owners]; o[oIdx] = { ...o[oIdx], children: (o[oIdx].children || []).filter((_, i) => i !== cIdx) }; setOwners(o); };
-  // Company social links
   const addCompanySocial = () => setFormData({ ...formData, social_links: [...(formData.social_links || []), ''] });
   const updateCompanySocial = (idx, val) => { const l = [...(formData.social_links || [])]; l[idx] = val; setFormData({ ...formData, social_links: l }); };
   const removeCompanySocial = (idx) => setFormData({ ...formData, social_links: (formData.social_links || []).filter((_, i) => i !== idx) });
@@ -85,12 +120,8 @@ export default function PublicForm() {
     finally { setSubmitting(false); }
   };
 
-  const TextField = ({ field }) => (
-    <div>
-      <Label className="text-xs">{field.label}</Label>
-      <Input value={formData[field.key] || ''} onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })} className="text-sm" />
-    </div>
-  );
+  // Which fields are select-based
+  const selectFields = { sector: opts.sectors, sub_sector: (opts.sub_sectors || {})[formData.sector] || [], company_size: opts.company_sizes, region: opts.regions, contact_position: opts.positions };
 
   if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#3D4F6F]" /></div>;
   if (error && !submitted) return <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4"><div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center"><AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" /><h2 className="text-lg font-bold text-red-600 mb-2">Xəta</h2><p className="text-slate-500">{error}</p></div></div>;
@@ -104,7 +135,7 @@ export default function PublicForm() {
             <Building2 className="w-5 h-5" /><span className="font-bold text-sm">MARSOL GROUP</span>
           </div>
           <h1 className="text-xl font-bold text-[#3D4F6F]">Üzvlük Forumu</h1>
-          <p className="text-slate-500 text-sm mt-1">Zəhmət olmasa şirkət məlumatlarını doldurun</p>
+          <p className="text-slate-500 text-sm mt-1">{meta.description}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-4">
@@ -116,20 +147,25 @@ export default function PublicForm() {
             </div>
           </div>
 
-          {/* Simple text fields */}
+          {/* Dynamic fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {meta.fields.filter(f => f.type === 'text' || f.type === 'select' || f.type === 'date').map(field => (
+            {meta.fields.filter(f => ['text', 'select', 'date'].includes(f.type)).map(field => (
               <div key={field.key}>
                 <Label className="text-xs">{field.label}</Label>
-                <Input type={field.type === 'date' ? 'date' : 'text'} value={formData[field.key] || ''} onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })} className="text-sm" />
+                {selectFields[field.key] ? (
+                  <DynSelect value={formData[field.key]} onChange={(v) => setFormData({ ...formData, [field.key]: v })} options={selectFields[field.key]} placeholder="Seçin" />
+                ) : field.type === 'date' ? (
+                  <Input type="date" value={formData[field.key] || ''} onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })} className="text-sm" />
+                ) : (
+                  <Input value={formData[field.key] || ''} onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })} className="text-sm" />
+                )}
               </div>
             ))}
           </div>
 
           {/* Textarea fields */}
           {meta.fields.filter(f => f.type === 'textarea').map(field => (
-            <div key={field.key}>
-              <Label className="text-xs">{field.label}</Label>
+            <div key={field.key}><Label className="text-xs">{field.label}</Label>
               <textarea value={formData[field.key] || ''} onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })} className="w-full min-h-[60px] p-2 text-sm border rounded-lg resize-none" />
             </div>
           ))}
@@ -150,11 +186,11 @@ export default function PublicForm() {
             </div>
           )}
 
-          {/* File upload fields */}
+          {/* File uploads */}
           {meta.fields.filter(f => f.type === 'file').map(field => (
             <div key={field.key}>
               <Label className="text-xs">{field.label}</Label>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <label className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 rounded-lg cursor-pointer hover:bg-slate-200 text-xs">
                   <Upload className="w-3 h-3" />Fayl seç
                   <input type="file" className="hidden" onChange={(e) => handleFileUpload(field.key, e)} />
@@ -184,14 +220,20 @@ export default function PublicForm() {
                     <div><Label className="text-[10px]">Ad</Label><Input value={owner.first_name} onChange={(e) => updateOwner(oIdx, 'first_name', e.target.value)} className="text-sm h-8" /></div>
                     <div><Label className="text-[10px]">Soyad</Label><Input value={owner.last_name} onChange={(e) => updateOwner(oIdx, 'last_name', e.target.value)} className="text-sm h-8" /></div>
                     <div><Label className="text-[10px]">Ata adı</Label><Input value={owner.father_name} onChange={(e) => updateOwner(oIdx, 'father_name', e.target.value)} className="text-sm h-8" /></div>
-                    <div><Label className="text-[10px]">Vəzifə</Label><Input value={owner.position} onChange={(e) => updateOwner(oIdx, 'position', e.target.value)} className="text-sm h-8" /></div>
+                    <div><Label className="text-[10px]">Vəzifə</Label><DynSelect value={owner.position} onChange={(v) => updateOwner(oIdx, 'position', v)} options={opts.positions || []} placeholder="Seçin" /></div>
                     <div><Label className="text-[10px]">Telefon</Label><Input value={owner.phone} onChange={(e) => updateOwner(oIdx, 'phone', e.target.value)} className="text-sm h-8" /></div>
                     <div><Label className="text-[10px]">Email</Label><Input value={owner.email} onChange={(e) => updateOwner(oIdx, 'email', e.target.value)} className="text-sm h-8" /></div>
                     <div><Label className="text-[10px]">Doğum tarixi</Label><Input type="date" value={owner.birth_date} onChange={(e) => updateOwner(oIdx, 'birth_date', e.target.value)} className="text-sm h-8" /></div>
                     <div><Label className="text-[10px]">Vətəndaşlıq</Label><Input value={owner.citizenship} onChange={(e) => updateOwner(oIdx, 'citizenship', e.target.value)} className="text-sm h-8" /></div>
-                    <div><Label className="text-[10px]">Təhsil</Label><Input value={owner.education} onChange={(e) => updateOwner(oIdx, 'education', e.target.value)} className="text-sm h-8" /></div>
+                    <div><Label className="text-[10px]">Təhsil</Label><DynSelect value={owner.education} onChange={(v) => updateOwner(oIdx, 'education', v)} options={opts.education_levels || []} placeholder="Seçin" /></div>
                     <div><Label className="text-[10px]">İxtisas</Label><Input value={owner.specialty} onChange={(e) => updateOwner(oIdx, 'specialty', e.target.value)} className="text-sm h-8" /></div>
                     <div><Label className="text-[10px]">Universitet</Label><Input value={owner.university} onChange={(e) => updateOwner(oIdx, 'university', e.target.value)} className="text-sm h-8" /></div>
+                  </div>
+
+                  {/* Desired activities - multi-select */}
+                  <div>
+                    <Label className="text-[10px]">Qatılmaq istədiyi fəaliyyətlər</Label>
+                    <MultiSelect selected={owner.desired_activities} options={opts.activities || []} onChange={(v) => updateOwner(oIdx, 'desired_activities', v)} placeholder="Fəaliyyət seçin" />
                   </div>
 
                   {/* Owner social links */}
@@ -217,9 +259,7 @@ export default function PublicForm() {
                         <Input value={child.name} onChange={(e) => updateChild(oIdx, cIdx, 'name', e.target.value)} placeholder="Ad" className="text-sm h-7 flex-1" />
                         <Input value={child.surname} onChange={(e) => updateChild(oIdx, cIdx, 'surname', e.target.value)} placeholder="Soyad" className="text-sm h-7 flex-1" />
                         <Input type="date" value={child.birth_date} onChange={(e) => updateChild(oIdx, cIdx, 'birth_date', e.target.value)} className="text-sm h-7 w-[120px]" />
-                        <select value={child.gender} onChange={(e) => updateChild(oIdx, cIdx, 'gender', e.target.value)} className="text-sm h-7 border rounded px-1">
-                          <option value="">Cins</option><option value="Oğlan">Oğlan</option><option value="Qız">Qız</option>
-                        </select>
+                        <select value={child.gender} onChange={(e) => updateChild(oIdx, cIdx, 'gender', e.target.value)} className="text-sm h-7 border rounded px-1"><option value="">Cins</option><option value="Oğlan">Oğlan</option><option value="Qız">Qız</option></select>
                         <button type="button" onClick={() => removeChild(oIdx, cIdx)} className="p-0.5 hover:bg-red-100 rounded"><X className="w-2.5 h-2.5 text-red-500" /></button>
                       </div>
                     ))}
@@ -229,7 +269,7 @@ export default function PublicForm() {
             </div>
           )}
 
-          <Button type="submit" disabled={submitting} className="w-full bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold py-3" data-testid="form-submit-btn">
+          <Button type="submit" disabled={submitting} className="w-full bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold py-3">
             {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}Göndər
           </Button>
         </form>

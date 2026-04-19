@@ -1369,6 +1369,20 @@ async def update_forum_fields(data: dict, current_user: dict = Depends(check_per
     await db.setting_lists.update_one({"key": "forum_enabled_fields"}, {"$set": {"values": enabled}}, upsert=True)
     return {"message": "Forum sahələri yeniləndi", "enabled": enabled}
 
+
+async def _get_all_options():
+    """Helper: get dynamic options for forms"""
+    positions_db = await db.positions.find({}, {"_id": 0}).to_list(200)
+    regions_db = await db.regions.find({}, {"_id": 0}).to_list(200)
+    activities_db = await db.activities.find({}, {"_id": 0}).to_list(200)
+    return {
+        "company_sizes": ["Böyük", "Orta", "Kiçik", "Mikro"],
+        "regions": [r["name"] for r in regions_db] if regions_db else ["Bakı", "Sumqayıt", "Gəncə"],
+        "positions": [p["name"] for p in positions_db] if positions_db else ["Direktor", "Təsisçi"],
+        "education_levels": ["Orta təhsil", "Sub bakalavr", "Bakalavr", "Magistratura", "Doktorantura"],
+        "activities": [a["name"] for a in activities_db] if activities_db else ["Networking", "Təlim", "Sərgi"],
+    }
+
 @api_router.post("/forum/generate-link/{company_id}")
 async def generate_forum_link(company_id: str, current_user: dict = Depends(get_current_user)):
     company = await db.companies.find_one({"id": company_id}, {"_id": 0})
@@ -1398,12 +1412,30 @@ async def get_public_form(token: str):
     for cf in custom_fields:
         fields_info[f"custom_{cf['id']}"] = {"label": cf.get("label", cf.get("name", "")), "type": "text"}
     enabled_fields = [{"key": k, "label": fields_info[k]["label"], "type": fields_info[k]["type"]} for k in enabled if k in fields_info]
+    # Get dynamic options for selects
+    sectors_db = await db.sectors.find({}, {"_id": 0}).to_list(200)
+    sub_sectors_db = await db.sub_sectors.find({}, {"_id": 0}).to_list(500)
+    sub_map = {}
+    for s in sub_sectors_db:
+        sub_map.setdefault(s.get("sector", ""), []).append(s.get("name", ""))
+    form_description = await db.setting_lists.find_one({"key": "forum_description"}, {"_id": 0})
+    all_options = await _get_all_options()
     return {
         "company_name": company.get("brand_name", ""),
         "owner_phone": company.get("owner_phone", ""),
         "owner_name": company.get("owner_name", ""),
         "fields": enabled_fields,
-        "current_values": {k: company.get(k, "") for k in enabled}
+        "current_values": {k: company.get(k, "") for k in enabled},
+        "description": (form_description.get("values", [""])[0] if form_description else "Zəhmət olmasa şirkət məlumatlarını doldurun"),
+        "options": {
+            "sectors": [s.get("name", "") for s in sectors_db] + ["Digər"],
+            "sub_sectors": sub_map,
+            "company_sizes": all_options.get("company_sizes", ["Böyük", "Orta", "Kiçik", "Mikro"]),
+            "regions": all_options.get("regions", []),
+            "positions": all_options.get("positions", []),
+            "education_levels": all_options.get("education_levels", []),
+            "activities": all_options.get("activities", []),
+        }
     }
 
 @api_router.post("/public/form/{token}")

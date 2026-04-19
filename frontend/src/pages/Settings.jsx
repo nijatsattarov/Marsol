@@ -97,6 +97,7 @@ export default function Settings() {
   const [roleForm, setRoleForm] = useState({ name: '', permissions: {} });
   const [forumFields, setForumFields] = useState([]);
   const [forumEnabled, setForumEnabled] = useState([]);
+  const [forumDescription, setForumDescription] = useState('Zəhmət olmasa şirkət məlumatlarını doldurun');
 
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0, invitation_count: 0 });
@@ -167,6 +168,7 @@ export default function Settings() {
       setRoles(rolesRes.data || []);
       setForumFields(ffRes.data.fields || []);
       setForumEnabled(ffRes.data.enabled || []);
+      try { const descRes = await axios.get(`${API}/settings/lists/forum_description`, { headers }); setForumDescription((descRes.data && descRes.data[0]) || 'Zəhmət olmasa şirkət məlumatlarını doldurun'); } catch {}
     } catch (err) {
       console.error('Error fetching settings:', err);
     } finally {
@@ -969,10 +971,17 @@ export default function Settings() {
                 <Button size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125]" onClick={async () => {
                   try {
                     await axios.put(`${API}/forum/fields`, { enabled: forumEnabled }, { headers });
-                    toast.success('Forum sahələri yadda saxlandı');
+                    await axios.put(`${API}/settings/lists/forum_description`, { values: [forumDescription] }, { headers });
+                    toast.success('Forum tənzimləmələri yadda saxlandı');
                   } catch { toast.error('Xəta baş verdi'); }
                 }} data-testid="save-forum-fields-btn">Yadda saxla</Button>
               </div>
+            </div>
+
+            {/* Forum description */}
+            <div className="mb-4">
+              <Label className="text-xs font-semibold">Forum açıqlama mətni</Label>
+              <textarea value={forumDescription} onChange={(e) => setForumDescription(e.target.value)} className="w-full min-h-[60px] p-2 text-sm border rounded-lg resize-none mt-1" placeholder="Formun yuxarısında görünəcək açıqlama..." data-testid="forum-description-input" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
               {forumFields.map(field => (
