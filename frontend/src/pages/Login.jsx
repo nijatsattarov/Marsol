@@ -12,6 +12,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [wakingUp, setWakingUp] = useState(false);
   const [logoUrl, setLogoUrl] = useState(DEFAULT_LOGO);
 
   useEffect(() => {
@@ -24,16 +25,34 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setWakingUp(false);
 
+    // Show wake-up hint after 5s (Render cold start)
+    const hintTimer = setTimeout(() => setWakingUp(true), 5000);
+
+    const delays = [0, 3000, 8000, 15000, 20000];  // tolerate cold start up to ~46s
+    let lastErr;
     try {
-      const response = await axios.post(`${API}/auth/login`, formData);
-      localStorage.setItem('token', response.data.access_token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-      window.location.href = '/dashboard';
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Giriş zamanı xəta baş verdi');
+      for (let i = 0; i < delays.length; i++) {
+        if (delays[i] > 0) await new Promise(r => setTimeout(r, delays[i]));
+        try {
+          const response = await axios.post(`${API}/auth/login`, formData, { timeout: 30000 });
+          localStorage.setItem('token', response.data.access_token);
+          localStorage.setItem('user', JSON.stringify(response.data.user));
+          clearTimeout(hintTimer);
+          window.location.href = '/dashboard';
+          return;
+        } catch (e) {
+          lastErr = e;
+          // Don't retry on auth errors (invalid password, etc.)
+          if (e.response?.status === 401 || e.response?.status === 400) break;
+        }
+      }
+      clearTimeout(hintTimer);
+      setError(lastErr?.response?.data?.detail || 'Giriş zamanı xəta baş verdi. Server yuxuda ola bilər, yenidən cəhd edin.');
     } finally {
       setLoading(false);
+      setWakingUp(false);
     }
   };
 
@@ -136,6 +155,11 @@ export default function Login() {
                 'Daxil ol'
               )}
             </button>
+            {wakingUp && (
+              <p className="text-xs text-amber-600 text-center animate-pulse" data-testid="wake-up-hint">
+                Server oyadılır, bir anda hazır olacaq...
+              </p>
+            )}
           </div>
         </form>
 
