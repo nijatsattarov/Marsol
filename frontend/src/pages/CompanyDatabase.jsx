@@ -31,7 +31,9 @@ const STATUS_COLORS = {
 
 const emptyForm = {
   company_name: '', contact_name: '', position: '', phone: '', email: '',
-  source: '', sale_type: 'Üzvlük', status: 'Yeni', notes: ''
+  source: '', sale_type: '', status: 'Yeni', notes: '',
+  project_id: '', package: '', kv_m: '', price_per_sqm: '', stand_number: '', hall_number: '',
+  total_amount: '', participant_count: ''
 };
 
 const emptyMeetingForm = { date: '', time: '', meeting_type: 'Müştəri görüşü', meeting_mode: 'Offline', location: '', notes: '' };
@@ -40,6 +42,9 @@ export default function CompanyDatabase() {
   const [leads, setLeads] = useState([]);
   const [stats, setStats] = useState({});
   const [options, setOptions] = useState({ lead_sources: [], meeting_types: [] });
+  const [projectTypes, setProjectTypes] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [packages, setPackages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showMeetingModal, setShowMeetingModal] = useState(false);
@@ -59,14 +64,20 @@ export default function CompanyDatabase() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [lRes, sRes, oRes] = await Promise.all([
+      const [lRes, sRes, oRes, ptRes, pRes, pkgRes] = await Promise.all([
         axios.get(`${API}/sales-leads`, { headers }),
         axios.get(`${API}/sales-leads/stats`, { headers }),
         axios.get(`${API}/options/all`, { headers }),
+        axios.get(`${API}/settings/projects`, { headers }),
+        axios.get(`${API}/project-events`, { headers }),
+        axios.get(`${API}/settings/packages`, { headers }).catch(() => ({ data: [] })),
       ]);
       setLeads(lRes.data);
       setStats(sRes.data);
       setOptions(oRes.data);
+      setProjectTypes(ptRes.data || []);
+      setProjects(pRes.data || []);
+      setPackages(pkgRes.data || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, []);
@@ -135,6 +146,33 @@ export default function CompanyDatabase() {
     return [...base, 'Satıldı'];
   };
 
+  // Auto-fill price_per_sqm from selected project when applicable
+  const handleProjectSelect = (projectId) => {
+    const proj = projects.find(p => p.id === projectId);
+    const next = { ...form, project_id: projectId };
+    if (proj && form.sale_type === 'Sərgi' && proj.price_per_sqm != null && !form.price_per_sqm) {
+      next.price_per_sqm = proj.price_per_sqm;
+      if (form.kv_m) {
+        next.total_amount = Number(form.kv_m) * Number(proj.price_per_sqm);
+      }
+    }
+    setForm(next);
+  };
+
+  const recalcTotal = (kv, price) => {
+    const k = Number(kv) || 0;
+    const p = Number(price) || 0;
+    return k && p ? k * p : '';
+  };
+
+  // Projects that can be linked: Aktiv or Planlaşdırılır, matching lead's sale_type
+  const projectsForSaleType = projects.filter(p =>
+    (p.status === 'Aktiv' || p.status === 'Planlaşdırılır') &&
+    (!form.sale_type || p.type === form.sale_type)
+  );
+
+  const isSoldStatus = form.status === 'Satıldı' || form.status === 'Üzv oldu';
+
   const openNewSaleForCompany = (lead) => {
     setEditing(null);
     setForm({ ...emptyForm, company_name: lead.company_name, contact_name: lead.contact_name, position: lead.position, phone: lead.phone, email: lead.email, sale_type: '' });
@@ -153,7 +191,6 @@ export default function CompanyDatabase() {
   });
 
   const sources = options.lead_sources || [];
-  const saleTypes = options.sale_types || [];
   const meetingTypes = options.meeting_types || [];
 
   const exportToExcel = () => {
@@ -239,7 +276,7 @@ export default function CompanyDatabase() {
                   <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Əlaqədar şəxs</th>
                   <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Əlaqə</th>
                   <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Mənbə</th>
-                  <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Satış növü</th>
+                  <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Layihə növü</th>
                   <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Status</th>
                   <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Kurator</th>
                   <th className="text-right px-3 py-3 text-xs font-semibold text-[#3D4F6F]"></th>
@@ -342,7 +379,7 @@ export default function CompanyDatabase() {
 
       {/* Lead Form Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle style={{ color: '#3D4F6F' }}>{editing ? 'Lead redaktə et' : 'Yeni Lead'}</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-3" data-testid="lead-form">
             <div className="grid grid-cols-2 gap-3">
@@ -361,10 +398,10 @@ export default function CompanyDatabase() {
                 <Input value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} className="text-sm" />
               </div>
               <div>
-                <Label className="text-xs">Satış növü *</Label>
-                <Select value={form.sale_type} onValueChange={(v) => setForm({ ...form, sale_type: v })}>
+                <Label className="text-xs">Layihə növü *</Label>
+                <Select value={form.sale_type} onValueChange={(v) => setForm({ ...form, sale_type: v, project_id: '', package: '', kv_m: '', price_per_sqm: '', stand_number: '', hall_number: '', total_amount: '', participant_count: '' })}>
                   <SelectTrigger className="text-sm" data-testid="lead-sale-type"><SelectValue placeholder="Seçin" /></SelectTrigger>
-                  <SelectContent>{saleTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                  <SelectContent>{projectTypes.map(t => <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
@@ -394,6 +431,89 @@ export default function CompanyDatabase() {
                   <SelectTrigger className="text-sm" data-testid="lead-status-select"><SelectValue /></SelectTrigger>
                   <SelectContent>{STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {/* SOLD-STATE DYNAMIC FIELDS */}
+            {editing && isSoldStatus && form.sale_type && (
+              <div className="border-t pt-3 mt-2 space-y-3 bg-emerald-50/30 rounded-lg p-3" data-testid="sold-fields">
+                <p className="text-xs font-semibold text-emerald-700">Satış təfərrüatları — {form.sale_type}</p>
+
+                {/* Project selector (not for membership-only when no project needed, but user wants it) */}
+                <div>
+                  <Label className="text-xs">Hansı layihə? *</Label>
+                  <Select value={form.project_id} onValueChange={handleProjectSelect}>
+                    <SelectTrigger className="text-sm" data-testid="lead-project-select"><SelectValue placeholder="Aktiv / Planlaşdırılan layihələr" /></SelectTrigger>
+                    <SelectContent>
+                      {projectsForSaleType.length === 0
+                        ? <SelectItem value="__none" disabled>Uyğun layihə yoxdur</SelectItem>
+                        : projectsForSaleType.map(p => <SelectItem key={p.id} value={p.id}>{p.name} <span className="text-[10px] text-slate-400 ml-1">({p.status})</span></SelectItem>)
+                      }
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Membership: Package selector */}
+                {form.sale_type === 'Üzvlük' && (
+                  <div>
+                    <Label className="text-xs">Paket *</Label>
+                    <Select value={form.package} onValueChange={(v) => setForm({ ...form, package: v })}>
+                      <SelectTrigger className="text-sm" data-testid="lead-package-select"><SelectValue placeholder="Paket seçin" /></SelectTrigger>
+                      <SelectContent>
+                        {packages.length === 0
+                          ? <SelectItem value="__none" disabled>Paket yoxdur</SelectItem>
+                          : packages.map(p => <SelectItem key={p.id} value={p.name}>{p.name}{p.price ? ` — ${p.price} AZN` : ''}</SelectItem>)
+                        }
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Exhibition: sqm fields */}
+                {form.sale_type === 'Sərgi' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs">kv/m *</Label>
+                        <Input type="number" value={form.kv_m} onChange={(e) => {
+                          const v = e.target.value;
+                          setForm({ ...form, kv_m: v, total_amount: recalcTotal(v, form.price_per_sqm) });
+                        }} className="text-sm" data-testid="lead-kvm-input" />
+                      </div>
+                      <div>
+                        <Label className="text-xs">kv/m qiyməti (AZN)</Label>
+                        <Input type="number" value={form.price_per_sqm} onChange={(e) => {
+                          const v = e.target.value;
+                          setForm({ ...form, price_per_sqm: v, total_amount: recalcTotal(form.kv_m, v) });
+                        }} className="text-sm" data-testid="lead-price-input" placeholder="Layihədən avtomatik və ya əllə" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs">Stend nömrəsi</Label>
+                        <Input value={form.stand_number} onChange={(e) => setForm({ ...form, stand_number: e.target.value })} className="text-sm" data-testid="lead-stand-input" />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Zal nömrəsi</Label>
+                        <Input value={form.hall_number} onChange={(e) => setForm({ ...form, hall_number: e.target.value })} className="text-sm" data-testid="lead-hall-input" />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Tour / Training: participant count (optional) */}
+                {(form.sale_type === 'Tur' || form.sale_type === 'Təlim') && (
+                  <div>
+                    <Label className="text-xs">İştirakçı sayı</Label>
+                    <Input type="number" value={form.participant_count} onChange={(e) => setForm({ ...form, participant_count: e.target.value })} className="text-sm" data-testid="lead-participant-input" />
+                  </div>
+                )}
+
+                {/* Common amount */}
+                <div>
+                  <Label className="text-xs">Yekun məbləğ (AZN) *</Label>
+                  <Input type="number" value={form.total_amount} onChange={(e) => setForm({ ...form, total_amount: e.target.value })} className="text-sm font-semibold" data-testid="lead-total-input" />
+                </div>
               </div>
             )}
             <div>

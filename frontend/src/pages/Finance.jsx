@@ -66,6 +66,12 @@ export default function Finance() {
 
   // Projects for expense dropdown
   const [projects, setProjects] = useState([]);
+  // Finance-project-view
+  const [projectEvents, setProjectEvents] = useState([]);
+  const [selectedProjectType, setSelectedProjectType] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [projectSales, setProjectSales] = useState([]);
+  const [editingSale, setEditingSale] = useState(null);
 
   const token = localStorage.getItem('token');
   const { permissions } = usePermissions();
@@ -74,16 +80,18 @@ export default function Finance() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [companiesRes, expensesRes, optionsRes, projectsRes] = await Promise.all([
+      const [companiesRes, expensesRes, optionsRes, projectsRes, eventsRes] = await Promise.all([
         axios.get(`${API}/companies`, { headers }),
         axios.get(`${API}/finance/expenses`, { headers }),
         axios.get(`${API}/options/all`, { headers }),
         axios.get(`${API}/settings/projects`, { headers }),
+        axios.get(`${API}/project-events`, { headers }),
       ]);
       setAllCompanies(companiesRes.data);
       setExpenses(expensesRes.data);
       setOptions(optionsRes.data);
       setProjects(projectsRes.data);
+      setProjectEvents(eventsRes.data || []);
     } catch (error) {
       console.error('Error:', error);
     } finally {
@@ -92,6 +100,35 @@ export default function Finance() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Load sales when a project is selected in finance view
+  useEffect(() => {
+    if (!selectedProjectId) { setProjectSales([]); return; }
+    (async () => {
+      try {
+        const res = await axios.get(`${API}/project-events/${selectedProjectId}/sales`, { headers });
+        setProjectSales(res.data.sales || []);
+      } catch { setProjectSales([]); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProjectId]);
+
+  const saveProjectSale = async () => {
+    if (!editingSale) return;
+    try {
+      const payload = { ...editingSale };
+      ['kv_m', 'price_per_sqm', 'total_amount', 'paid_amount'].forEach(k => {
+        if (payload[k] === '' || payload[k] == null) payload[k] = null;
+        else payload[k] = Number(payload[k]);
+      });
+      await axios.put(`${API}/sales-leads/${editingSale.id}`, payload, { headers });
+      toast.success('Yadda saxlandı');
+      setEditingSale(null);
+      // Reload
+      const res = await axios.get(`${API}/project-events/${selectedProjectId}/sales`, { headers });
+      setProjectSales(res.data.sales || []);
+    } catch { toast.error('Xəta baş verdi'); }
+  };
 
   // Summary calculated from companies
   const totalIncome = allCompanies.reduce((s, c) => s + (c.total_amount || 0), 0);
@@ -345,6 +382,7 @@ export default function Finance() {
           <TabsTrigger value="overview" data-testid="tab-overview">İcmal</TabsTrigger>
           <TabsTrigger value="incomes" data-testid="tab-incomes">Gəlirlər ({allCompanies.length})</TabsTrigger>
           <TabsTrigger value="expenses" data-testid="tab-expenses">Xərclər ({expenses.length})</TabsTrigger>
+          <TabsTrigger value="projects" data-testid="tab-projects">Layihələr</TabsTrigger>
         </TabsList>
 
         {/* OVERVIEW TAB */}
@@ -594,7 +632,155 @@ export default function Finance() {
             </div>
           </div>
         </TabsContent>
+
+        {/* ====== PROJECTS TAB ====== */}
+        <TabsContent value="projects">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6" data-testid="finance-projects-tab">
+            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+              <div className="flex-1">
+                <Label className="text-xs">Layihə növü</Label>
+                <Select value={selectedProjectType} onValueChange={(v) => { setSelectedProjectType(v); setSelectedProjectId(''); }}>
+                  <SelectTrigger className="text-sm" data-testid="finance-projtype-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                  <SelectContent>
+                    {projects.map(p => <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {selectedProjectType && (
+              <div className="mb-4">
+                <Label className="text-xs mb-2 block">Layihələr</Label>
+                <div className="flex flex-wrap gap-2">
+                  {projectEvents.filter(e => e.type === selectedProjectType).map(e => (
+                    <button
+                      key={e.id}
+                      onClick={() => setSelectedProjectId(e.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${selectedProjectId === e.id ? 'bg-[#3D4F6F] text-white border-[#3D4F6F]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+                      data-testid={`finance-project-tab-${e.id}`}
+                    >
+                      {e.name} <span className="opacity-60 ml-1">({e.status})</span>
+                    </button>
+                  ))}
+                  {projectEvents.filter(e => e.type === selectedProjectType).length === 0 && (
+                    <p className="text-xs text-slate-400">Bu növdə layihə yoxdur</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {selectedProjectId && (
+              <div className="border-t pt-4">
+                {projectSales.length === 0 ? (
+                  <p className="text-center text-slate-400 py-8 text-sm">Bu layihə üçün satış yoxdur</p>
+                ) : selectedProjectType === 'Sərgi' ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs" data-testid="finance-sales-table">
+                      <thead className="bg-slate-50 border-b">
+                        <tr>
+                          <th className="text-left px-2 py-2 font-semibold text-[#3D4F6F]">ID</th>
+                          <th className="text-left px-2 py-2 font-semibold text-[#3D4F6F]">Şirkət</th>
+                          <th className="text-left px-2 py-2 font-semibold text-[#3D4F6F]">Müqavilə №</th>
+                          <th className="text-left px-2 py-2 font-semibold text-[#3D4F6F]">E-qaimə</th>
+                          <th className="text-left px-2 py-2 font-semibold text-[#3D4F6F]">kv/m</th>
+                          <th className="text-left px-2 py-2 font-semibold text-[#3D4F6F]">Stend №</th>
+                          <th className="text-right px-2 py-2 font-semibold text-[#3D4F6F]">Məbləğ</th>
+                          <th className="text-right px-2 py-2 font-semibold text-emerald-600">Ödənilib</th>
+                          <th className="text-right px-2 py-2 font-semibold text-red-500">Borc</th>
+                          <th className="text-left px-2 py-2 font-semibold text-[#3D4F6F]">Qeyd</th>
+                          <th className="text-right px-2 py-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {projectSales.map(s => {
+                          const total = Number(s.total_amount) || 0;
+                          const paid = Number(s.paid_amount) || 0;
+                          const debt = Math.max(total - paid, 0);
+                          return (
+                            <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                              <td className="px-2 py-2 font-mono text-[10px]">{s.lead_code}</td>
+                              <td className="px-2 py-2 font-medium">{s.company_name}</td>
+                              <td className="px-2 py-2">{s.contract_number || '-'}</td>
+                              <td className="px-2 py-2">{s.e_invoice_number || '-'}</td>
+                              <td className="px-2 py-2">{s.kv_m ?? '-'}</td>
+                              <td className="px-2 py-2">{s.stand_number || '-'}</td>
+                              <td className="px-2 py-2 text-right font-semibold">{total}</td>
+                              <td className="px-2 py-2 text-right text-emerald-600">{paid}</td>
+                              <td className="px-2 py-2 text-right text-red-500">{debt}</td>
+                              <td className="px-2 py-2 text-slate-500 max-w-[160px] truncate">{s.notes || ''}</td>
+                              <td className="px-2 py-2 text-right">{_canEdit && <button onClick={() => setEditingSale({ ...s })} className="p-1 hover:bg-slate-100 rounded" data-testid={`finance-edit-sale-${s.id}`}><Pencil className="w-3 h-3 text-slate-500" /></button>}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs" data-testid="finance-sales-table-simple">
+                      <thead className="bg-slate-50 border-b">
+                        <tr>
+                          <th className="text-left px-2 py-2 font-semibold text-[#3D4F6F]">ID</th>
+                          <th className="text-left px-2 py-2 font-semibold text-[#3D4F6F]">Şirkət</th>
+                          <th className="text-left px-2 py-2 font-semibold text-[#3D4F6F]">Müqavilə №</th>
+                          <th className="text-right px-2 py-2 font-semibold text-[#3D4F6F]">Məbləğ</th>
+                          <th className="text-right px-2 py-2 font-semibold text-emerald-600">Ödənilib</th>
+                          <th className="text-right px-2 py-2 font-semibold text-red-500">Borc</th>
+                          <th className="text-left px-2 py-2 font-semibold text-[#3D4F6F]">Qeyd</th>
+                          <th className="text-right px-2 py-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {projectSales.map(s => {
+                          const total = Number(s.total_amount) || 0;
+                          const paid = Number(s.paid_amount) || 0;
+                          const debt = Math.max(total - paid, 0);
+                          return (
+                            <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                              <td className="px-2 py-2 font-mono text-[10px]">{s.lead_code}</td>
+                              <td className="px-2 py-2 font-medium">{s.company_name}</td>
+                              <td className="px-2 py-2">{s.contract_number || '-'}</td>
+                              <td className="px-2 py-2 text-right font-semibold">{total}</td>
+                              <td className="px-2 py-2 text-right text-emerald-600">{paid}</td>
+                              <td className="px-2 py-2 text-right text-red-500">{debt}</td>
+                              <td className="px-2 py-2 text-slate-500 max-w-[160px] truncate">{s.notes || ''}</td>
+                              <td className="px-2 py-2 text-right">{_canEdit && <button onClick={() => setEditingSale({ ...s })} className="p-1 hover:bg-slate-100 rounded" data-testid={`finance-edit-sale-${s.id}`}><Pencil className="w-3 h-3 text-slate-500" /></button>}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </TabsContent>
       </Tabs>
+
+      {/* Finance sale edit modal */}
+      <Dialog open={!!editingSale} onOpenChange={(o) => !o && setEditingSale(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle className="text-[#3D4F6F]">Maliyyə redaktə — {editingSale?.company_name}</DialogTitle></DialogHeader>
+          {editingSale && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className="text-xs">Müqavilə №</Label><Input value={editingSale.contract_number || ''} onChange={e => setEditingSale({ ...editingSale, contract_number: e.target.value })} className="text-sm" data-testid="finance-contract-input" /></div>
+                <div><Label className="text-xs">E-qaimə №</Label><Input value={editingSale.e_invoice_number || ''} onChange={e => setEditingSale({ ...editingSale, e_invoice_number: e.target.value })} className="text-sm" data-testid="finance-einvoice-input" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className="text-xs">Məbləğ (AZN)</Label><Input type="number" value={editingSale.total_amount ?? ''} onChange={e => setEditingSale({ ...editingSale, total_amount: e.target.value })} className="text-sm" /></div>
+                <div><Label className="text-xs">Ödənilib (AZN)</Label><Input type="number" value={editingSale.paid_amount ?? ''} onChange={e => setEditingSale({ ...editingSale, paid_amount: e.target.value })} className="text-sm" data-testid="finance-paid-input" /></div>
+              </div>
+              <div><Label className="text-xs">Qeyd</Label><textarea value={editingSale.notes || ''} onChange={e => setEditingSale({ ...editingSale, notes: e.target.value })} className="w-full min-h-[40px] p-2 text-sm border rounded-lg resize-none" /></div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setEditingSale(null)}>Ləğv et</Button>
+                <Button type="button" className="bg-[#3D4F6F] text-white" onClick={saveProjectSale} data-testid="finance-save-sale-btn">Saxla</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Note Modal */}
       <Dialog open={showNoteModal} onOpenChange={setShowNoteModal}>

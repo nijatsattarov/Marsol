@@ -1300,6 +1300,7 @@ async def create_project_event(data: dict, current_user: dict = Depends(check_pe
         "location": data.get("location", ""),
         "description": data.get("description", ""),
         "status": data.get("status", "Planlaşdırılır"),
+        "price_per_sqm": data.get("price_per_sqm"),
         "created_by": current_user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -1329,6 +1330,26 @@ async def delete_project_event(event_id: str, current_user: dict = Depends(check
     await db.project_events.delete_one({"id": event_id})
     await db.event_invitations.delete_many({"event_id": event_id})
     return {"message": "Layihə silindi"}
+
+@api_router.get("/project-events/{event_id}/sales")
+async def get_project_sales(event_id: str, current_user: dict = Depends(get_current_user)):
+    """Return all sales-leads linked to this project (status Satıldı or Üzv oldu)."""
+    event = await db.project_events.find_one({"id": event_id}, {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Layihə tapılmadı")
+    query = {
+        "project_id": event_id,
+        "status": {"$in": ["Satıldı", "Üzv oldu"]}
+    }
+    query = await apply_scope(query, current_user, "sales")
+    sales = await db.sales_leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    # Enrich each sale with sector info from companies if linked by name
+    for s in sales:
+        # Try to find matching company by brand_name for sector / sub_sector info
+        comp = await db.companies.find_one({"brand_name": s.get("company_name", "")}, {"_id": 0, "sector": 1, "sub_sector": 1})
+        s["sector"] = comp.get("sector", "") if comp else ""
+        s["sub_sector"] = comp.get("sub_sector", "") if comp else ""
+    return {"event": event, "sales": sales}
 
 # ==================== EVENT INVITATIONS (QONAQLAR / DƏVƏTLƏR) ====================
 
@@ -1549,6 +1570,14 @@ async def create_sales_lead(data: dict, current_user: dict = Depends(check_permi
         "sale_type": data.get("sale_type", "Üzvlük"),
         "status": data.get("status", "Yeni"),
         "notes": data.get("notes", ""),
+        "project_id": data.get("project_id", ""),
+        "package": data.get("package", ""),
+        "kv_m": data.get("kv_m"),
+        "price_per_sqm": data.get("price_per_sqm"),
+        "stand_number": data.get("stand_number", ""),
+        "hall_number": data.get("hall_number", ""),
+        "total_amount": data.get("total_amount"),
+        "participant_count": data.get("participant_count"),
         "curator": current_user.get("name", ""),
         "created_by": current_user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()

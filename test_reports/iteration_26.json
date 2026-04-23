@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 26 — Lead (Şirkət Bazası) Layihə növü, dynamic sold-fields, Projects 'Satışlar' modal, Finance 'Layihələr' tab. Backend: 8/8 pytest PASS — POST /api/sales-leads persists new fields (project_id, package, kv_m, price_per_sqm, stand_number, hall_number, total_amount, participant_count); PUT updates them; POST /api/project-events persists price_per_sqm; GET /api/project-events/{id}/sales returns {event, sales} with sector/sub_sector enrichment from companies by brand_name; invalid id → 404; only Satıldı/Üzv oldu leads returned (Yeni Tur lead excluded); scope='own' for Satış meneceri role correctly filters /project-events/{id}/sales so sales manager sees only own leads while admin sees all. Frontend: UI verified via Playwright — 'Layihə növü' column header present (was 'Satış növü'); sale_type dropdown dynamic from /api/settings/projects (options: Test, Forum 2026, Sərgi — NOT hardcoded sale_types); add-lead-btn→lead-form→lead-sale-type→lead-status-select→sold-fields all render correctly; sold-fields visible when status=Satıldı; lead-project-select visible inside sold-fields; Sərgi branch shows lead-kvm-input + lead-price-input + lead-stand-input + lead-hall-input; total auto-calc verified (kv/m 10 × price 100 = 1000); Projects page has data-testid='sales-btn-{id}' rendered per event (2 events), clicking opens Dialog with 'Satışlar' title (shows 'Bu layihə üçün satış yoxdur' when empty); Projects add-event modal event-type-select dynamic, selecting Sərgi renders event-price-input; Finance page tab-projects ('Layihələr') visible and functional, selecting Sərgi in Layihə növü selector renders matching project buttons ('Yerli şirkətlərin tanıtım sərgisi (Aktiv)').",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration26_project_sales.py",
+    "/app/test_reports/pytest/pytest_results_iter26.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:1349 /api/project-events/{id}/sales enriches sector/sub_sector by matching lead.company_name to companies.brand_name. For non-Üzvlük leads (Sərgi/Tur/Təlim) leads are NOT promoted to companies (per requirement), so a Sərgi lead whose company name doesn't exactly match a company brand_name will get empty sector/sub_sector. Suggest also falling back on lead.sector/sub_sector if ever stored, OR denormalise these fields onto the lead at creation. Current behaviour correct per spec but fragile to typos/casing in company_name.",
+    "server.py:1292 POST /project-events does not validate price_per_sqm type. A string like '250' will pass through; frontend does handle this (Number cast) but server could coerce to float for consistent storage. Minor.",
+    "Frontend CompanyDatabase.jsx:152 handleProjectSelect auto-fills price_per_sqm only when form.price_per_sqm is falsy — if user clears value then picks a project, auto-fill works; if user types a value then switches project, manual value is preserved (intentional). Ok.",
+    "Projects.jsx: salesView Dialog uses DialogContent without accessibility description — will likely trigger React a11y warning 'Missing Description or aria-describedby'. Minor a11y only.",
+    "Finance.jsx Layihələr tab — project-type Select uses plain text-based combobox without data-testid on the trigger; minor — first combobox selector used in test worked but a dedicated testid like 'finance-project-type-select' would be more robust."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration26_project_sales.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": "Admin: settings@marsol.az / marsol123; Satış: satis@marsol.az / marsol123",
+  "seed_data_creation": "Created TEST_ prefixed project-event (Sərgi, 2026-06), TEST_SergiCo company (sector=IT, sub_sector=SaaS), and 3 TEST_ sales-leads (Sərgi/Üzvlük/Tur). All cleaned up in teardown_module. Sales manager role scopes reset to {} after scope test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Routes: /sales/company-database (NOT /company-database or /leads), /projects, /finance. Login returns access_token. For scope testing, use PUT /api/roles/{id} (NOT /settings/roles). Key testids: company-database-page, add-lead-btn, lead-form, lead-sale-type (dynamic dropdown), lead-status-select, sold-fields, lead-project-select, lead-package-select (Üzvlük), lead-kvm-input/lead-price-input/lead-stand-input/lead-hall-input (Sərgi, with total auto-calc kv_m × price_per_sqm), lead-participant-input (Tur/Təlim), lead-total-input, lead-submit-btn; Projects: projects-page, add-event-btn, event-{id}, sales-btn-{id}, event-type-select, event-price-input (Sərgi only), sales-table-exhibition/tour/training, edit-sale-{id}, save-sale-btn; Finance: tab-projects, finance-edit-sale-{id}. GET /api/project-events/{id}/sales returns {event, sales[]} with sector/sub_sector injected from companies.brand_name match. Only status in ['Satıldı','Üzv oldu'] appear.",
+  "rca of the issue": "No bugs found. All 8 pytest backend tests pass (sales-lead new fields persist on POST/PUT, project-event price_per_sqm persists, /project-events/{id}/sales works with enrichment + 404 + scope filtering). All 14 UI checkpoints from the review request pass."
+}
