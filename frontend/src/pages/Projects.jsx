@@ -11,12 +11,12 @@ import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-const EVENT_TYPES = ['Sərgi', 'Forum', 'İftar', 'Təlim', 'Tur (Daxili)', 'Tur (Xarici)', 'Networking', 'Konfrans', 'Digər'];
 const STATUSES = ['Planlaşdırılır', 'Aktiv', 'Tamamlandı'];
 const STATUS_COLORS = { 'Planlaşdırılır': 'bg-amber-100 text-amber-700', 'Aktiv': 'bg-green-100 text-green-700', 'Tamamlandı': 'bg-slate-100 text-slate-600' };
 
 export default function Projects() {
   const [events, setEvents] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -28,7 +28,14 @@ export default function Projects() {
   const headers = { Authorization: `Bearer ${token}` };
 
   const fetchData = useCallback(async () => {
-    try { const res = await axios.get(`${API}/project-events`, { headers }); setEvents(res.data); }
+    try {
+      const [evRes, typeRes] = await Promise.all([
+        axios.get(`${API}/project-events`, { headers }),
+        axios.get(`${API}/settings/projects`, { headers }),
+      ]);
+      setEvents(evRes.data);
+      setProjectTypes(typeRes.data || []);
+    }
     catch (e) { console.error(e); } finally { setLoading(false); }
   }, []);
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -93,8 +100,8 @@ export default function Projects() {
             <div><Label className="text-xs">Layihə adı *</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required className="text-sm" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label className="text-xs">Növ *</Label>
-                <Select value={form.type} onValueChange={v => setForm({...form, type: v})}><SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
-                  <SelectContent>{EVENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent></Select></div>
+                <Select value={form.type} onValueChange={v => setForm({...form, type: v})}><SelectTrigger className="text-sm" data-testid="event-type-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                  <SelectContent>{projectTypes.map(t => <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}</SelectContent></Select></div>
               <div><Label className="text-xs">Status</Label>
                 <Select value={form.status} onValueChange={v => setForm({...form, status: v})}><SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>{STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></div>

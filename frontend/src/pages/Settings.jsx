@@ -103,7 +103,7 @@ export default function Settings() {
 
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0, invitation_count: 0 });
-  const [projectForm, setProjectForm] = useState({ name: '', description: '' });
+  const [projectForm, setProjectForm] = useState({ name: '' });
   const [fieldForm, setFieldForm] = useState({ module: '', sub_tab: '', field_name: '', field_label: '', field_type: 'text', options: '', required: false });
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'user', department: '', phone: '', status: 'Aktiv' });
   const [sectorForm, setSectorForm] = useState({ name: '' });
@@ -219,7 +219,7 @@ export default function Settings() {
         toast.success('Layihə əlavə edildi');
       }
       setEditingProject(null);
-      setProjectForm({ name: '', description: '' });
+      setProjectForm({ name: '' });
       fetchData();
     } catch { toast.error('Xəta baş verdi'); }
   };
@@ -563,23 +563,19 @@ export default function Settings() {
         <TabsContent value="projects">
           <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold" style={{ color: '#3D4F6F' }}>Layihələr</h2>
+              <h2 className="text-lg font-semibold" style={{ color: '#3D4F6F' }}>Layihə növləri</h2>
             </div>
             <form onSubmit={handleProjectSubmit} className="flex flex-col sm:flex-row gap-3 mb-6 p-4 bg-slate-50 rounded-lg" data-testid="project-form">
               <div className="flex-1">
-                <Label className="text-xs mb-1">Layihə adı *</Label>
-                <Input value={projectForm.name} onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })} placeholder="Layihə adı" className="text-sm" required data-testid="project-name-input" />
-              </div>
-              <div className="flex-1">
-                <Label className="text-xs mb-1">Təsvir</Label>
-                <Input value={projectForm.description} onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })} placeholder="Təsvir" className="text-sm" data-testid="project-desc-input" />
+                <Label className="text-xs mb-1">Layihə növü *</Label>
+                <Input value={projectForm.name} onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })} placeholder="Layihə növü" className="text-sm" required data-testid="project-name-input" />
               </div>
               <div className="flex gap-2 items-end">
                 <Button type="submit" size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="project-submit-btn">
                   {editingProject ? 'Yenilə' : 'Əlavə et'}
                 </Button>
                 {editingProject && (
-                  <Button type="button" variant="outline" size="sm" onClick={() => { setEditingProject(null); setProjectForm({ name: '', description: '' }); }} data-testid="project-cancel-btn">Ləğv</Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => { setEditingProject(null); setProjectForm({ name: '' }); }} data-testid="project-cancel-btn">Ləğv</Button>
                 )}
               </div>
             </form>
@@ -588,10 +584,9 @@ export default function Settings() {
                 <div key={prj.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors" data-testid={`project-item-${prj.id}`}>
                   <div className="flex-1">
                     <p className="font-semibold text-sm text-[#3D4F6F]">{prj.name}</p>
-                    {prj.description && <p className="text-xs text-slate-500 mt-0.5">{prj.description}</p>}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => { setEditingProject(prj); setProjectForm({ name: prj.name, description: prj.description || '' }); }} data-testid={`project-edit-${prj.id}`}>
+                    <Button variant="ghost" size="sm" onClick={() => { setEditingProject(prj); setProjectForm({ name: prj.name }); }} data-testid={`project-edit-${prj.id}`}>
                       <Pencil className="w-4 h-4 text-slate-500" />
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => handleDeleteProject(prj.id)} data-testid={`project-delete-${prj.id}`}>

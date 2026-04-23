@@ -69,6 +69,7 @@ Marketinq, Hesabatlar, Fayllar, Qeydlər
 - [x] Barter Əməliyyatları — ✅ Iter 22
 - [x] **AI Data Analyst (Hesabatlar)** — təbii dil sorğuları, cədvəl, Excel export, Siyahıya əlavə — ✅ Iter 23
 - [x] **Fəaliyyətlər modulu tam yenidən qurulub** — 8 alt-modul + reytinq aqreqasiyası — ✅ Iter 24
+- [x] **Settings → Layihə növləri** — "Layihə adı" → "Layihə növü", Təsvir sahəsi silindi; Projects modulunda "Növ" dropdown-u Settings-dən dinamik gəlir — ✅ 2026-04-23
 
 ### P1
 - [ ] PDF Reports generation (Hesabatlar modulu)
