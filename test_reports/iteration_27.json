@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 27 — Layihə detalı, payment endpoint, Tur/Təlim total_price. Backend: 10/10 pytest PASS on new file test_iteration27_payments_totalprice.py. Verified: (a) POST /api/project-events saves both price_per_sqm & total_price (Sərgi w/ 200+50000; Tur w/ total_price=3500). (b) POST /api/sales-leads/{id}/payment appends history entry with id/amount/date/note/added_by/added_at, updates paid_amount cumulatively (500→800 after 2nd), persists meta (contract_number, e_invoice_number, e_invoice_date, voen, payment_due_date, follow_up, notes). (c) GET /api/sales-leads/{id}/payments returns list of 2 history entries. (d) Meta-only payload (amount=0) updates contract_number without growing history. (e) GET /api/project-events/{id}/sales returns sales with debt_amount = total-paid (2000-800=1200). (f) Invalid lead id → 404 on both POST /payment and GET /payments. (g) Satış meneceri with scope=own → 403 when POSTing payment on admin-owned lead. Frontend: Playwright verified projects→/projects/{id} navigation works, ProjectDetail page has header (name/type/status/price badge/date/location), Excel button (detail-export-btn), detail-search input, detail-filter-toggle with 11 filter-{key} inputs for Sərgi type, edit-sale-{id}. Projects add-event modal: Tur type renders event-totalprice-input and hides event-price-input; Sərgi type renders event-price-input. Finance Layihələr tab: tab-projects works, project type selector filters projects, finance-edit-sale-{id} pencil opens payment modal with ALL required sections (Yeni Ödəniş / Maliyyə Məlumatları) and ALL fields (Müqavilə №, Ödəniş tarixi, VÖEN, E-qaimə tarixi, E-qaimə №, Follow-up, Qeyd). Save triggered POST /payment → 'Yadda saxlandı' toast + modal closed + table refreshed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration27_payments_totalprice.py",
+    "/app/test_reports/pytest/pytest_results_iter27.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Finance.jsx: 'finance-sales-search' and 'finance-sales-filter-toggle' data-testids are conditionally rendered only after a project is selected (not present when tab first opens). That's fine functionally but slightly fragile for tests — consider rendering placeholder/hidden versions or documenting this. Testing agent worked around it.",
+    "Finance.jsx payment modal new-payment amount input lacks a dedicated data-testid ('finance-new-payment-amount' returned null). The Save flow still works but add data-testid='finance-new-payment-amount' and 'finance-save-payment-btn' for robust tests.",
+    "ProjectDetail.jsx:182 filter list for Sərgi renders 11 filter-{key} inputs including readonly cells sector/sub_sector/lead_code (wanted behaviour). Looks correct per requirements.",
+    "server.py:1358 POST /api/sales-leads/{id}/payment uses check_permission('sales','write') + assert_scope_ownership — properly returns 403 for non-owner when scope=own. Verified.",
+    "server.py:1355 debt_amount computed max(total-paid, 0) — good; negative case handled.",
+    "ProjectDetail.jsx:182 readonly filter inclusion relies on key check list (sector/sub_sector/lead_code). If a future TABLE_CONFIG adds new readonly columns, they will be excluded from filters by default. Small future-maintenance note."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration27_payments_totalprice.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin: settings@marsol.az/marsol123; Satış: satis@marsol.az/marsol123",
+  "seed_data_creation": "Created TEST27_SergiEvt (Sərgi, price_per_sqm=200, total_price=50000) + TEST27_TurEvt (Tur, total_price=3500) + TEST27_LeadCo (Satıldı, total=2000, 2 payments=800). All cleaned in teardown. Satış meneceri role scope reset to {} after test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 27 validated: /projects/:id ProjectDetail page (testids: project-detail-page, detail-search, detail-filter-toggle, detail-export-btn, filter-{key} per column, edit-sale-{id}, save-sale-btn, detail-sales-table, back-to-projects). Projects add-event modal has event-totalprice-input (Tur/Təlim only) and event-price-input (Sərgi only). Finance Layihələr: tab-projects, finance-edit-sale-{id} opens 'Ödəniş redaktə' modal with sections 'Yeni Ödəniş' + 'Maliyyə Məlumatları' (Müqavilə №, Ödəniş tarixi, VÖEN, E-qaimə tarixi, E-qaimə №, Follow-up, Qeyd) + Saxla/Ləğv et buttons. POST /api/sales-leads/{id}/payment appends to payment_history and accumulates paid_amount. GET /api/sales-leads/{id}/payments returns history list. /project-events/{id}/sales enriches debt_amount. NOTE: finance-sales-search / finance-sales-filter-toggle / finance-new-payment-amount testids may be missing/conditional — test with UI state before relying.",
+  "rca of the issue": "No bugs found. All review request checkpoints verified: backend via pytest (10/10), frontend via Playwright (ProjectDetail full flow + Projects total_price conditional + Finance payment modal end-to-end save)."
+}

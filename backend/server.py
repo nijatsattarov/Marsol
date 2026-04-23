@@ -1301,6 +1301,7 @@ async def create_project_event(data: dict, current_user: dict = Depends(check_pe
         "description": data.get("description", ""),
         "status": data.get("status", "Planlaşdırılır"),
         "price_per_sqm": data.get("price_per_sqm"),
+        "total_price": data.get("total_price"),
         "created_by": current_user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -1345,11 +1346,56 @@ async def get_project_sales(event_id: str, current_user: dict = Depends(get_curr
     sales = await db.sales_leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
     # Enrich each sale with sector info from companies if linked by name
     for s in sales:
-        # Try to find matching company by brand_name for sector / sub_sector info
         comp = await db.companies.find_one({"brand_name": s.get("company_name", "")}, {"_id": 0, "sector": 1, "sub_sector": 1})
         s["sector"] = comp.get("sector", "") if comp else ""
         s["sub_sector"] = comp.get("sub_sector", "") if comp else ""
+        # Compute debt
+        total = s.get("total_amount") or 0
+        paid = s.get("paid_amount") or 0
+        s["debt_amount"] = max(float(total) - float(paid), 0)
     return {"event": event, "sales": sales}
+
+@api_router.post("/sales-leads/{lead_id}/payment")
+async def add_lead_payment(lead_id: str, data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
+    """Append a payment to a lead and update paid_amount & metadata (contract, e-qaimə, follow-up)."""
+    lead = await db.sales_leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead tapılmadı")
+    await assert_scope_ownership(current_user, "sales", lead)
+    
+    updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    # Metadata updates (all optional)
+    for k in ("contract_number", "e_invoice_date", "e_invoice_number", "voen", "payment_due_date", "follow_up", "notes"):
+        if k in data:
+            updates[k] = data[k]
+    
+    # Add new payment if amount > 0
+    amount = data.get("new_payment_amount")
+    if amount is not None and str(amount).strip() and float(amount) > 0:
+        payment = {
+            "id": str(uuid.uuid4()),
+            "amount": float(amount),
+            "date": data.get("payment_date", datetime.now(timezone.utc).strftime("%Y-%m-%d")),
+            "note": data.get("payment_note", ""),
+            "added_by": current_user.get("name", ""),
+            "added_at": datetime.now(timezone.utc).isoformat()
+        }
+        history = lead.get("payment_history", []) or []
+        history.append(payment)
+        updates["payment_history"] = history
+        updates["paid_amount"] = float(lead.get("paid_amount") or 0) + float(amount)
+    
+    await db.sales_leads.update_one({"id": lead_id}, {"$set": updates})
+    updated = await db.sales_leads.find_one({"id": lead_id}, {"_id": 0})
+    return updated
+
+@api_router.get("/sales-leads/{lead_id}/payments")
+async def get_lead_payments(lead_id: str, current_user: dict = Depends(get_current_user)):
+    lead = await db.sales_leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead tapılmadı")
+    return lead.get("payment_history", []) or []
 
 # ==================== EVENT INVITATIONS (QONAQLAR / DƏVƏTLƏR) ====================
 

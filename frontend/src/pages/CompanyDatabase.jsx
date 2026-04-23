@@ -146,7 +146,7 @@ export default function CompanyDatabase() {
     return [...base, 'Satıldı'];
   };
 
-  // Auto-fill price_per_sqm from selected project when applicable
+  // Auto-fill price_per_sqm / total_amount from selected project when applicable
   const handleProjectSelect = (projectId) => {
     const proj = projects.find(p => p.id === projectId);
     const next = { ...form, project_id: projectId };
@@ -155,6 +155,9 @@ export default function CompanyDatabase() {
       if (form.kv_m) {
         next.total_amount = Number(form.kv_m) * Number(proj.price_per_sqm);
       }
+    }
+    if (proj && (form.sale_type === 'Tur' || form.sale_type === 'Təlim') && proj.total_price != null && !form.total_amount) {
+      next.total_amount = proj.total_price;
     }
     setForm(next);
   };

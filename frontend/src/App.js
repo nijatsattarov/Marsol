@@ -18,6 +18,7 @@ import Members from "./pages/Members";
 import DashboardLayout from "./layouts/DashboardLayout";
 import Marketing from "./pages/Marketing";
 import Projects from "./pages/Projects";
+import ProjectDetail from "./pages/ProjectDetail";
 import Organization from "./pages/Organization";
 import OrgDashboard from "./pages/organization/OrgDashboard";
 import VendorModule from "./pages/organization/VendorModule";
@@ -64,6 +65,7 @@ function App() {
             <Route path="sales/contact-lists" element={<ContactLists />} />
             <Route path="marketing" element={<Marketing />} />
             <Route path="projects" element={<Projects />} />
+            <Route path="projects/:id" element={<ProjectDetail />} />
             <Route path="organization" element={<OrgDashboard />} />
             <Route path="organization/ratings" element={<OrgRatings />} />
             <Route path="organization/venues" element={<VendorModule config={ORG_CONFIGS.venues} />} />
