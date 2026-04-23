@@ -465,10 +465,9 @@ export default function Companies() {
 
             {/* ŞIRKƏT TAB */}
             <TabsContent value="basic" className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><Label className="text-xs">Brend adı *</Label><Input value={formData.brand_name} onChange={e => setFormData({...formData, brand_name: e.target.value})} required className="text-sm" data-testid="company-brand-input" /></div>
                 <div><Label className="text-xs">Hüquqi adı</Label><Input value={formData.legal_name} onChange={e => setFormData({...formData, legal_name: e.target.value})} className="text-sm" /></div>
-                <div><Label className="text-xs">VÖEN</Label><Input value={formData.voen} onChange={e => setFormData({...formData, voen: e.target.value})} className="text-sm" data-testid="company-voen-input" /></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div><Label className="text-xs">Sektor *</Label>
@@ -564,11 +563,6 @@ export default function Companies() {
                     {formData.logo_url && <img src={formData.logo_url} alt="logo" className="w-10 h-10 rounded border object-cover" />}
                     <label className="flex items-center gap-1 px-3 py-2 bg-slate-50 border rounded-lg cursor-pointer hover:bg-slate-100 text-xs"><Upload className="w-3.5 h-3.5" />Logo yüklə<input type="file" accept="image/*" className="hidden" onChange={e => handleFileUpload(e, 'logo_url')} /></label>
                   </div>
-                </div>
-                <div>
-                  <Label className="text-xs">Bank rekvizitləri (fayl)</Label>
-                  <label className="flex items-center gap-1 px-3 py-2 bg-slate-50 border rounded-lg cursor-pointer hover:bg-slate-100 text-xs mt-1"><Upload className="w-3.5 h-3.5" />Fayl yüklə<input type="file" className="hidden" onChange={e => handleFileUpload(e, 'bank_files')} /></label>
-                  {(formData.bank_files || []).map((f, i) => <p key={i} className="text-xs text-slate-500 mt-1">{f.name}</p>)}
                 </div>
               </div>
               <CompanyCustomFieldsRenderer fields={customFields} tabName="company" formData={formData} setFormData={setFormData} />
@@ -681,6 +675,17 @@ export default function Companies() {
                     <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
                     <SelectContent>{options?.marsol_representatives?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                   </Select>
+                </div>
+                <div><Label className="text-xs">VÖEN</Label><Input value={formData.voen} onChange={e => setFormData({...formData, voen: e.target.value})} className="text-sm" data-testid="company-voen-input" placeholder="1234567890" /></div>
+              </div>
+              <div className="p-3 bg-blue-50/40 border border-blue-100 rounded-lg">
+                <Label className="text-xs font-semibold text-blue-700">Bank rekvizitləri</Label>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <label className="flex items-center gap-1 px-3 py-2 bg-white border rounded-lg cursor-pointer hover:bg-slate-50 text-xs"><Upload className="w-3.5 h-3.5" />Fayl yüklə<input type="file" className="hidden" onChange={e => handleFileUpload(e, 'bank_files')} /></label>
+                  {(formData.bank_files || []).map((f, i) => (
+                    <span key={i} className="text-xs text-slate-600 bg-white border rounded px-2 py-1">{f.name}</span>
+                  ))}
+                  {(!formData.bank_files || formData.bank_files.length === 0) && <span className="text-[11px] text-slate-400">Heç bir fayl yüklənməyib</span>}
                 </div>
               </div>
               {formData.contracts.map((ct, ci) => (
