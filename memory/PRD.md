@@ -70,6 +70,7 @@ Marketinq, Hesabatlar, Fayllar, Qeydlər
 - [x] **AI Data Analyst (Hesabatlar)** — təbii dil sorğuları, cədvəl, Excel export, Siyahıya əlavə — ✅ Iter 23
 - [x] **Fəaliyyətlər modulu tam yenidən qurulub** — 8 alt-modul + reytinq aqreqasiyası — ✅ Iter 24
 - [x] **Settings → Layihə növləri** — "Layihə adı" → "Layihə növü", Təsvir sahəsi silindi; Projects modulunda "Növ" dropdown-u Settings-dən dinamik gəlir — ✅ 2026-04-23
+- [x] **Rol bazlı Görünüş Miqyası (Scope)** — hər rol üçün per-modul "Hamısı"/"Yalnız özününki" radio; apply_scope + assert_scope_ownership backend-də; /api/sales-members missing-return bug fix; Tasks/Meetings assignee dropdown artıq sistem istifadəçiləri + HR birləşmiş — ✅ Iter 25 (12/12 pytest PASS)
 
 ### P1
 - [ ] PDF Reports generation (Hesabatlar modulu)
