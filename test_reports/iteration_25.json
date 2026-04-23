@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 25 — Scope (Görünüş Miqyası) & /api/sales-members bug fix. Backend: 12/12 pytest PASS — role POST/PUT persists 'scopes' field, /api/sales-members now returns 200 with array (previous missing-return bug fixed), apply_scope() correctly filters /api/tasks, /api/meetings, /api/members, /api/sales-leads, /api/project-events, /api/assemblies when role scope='own' (non-owned records hidden), admin is never scoped, default scope is 'all', assert_scope_ownership returns 403 on non-owned PUT and 200 on own PUT, sales manager can POST /api/tasks. Frontend: Settings → Rollar → edit modal shows 'Görünüş Miqyası' table with all 7 modules (members, companies, sales, tasks, meetings, assembly, projects) with data-testids scope-{module}-{all|own}; toggling and saving a scope persists on backend (verified by reopening modal and inspecting radio state). Tasks modal task-assignee-select and Meetings modal meeting-employee-select both show merged 29-option dropdown (system users + HR employees), confirming users+employeeNames merge.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Role edit modal", "issues": ["React warning: Missing `Description` or `aria-describedby={undefined}` for DialogContent — cosmetic a11y warning only, not blocking"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration25_scopes_and_sales_members.py",
+    "/app/test_reports/pytest/pytest_results_iter25.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:1528-1533 /api/sales-leads/stats re-calls apply_scope() inside a loop over LEAD_STATUSES; this issues one extra DB round-trip per status for the scope lookup (get_user_scopes). Minor perf improvement: cache scopes once per request or pass pre-computed scoped base filter. Not blocking.",
+    "server.py SCOPE_FIELDS uses user.get('name','') for identification. If two users share the same 'name' string, their records will cross-leak under scope=own. Consider matching by user id or user email with a dedicated 'created_by_id' field for strong isolation. Currently UUID name collision unlikely but worth hardening.",
+    "server.py:346 assert_scope_ownership returns early for admin but also if record is None; for PUT endpoints the caller already 404s on missing record, so this branch is safe. Good.",
+    "server.py:1631 /api/sales-members now correctly returns the list. Good fix.",
+    "Frontend Settings.jsx role modal and Tasks/Meetings merging list de-duplicates by plain `new Set()` on names — same collision risk as backend scope. Minor."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration25_scopes_and_sales_members.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": "Admin: settings@marsol.az / marsol123; Satış: satis@marsol.az / marsol123 (role='Satış meneceri', name='Satış Test')",
+  "seed_data_creation": "Test tasks/leads/meetings/roles created with TEST_ prefix were cleaned up after each test. Satış meneceri role scopes were reset to {} at end of each test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login endpoint returns 'access_token'. Scope mechanics: role document holds 'scopes' dict {module: 'all'|'own'}; default treated as 'all'. SCOPE_FIELDS in server.py:310 maps module -> ownership field names. get_user_scopes returns {} for admin so apply_scope is a no-op. Key testids for role scope UI: scope-{members|companies|sales|tasks|meetings|assembly|projects}-{all|own}. Tasks assignee dropdown testid=task-assignee-select, responsible=task-responsible-select; Meetings employee=meeting-employee-select. Meeting POST requires meeting_type/department/employee/date/time/company_name/contact_person/contact_phone.",
+  "rca of the issue": "No bugs. Original /api/sales-members missing-return bug is fixed; endpoint now returns filtered list of lead docs with status='Üzv oldu' and sale_type='Üzvlük'. Scope mechanism verified end-to-end: non-admin with scopes[module]='own' sees only records where any SCOPE_FIELDS[module] equals user.name; PUT of non-owned record yields HTTP 403 with 'Bu qeyd sizə aid deyil'; admin is bypassed in both apply_scope and assert_scope_ownership."
+}

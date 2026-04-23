@@ -94,7 +94,7 @@ export default function Settings() {
   const [roles, setRoles] = useState([]);
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
-  const [roleForm, setRoleForm] = useState({ name: '', permissions: {} });
+  const [roleForm, setRoleForm] = useState({ name: '', permissions: {}, scopes: {} });
   const [forumFields, setForumFields] = useState([]);
   const [forumEnabled, setForumEnabled] = useState([]);
   const [forumDescription, setForumDescription] = useState('Zəhmət olmasa şirkət məlumatlarını doldurun');
@@ -1013,7 +1013,7 @@ export default function Settings() {
                 setEditingRole(null);
                 const defaultPerms = {};
                 ['dashboard','companies','hr','sales','members','obligations','finance','organization','meetings','assembly','tasks','marketing','projects','reports','messages','files','notes','settings','notifications'].forEach(m => defaultPerms[m] = 'none');
-                setRoleForm({ name: '', permissions: defaultPerms });
+                setRoleForm({ name: '', permissions: defaultPerms, scopes: {} });
                 setShowRoleModal(true);
               }} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125]" data-testid="add-role-btn">
                 <Plus className="w-4 h-4 mr-1" />Yeni Rol
@@ -1031,7 +1031,7 @@ export default function Settings() {
                       <div className="flex gap-1">
                         <Button size="sm" variant="ghost" onClick={() => {
                           setEditingRole(role);
-                          setRoleForm({ name: role.name, permissions: { ...role.permissions } });
+                          setRoleForm({ name: role.name, permissions: { ...role.permissions }, scopes: { ...(role.scopes || {}) } });
                           setShowRoleModal(true);
                         }} data-testid={`edit-role-${role.id}`}><Pencil className="w-3.5 h-3.5" /></Button>
                         <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={async () => {
@@ -1101,6 +1101,48 @@ export default function Settings() {
                                   onChange={() => setRoleForm({ ...roleForm, permissions: { ...roleForm.permissions, [key]: level } })}
                                   className="w-4 h-4 accent-[#3D4F6F]"
                                   data-testid={`perm-${key}-${level}`}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">Görünüş Miqyası</Label>
+                  <p className="text-xs text-slate-500 mt-1 mb-2">Bu rolda olan istifadəçilər hansı qeydləri görə və redaktə edə bilsin?</p>
+                  <div className="mt-2 border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b">
+                          <th className="text-left px-3 py-2 text-xs font-semibold text-[#3D4F6F]">Modul</th>
+                          <th className="text-center px-3 py-2 text-xs font-semibold text-[#3D4F6F]">Hamısı</th>
+                          <th className="text-center px-3 py-2 text-xs font-semibold text-amber-600">Yalnız özününki</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          ['members', 'Üzvlər'],
+                          ['companies', 'Şirkət Məlumatları'],
+                          ['sales', 'Satış (Şirkət Bazası)'],
+                          ['tasks', 'Tapşırıqlar'],
+                          ['meetings', 'Görüşlər'],
+                          ['assembly', 'İclaslar'],
+                          ['projects', 'Layihələr'],
+                        ].map(([key, label]) => (
+                          <tr key={`scope-${key}`} className="border-b border-slate-100 hover:bg-slate-50/50">
+                            <td className="px-3 py-2 text-xs text-slate-700 font-medium">{label}</td>
+                            {['all', 'own'].map(sc => (
+                              <td key={sc} className="text-center px-3 py-2">
+                                <input
+                                  type="radio"
+                                  name={`scope-${key}`}
+                                  checked={(roleForm.scopes?.[key] || 'all') === sc}
+                                  onChange={() => setRoleForm({ ...roleForm, scopes: { ...(roleForm.scopes || {}), [key]: sc } })}
+                                  className="w-4 h-4 accent-[#3D4F6F]"
+                                  data-testid={`scope-${key}-${sc}`}
                                 />
                               </td>
                             ))}

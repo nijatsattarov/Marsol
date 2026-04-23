@@ -27,6 +27,7 @@ const emptyForm = {
 export default function Meetings() {
   const [meetings, setMeetings] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [users, setUsers] = useState([]);
   const [options, setOptions] = useState({ meeting_types: [], departments: [], projects: [] });
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -46,14 +47,16 @@ export default function Meetings() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [mRes, eRes, oRes] = await Promise.all([
+      const [mRes, eRes, oRes, uRes] = await Promise.all([
         axios.get(`${API}/meetings`, { headers }),
         axios.get(`${API}/employees`, { headers }),
         axios.get(`${API}/options/all`, { headers }),
+        axios.get(`${API}/settings/users`, { headers }).catch(() => ({ data: [] })),
       ]);
       setMeetings(mRes.data);
       setEmployees(eRes.data);
       setOptions(oRes.data);
+      setUsers(uRes.data || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, []);
@@ -128,7 +131,10 @@ export default function Meetings() {
   const meetingTypes = options.meeting_types || [];
   const departments = options.departments || [];
   const projects = options.projects || [];
-  const employeeNames = [...new Set(employees.map(e => `${e.first_name || ''} ${e.last_name || ''}`.trim()).filter(Boolean))];
+  const employeeNames = [...new Set([
+    ...users.filter(u => (u.status || 'Aktiv') === 'Aktiv' && u.name).map(u => u.name),
+    ...employees.map(e => `${e.first_name || ''} ${e.last_name || ''}`.trim()).filter(Boolean),
+  ])];
 
   if (loading) return <div className="flex items-center justify-center h-[60vh]"><Loader2 className="w-8 h-8 animate-spin" style={{ color: '#3D4F6F' }} /></div>;
 

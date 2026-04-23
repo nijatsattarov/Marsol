@@ -303,6 +303,59 @@ def check_permission(module: str, level: str = "read"):
         raise HTTPException(status_code=403, detail="Bu əməliyyat üçün icazəniz yoxdur")
     return checker
 
+# ==================== SCOPE (RECORD-LEVEL VISIBILITY) HELPER ====================
+# Each module defines which stored fields identify "ownership" of a record.
+# If a role has scopes[module] == "own", only records where one of these
+# fields equals the user's name are visible / editable. Default is "all".
+SCOPE_FIELDS = {
+    "members": ["curator", "created_by"],
+    "companies": ["curator", "created_by"],
+    "tasks": ["assignee", "responsible_person", "created_by"],
+    "meetings": ["employee", "meeting_setter", "created_by"],
+    "sales": ["curator", "created_by"],
+    "projects": ["created_by"],
+    "assembly": ["created_by", "curator"],
+}
+
+async def get_user_scopes(user: dict) -> dict:
+    if user.get("role") == "admin":
+        return {}
+    role = await db.roles.find_one({"name": user.get("role", "")}, {"_id": 0})
+    if not role:
+        return {}
+    return role.get("scopes", {}) or {}
+
+async def apply_scope(query: dict, user: dict, module: str) -> dict:
+    """Merge scope-based ownership filter into query. Returns new query dict."""
+    if user.get("role") == "admin":
+        return query
+    scopes = await get_user_scopes(user)
+    if scopes.get(module, "all") != "own":
+        return query
+    fields = SCOPE_FIELDS.get(module, [])
+    if not fields:
+        return query
+    user_name = user.get("name", "")
+    clauses = [{f: user_name} for f in fields]
+    if "$or" in query or "$and" in query:
+        return {"$and": [query, {"$or": clauses}]}
+    new_query = dict(query)
+    new_query["$or"] = clauses
+    return new_query
+
+async def assert_scope_ownership(user: dict, module: str, record: Optional[dict]):
+    """Raise 403 if user has 'own' scope and record is not theirs."""
+    if user.get("role") == "admin" or not record:
+        return
+    scopes = await get_user_scopes(user)
+    if scopes.get(module, "all") != "own":
+        return
+    fields = SCOPE_FIELDS.get(module, [])
+    user_name = user.get("name", "")
+    if any(record.get(f) == user_name for f in fields):
+        return
+    raise HTTPException(status_code=403, detail="Bu qeyd sizə aid deyil")
+
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/register", response_model=Token)
@@ -493,7 +546,7 @@ async def get_companies(
         query["marsol_representative"] = marsol_representative
     if status and status != "all":
         query["status"] = status
-    
+    query = await apply_scope(query, current_user, "companies")
     companies = await db.companies.find(query, {"_id": 0}).sort("created_at", 1).to_list(1000)
     # Compute finance_id (FN001, FN002...) and contract_days
     today = datetime.now(timezone.utc).date()
@@ -1071,14 +1124,7 @@ async def get_tasks(
         query["priority"] = priority
     if assignee and assignee != "all":
         query["assignee"] = {"$regex": assignee, "$options": "i"}
-    # Non-admin users see only their tasks
-    if current_user.get("role") != "admin":
-        user_name = current_user.get("name", "")
-        if user_name:
-            query["$or"] = [
-                {"assignee": {"$regex": user_name, "$options": "i"}},
-                {"responsible_person": {"$regex": user_name, "$options": "i"}}
-            ]
+    query = await apply_scope(query, current_user, "tasks")
     tasks = await db.tasks.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return tasks
 
@@ -1099,6 +1145,10 @@ async def create_task(task_data: TaskCreate, current_user: dict = Depends(check_
 
 @api_router.put("/tasks/{task_id}")
 async def update_task(task_id: str, task_data: dict, current_user: dict = Depends(check_permission("tasks", "write"))):
+    existing = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Tapşırıq tapılmadı")
+    await assert_scope_ownership(current_user, "tasks", existing)
     update_data = {k: v for k, v in task_data.items() if v is not None}
     result = await db.tasks.update_one({"id": task_id}, {"$set": update_data})
     if result.matched_count == 0:
@@ -1108,6 +1158,10 @@ async def update_task(task_id: str, task_data: dict, current_user: dict = Depend
 
 @api_router.delete("/tasks/{task_id}")
 async def delete_task(task_id: str, current_user: dict = Depends(check_permission("tasks", "write"))):
+    existing = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Tapşırıq tapılmadı")
+    await assert_scope_ownership(current_user, "tasks", existing)
     result = await db.tasks.delete_one({"id": task_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Tapşırıq tapılmadı")
@@ -1135,6 +1189,7 @@ async def get_meetings(
         query.setdefault("date", {})["$gte"] = date_from
     if date_to:
         query.setdefault("date", {})["$lte"] = date_to
+    query = await apply_scope(query, current_user, "meetings")
     
     meetings = await db.meetings.find(query, {"_id": 0}).sort("date", -1).to_list(1000)
     return meetings
@@ -1182,6 +1237,10 @@ async def create_meeting(data: dict, current_user: dict = Depends(check_permissi
 
 @api_router.put("/meetings/{meeting_id}")
 async def update_meeting(meeting_id: str, data: dict, current_user: dict = Depends(check_permission("meetings", "write"))):
+    existing = await db.meetings.find_one({"id": meeting_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Görüş tapılmadı")
+    await assert_scope_ownership(current_user, "meetings", existing)
     update_data = {k: v for k, v in data.items() if k != "id"}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     result = await db.meetings.update_one({"id": meeting_id}, {"$set": update_data})
@@ -1207,6 +1266,10 @@ async def update_meeting(meeting_id: str, data: dict, current_user: dict = Depen
 
 @api_router.delete("/meetings/{meeting_id}")
 async def delete_meeting(meeting_id: str, current_user: dict = Depends(check_permission("meetings", "write"))):
+    existing = await db.meetings.find_one({"id": meeting_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Görüş tapılmadı")
+    await assert_scope_ownership(current_user, "meetings", existing)
     result = await db.meetings.delete_one({"id": meeting_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Görüş tapılmadı")
@@ -1219,7 +1282,8 @@ async def delete_meeting(meeting_id: str, current_user: dict = Depends(check_per
 
 @api_router.get("/project-events")
 async def get_project_events(current_user: dict = Depends(get_current_user)):
-    events = await db.project_events.find({}, {"_id": 0}).sort("date", -1).to_list(500)
+    query = await apply_scope({}, current_user, "projects")
+    events = await db.project_events.find(query, {"_id": 0}).sort("date", -1).to_list(500)
     for e in events:
         e["guest_count"] = await db.event_invitations.count_documents({"event_id": e["id"]})
         e["attended_count"] = await db.event_invitations.count_documents({"event_id": e["id"], "status": "İştirak etdi"})
@@ -1247,6 +1311,10 @@ async def create_project_event(data: dict, current_user: dict = Depends(check_pe
 
 @api_router.put("/project-events/{event_id}")
 async def update_project_event(event_id: str, data: dict, current_user: dict = Depends(check_permission("projects", "write"))):
+    existing = await db.project_events.find_one({"id": event_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Layihə tapılmadı")
+    await assert_scope_ownership(current_user, "projects", existing)
     update = {k: v for k, v in data.items() if k not in ("id",)}
     await db.project_events.update_one({"id": event_id}, {"$set": update})
     doc = await db.project_events.find_one({"id": event_id}, {"_id": 0})
@@ -1254,6 +1322,10 @@ async def update_project_event(event_id: str, data: dict, current_user: dict = D
 
 @api_router.delete("/project-events/{event_id}")
 async def delete_project_event(event_id: str, current_user: dict = Depends(check_permission("projects", "write"))):
+    existing = await db.project_events.find_one({"id": event_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Layihə tapılmadı")
+    await assert_scope_ownership(current_user, "projects", existing)
     await db.project_events.delete_one({"id": event_id})
     await db.event_invitations.delete_many({"event_id": event_id})
     return {"message": "Layihə silindi"}
@@ -1447,21 +1519,17 @@ async def get_sales_leads(
         query["status"] = status
     if source and source != "all":
         query["source"] = source
-    # Non-admin: only own leads
-    if current_user.get("role") != "admin":
-        query["curator"] = current_user.get("name", "")
+    query = await apply_scope(query, current_user, "sales")
     leads = await db.sales_leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
     return leads
 
 @api_router.get("/sales-leads/stats")
 async def get_sales_leads_stats(current_user: dict = Depends(get_current_user)):
-    query = {}
-    if current_user.get("role") != "admin":
-        query["curator"] = current_user.get("name", "")
+    query = await apply_scope({}, current_user, "sales")
     total = await db.sales_leads.count_documents(query)
     stats = {"total": total}
     for s in LEAD_STATUSES:
-        q = {**query, "status": s}
+        q = await apply_scope({"status": s}, current_user, "sales")
         stats[s] = await db.sales_leads.count_documents(q)
     return stats
 
@@ -1499,6 +1567,7 @@ async def update_sales_lead(lead_id: str, data: dict, current_user: dict = Depen
     lead = await db.sales_leads.find_one({"id": lead_id}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead tapılmadı")
+    await assert_scope_ownership(current_user, "sales", lead)
     
     result = await db.sales_leads.update_one({"id": lead_id}, {"$set": update_data})
     
@@ -1550,6 +1619,10 @@ async def update_sales_lead(lead_id: str, data: dict, current_user: dict = Depen
 
 @api_router.delete("/sales-leads/{lead_id}")
 async def delete_sales_lead(lead_id: str, current_user: dict = Depends(check_permission("sales", "write"))):
+    existing = await db.sales_leads.find_one({"id": lead_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Lead tapılmadı")
+    await assert_scope_ownership(current_user, "sales", existing)
     result = await db.sales_leads.delete_one({"id": lead_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Lead tapılmadı")
@@ -1558,8 +1631,9 @@ async def delete_sales_lead(lead_id: str, current_user: dict = Depends(check_per
 @api_router.get("/sales-members")
 async def get_sales_members(current_user: dict = Depends(get_current_user)):
     query = {"status": "Üzv oldu", "sale_type": "Üzvlük"}
-    if current_user.get("role") != "admin":
-        query["curator"] = current_user.get("name", "")
+    query = await apply_scope(query, current_user, "sales")
+    members = await db.sales_leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    return members
 
 @api_router.get("/members")
 async def get_members(
@@ -1575,9 +1649,7 @@ async def get_members(
         query["sector"] = sector
     if status and status != "all":
         query["status"] = status
-    # Non-admin: only their curated companies
-    if current_user.get("role") != "admin":
-        query["curator"] = current_user.get("name", "")
+    query = await apply_scope(query, current_user, "members")
     companies = await db.companies.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
     # Map fields for frontend compatibility
     now = datetime.now(timezone.utc)
@@ -1648,6 +1720,10 @@ async def create_member(data: dict, current_user: dict = Depends(check_permissio
 
 @api_router.put("/members/{member_id}")
 async def update_member(member_id: str, data: dict, current_user: dict = Depends(check_permission("members", "write"))):
+    existing = await db.companies.find_one({"id": member_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Üzv tapılmadı")
+    await assert_scope_ownership(current_user, "members", existing)
     update = {}
     field_map = {"company_name": "brand_name", "director_name": "owner_name", "director_phone": "owner_phone", "business_size": "company_size", "contact_person": "representative_name", "contact_position": "representative_position"}
     for k, v in data.items():
@@ -1667,13 +1743,14 @@ async def update_member(member_id: str, data: dict, current_user: dict = Depends
 
 @api_router.delete("/members/{member_id}")
 async def delete_member(member_id: str, current_user: dict = Depends(check_permission("members", "write"))):
+    existing = await db.companies.find_one({"id": member_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Üzv tapılmadı")
+    await assert_scope_ownership(current_user, "members", existing)
     result = await db.companies.delete_one({"id": member_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Üzv tapılmadı")
     return {"message": "Üzv silindi"}
-
-    members = await db.sales_leads.find(query, {"_id": 0}).sort("updated_at", -1).to_list(2000)
-    return members
 
 @api_router.post("/sales-leads/{lead_id}/create-meeting")
 async def create_meeting_from_lead(lead_id: str, data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
@@ -1781,6 +1858,7 @@ async def get_assemblies(
         if date_to:
             date_q["$lte"] = date_to
         query["created_at"] = date_q
+    query = await apply_scope(query, current_user, "assembly")
     assemblies = await db.assemblies.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return assemblies
 
@@ -1809,6 +1887,10 @@ async def create_assembly(data: dict, current_user: dict = Depends(check_permiss
 
 @api_router.put("/assemblies/{assembly_id}")
 async def update_assembly(assembly_id: str, data: dict, current_user: dict = Depends(check_permission("assembly", "write"))):
+    existing = await db.assemblies.find_one({"id": assembly_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="İclas tapılmadı")
+    await assert_scope_ownership(current_user, "assembly", existing)
     update_data = {k: v for k, v in data.items() if k not in ("id", "assembly_code")}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     result = await db.assemblies.update_one({"id": assembly_id}, {"$set": update_data})
@@ -1820,6 +1902,10 @@ async def update_assembly(assembly_id: str, data: dict, current_user: dict = Dep
 
 @api_router.delete("/assemblies/{assembly_id}")
 async def delete_assembly(assembly_id: str, current_user: dict = Depends(check_permission("assembly", "write"))):
+    existing = await db.assemblies.find_one({"id": assembly_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="İclas tapılmadı")
+    await assert_scope_ownership(current_user, "assembly", existing)
     result = await db.assemblies.delete_one({"id": assembly_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="İclas tapılmadı")
@@ -1996,6 +2082,7 @@ async def create_role(data: dict, current_user: dict = Depends(check_permission(
         "id": str(uuid.uuid4()),
         "name": data.get("name", ""),
         "permissions": data.get("permissions", {}),
+        "scopes": data.get("scopes", {}),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.roles.insert_one(doc)

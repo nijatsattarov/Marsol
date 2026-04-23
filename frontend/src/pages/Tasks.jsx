@@ -53,6 +53,7 @@ const getStatusIcon = (status) => {
 export default function Tasks() {
   const [tasks, setTasks] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [users, setUsers] = useState([]);
   const [options, setOptions] = useState({ departments: [], projects: [] });
   const [assemblies, setAssemblies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -80,23 +81,28 @@ export default function Tasks() {
       const params = new URLSearchParams();
       if (filters.status !== 'all') params.append('status', filters.status);
       if (filters.priority !== 'all') params.append('priority', filters.priority);
-      const [tRes, eRes, oRes, aRes] = await Promise.all([
+      const [tRes, eRes, oRes, aRes, uRes] = await Promise.all([
         axios.get(`${API}/tasks?${params.toString()}`, { headers }),
         axios.get(`${API}/employees`, { headers }),
         axios.get(`${API}/options/all`, { headers }),
         axios.get(`${API}/assemblies`, { headers }),
+        axios.get(`${API}/settings/users`, { headers }).catch(() => ({ data: [] })),
       ]);
       setTasks(tRes.data);
       setEmployees(eRes.data);
       setOptions(oRes.data);
       setAssemblies(aRes.data);
+      setUsers(uRes.data || []);
     } catch (error) { console.error('Error:', error); }
     finally { setLoading(false); }
   }, [filters]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const employeeNames = [...new Set(employees.map(e => `${e.first_name || ''} ${e.last_name || ''}`.trim()).filter(Boolean))];
+  const employeeNames = [...new Set([
+    ...users.filter(u => (u.status || 'Aktiv') === 'Aktiv' && u.name).map(u => u.name),
+    ...employees.map(e => `${e.first_name || ''} ${e.last_name || ''}`.trim()).filter(Boolean),
+  ])];
   const departments = options.departments || [];
   const projects = options.projects || [];
 
