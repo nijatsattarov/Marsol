@@ -71,6 +71,7 @@ Marketinq, Hesabatlar, Fayllar, Qeydlər
 - [x] **Fəaliyyətlər modulu tam yenidən qurulub** — 8 alt-modul + reytinq aqreqasiyası — ✅ Iter 24
 - [x] **Settings → Layihə növləri** — "Layihə adı" → "Layihə növü", Təsvir sahəsi silindi; Projects modulunda "Növ" dropdown-u Settings-dən dinamik gəlir — ✅ 2026-04-23
 - [x] **Rol bazlı Görünüş Miqyası (Scope)** — hər rol üçün per-modul "Hamısı"/"Yalnız özününki" radio; apply_scope + assert_scope_ownership backend-də; /api/sales-members missing-return bug fix; Tasks/Meetings assignee dropdown artıq sistem istifadəçiləri + HR birləşmiş — ✅ Iter 25 (12/12 pytest PASS)
+- [x] **Lead → Layihə bağlantısı və Satış axını** — Şirkət Bazası formunda "Satış növü" → "Layihə növü" (Settings-dən dinamik); Lead redaktəsində status=Satıldı/Üzv oldu seçəndə dynamic sahələr (layihə seçimi + Üzvlük:Paket / Sərgi:kv/m+qiymət+stend+zal+avtomatik məbləğ / Tur,Təlim:iştirakçı); Projects modulunda "Satışlar" cədvəli (Sərgi: 11 sütun, Tur/Təlim: sadə, inline edit); Finance modulunda yeni "Layihələr" tab-ı (layihə növü→layihə→satış cədvəli Müqavilə №/E-qaimə/Ödənilib/Borc) — ✅ Iter 26 (8/8 pytest PASS)
 
 ### P1
 - [ ] PDF Reports generation (Hesabatlar modulu)
