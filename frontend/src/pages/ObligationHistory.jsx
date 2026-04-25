@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Loader2, Search, Calendar, Building2, Eye,
   Phone, PhoneCall, PhoneOff, CheckCircle2, XCircle,
-  Filter, BarChart3
+  Filter, BarChart3, Download
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const EVENT_TYPES = ['Breakfast', 'Ofis ziyarəti', 'Mafia', 'Sosial fəaliyyət', 'Təlim', 'B2B görüş'];
@@ -58,6 +59,55 @@ export default function ObligationHistory() {
     finally { setDetailLoading(false); }
   };
 
+  const exportExcel = () => {
+    if (filteredInvitations.length === 0) {
+      toast.error('Export üçün məlumat yoxdur');
+      return;
+    }
+    const statusLabel = (inv) => {
+      if (inv.participation_status === 'Qatılır') return 'Qatıldı';
+      if (inv.participation_status === 'Qatılmır') return 'Rədd';
+      if (inv.call_status === 'Cavab vermədi') return 'Cavabsız';
+      if (inv.call_status === 'Gözləyir') return 'Gözləyir';
+      return '';
+    };
+    const invData = filteredInvitations.map((inv, i) => ({
+      '#': i + 1,
+      'Şirkət': inv.company_name || '',
+      'Fəaliyyət': inv.event_name || '',
+      'Növ': inv.event_type || '',
+      'Tarix': inv.event_date || '',
+      'Status': statusLabel(inv),
+      'Zəng edən': inv.called_by || '',
+      'Qeyd': inv.notes || ''
+    }));
+    const summaryData = eventTypeStats.map(s => ({
+      'Növ': s.type,
+      'Görüş sayı': s.eventCount,
+      'Dəvət': s.total,
+      'Qatıldı': s.attended,
+      'Rədd': s.declined,
+      'Cavabsız': s.noAnswer
+    }));
+    const companyData = filtered.map(o => ({
+      'Şirkət': o.company_name,
+      'Sahibkar': o.owner_name || '',
+      'Paket': o.package || '',
+      'Kvota istifadəsi': `${o.used_quota}/${o.total_quota}`,
+      'Dəvət': o.total_invited,
+      'Qatıldı': o.total_attended,
+      'Rədd': o.total_declined,
+      'Cavabsız': o.total_no_answer
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(invData), 'Dəvət tarixçəsi');
+    if (summaryData.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Fəaliyyət növləri');
+    if (companyData.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(companyData), 'Şirkət üzrə icmal');
+    const today = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `ohdelik-tarixcesi-${today}.xlsx`);
+    toast.success('Excel yükləndi');
+  };
+
   // Event type stats from all invitations
   const eventTypeStats = EVENT_TYPES.map(type => {
     let invs = allInvitations.filter(i => i.event_type === type);
@@ -100,9 +150,14 @@ export default function ObligationHistory() {
     <div className="p-4 sm:p-6 lg:p-8" data-testid="obligation-history-page">
       <Toaster position="top-right" richColors />
 
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Öhdəlik Tarixçəsi</h1>
-        <p className="text-slate-500 text-sm mt-1">Fəaliyyət növləri üzrə detallı hesabat və tarixçə</p>
+      <div className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Öhdəlik Tarixçəsi</h1>
+          <p className="text-slate-500 text-sm mt-1">Fəaliyyət növləri üzrə detallı hesabat və tarixçə</p>
+        </div>
+        <Button onClick={exportExcel} variant="outline" size="sm" className="text-[#3D4F6F] border-[#3D4F6F]/20" data-testid="history-export-btn">
+          <Download className="w-4 h-4 mr-1" />Excel
+        </Button>
       </div>
 
       {/* Event Type Stats Summary */}
