@@ -10,10 +10,10 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState({ notifications: [], count: 0, high_count: 0 });
   
-  const token = localStorage.getItem('token');
-  const headers = { Authorization: `Bearer ${token}` };
-
   const fetchNotifications = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const headers = { Authorization: `Bearer ${token}` };
     try {
       const res = await axios.get(`${API}/notifications`, { headers });
       setData(res.data);

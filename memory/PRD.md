@@ -76,6 +76,7 @@ Marketinq, Hesabatlar, Fayllar, Qeydlər
 - [x] **Üzvlük dövrü idarəetməsi** — calendar year əsaslı il filtri (Üzvlər, Öhdəliklər, Öhdəlik Tarixçəsi), defolt cari il; `POST /api/members/{id}/renew` (cari müqaviləni `membership_history`-ə arxivlə + yeni dövr); carry_over_quota seçimi (`bonus_quota`); Üzv kartında 'Tarixçə' və '+N il' badge-ləri — ✅ Iter 28 (12/12 pytest PASS, frontend 100%)
 - [x] **Öhdəlik Tarixçəsi → Excel Export** — 3 vərəqli xlsx (Dəvət tarixçəsi, Fəaliyyət növləri, Şirkət üzrə icmal) — ✅ 2026-04-24
 - [x] **Maliyyədə Ödəniş üsulu + Forum Approval Flow** — payment_method (Köçürmə/Nəğd/Posterminal/CTC) Income, Expense, companies/payment, sales-leads/payment endpointlərində; public form göndərildikdə birbaşa şirkət sahələrini DƏYİŞMİR — `companies.pending_form_data`-ya yazır, notifications-da `form_submission` bildirişi yaradılır; Companies səhifəsində 📩 badge + yan-yana müqayisə cədvəli + Təsdiqlə/Rədd et düymələri — ✅ Iter 30 (14/14 pytest PASS, frontend 100%)
+- [x] **Resend Email Notifications** — `resend` SDK + `email_service.py` (notify, send_email, branded HTML wrap); admin@marsol.az + əlaqədar curator hər zaman alıcıdır; hooks: yeni Görüş, Lead 'Bağlandı', Public form göndərimi; idempotent `POST /api/notifications/dispatch-emails` (notification_email_log koleksiyası); NotificationBell.jsx polling token mövcud olduqda işləyir — ✅ Iter 31 (19/19 pytest PASS, frontend smoke 100%)
 
 ### P1
 - [ ] PDF Reports generation (Hesabatlar modulu)
