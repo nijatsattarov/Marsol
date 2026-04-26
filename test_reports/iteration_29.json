@@ -1,0 +1,35 @@
+{
+  "summary": "Iter 29 — payment_method on finance + Üzvlük form approval flow. Backend pytest 12/14 PASS in test_iteration29_payment_method_form_approval.py. PASSED: (a) POST /api/finance/expenses persists payment_method for Köçürmə/Nəğd/Posterminal/CTC and returns it on GET. (b) POST /api/finance/incomes accepts and returns payment_method. (c) PUT /api/companies/{id}/finance with new_payment_amount + payment_method writes payment_method into payment_history (verified via GET /companies/{id}/payments). (d) POST /api/sales-leads/{id}/payment writes payment_method into payment_history. (e) POST /api/public/form/{token} writes ONLY pending_form_data + pending_form_submitted_at + pending_form_status='Gözləyir'; main fields (company_phone/company_email) NOT modified. (f) POST /api/companies/{id}/approve-form moves pending_form_data into real fields and clears all pending_* keys. (g) POST /api/companies/{id}/reject-form clears pending_form_data, sets status='Rədd edildi', stores pending_form_reject_reason. (h) approve-form & reject-form return 400 when no pending data. FAILED: (i) GET /api/notifications returns 500 — KeyError on 'contract_end_date' in server.py:3403 (Mongo $ne:'' matches docs missing field; pre-existing bug surfaced when test companies created without contract_end_date). (j) approve-form does NOT enforce scope=own → sales user with companies:write + scope=own can approve any company (ownership check missing in approve_form_submission/reject_form_submission). Frontend Playwright (admin login): Companies table shows 📩 next to brand_name when pending_form_data exists. Card variant shows pending-badge-{id} testid. Detail view (after row eye-click) renders pending-form-banner with side-by-side Cari vs Yeni göndərilən table + approve-form-btn + reject-form-btn (all 3 testids found, count=1 each). Clicking approve-form-btn → POST /companies/{id}/approve-form → backend updates company_phone to pending value, pending_form_data cleared, banner disappears. Finance → Xərclər tab → 'Xərc əlavə et' modal contains expense-payment-method testid. PublicForm /form/{token}: submit shows 'Təşəkkür edirik! Məlumatlarınız uğurla göndərildi. Admin təsdiqindən sonra məlumatlar profilinizdə yenilənəcək' (yellow notice card).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/notifications", "issue": "Returns 500 (KeyError 'contract_end_date') when any company doc is missing the field; query uses {contract_end_date:{$ne:''}} which also matches missing-field docs in MongoDB. server.py:3403 must use c.get('contract_end_date') and skip if falsy. Surfaced after creating test companies without contract dates.", "priority": "HIGH"},
+      {"endpoint": "POST /api/companies/{id}/approve-form & /reject-form", "issue": "No assert_scope_ownership('companies', company) call. Sales user with permissions.companies='write' + scopes.companies='own' can approve/reject pending forms on companies they don't own (test got 200 with 'Təsdiqləndi' instead of 403).", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration29_payment_method_form_approval.py",
+    "/app/test_reports/pytest/pytest_results_iter29.xml"
+  ],
+  "action_items": [
+    "server.py:3403 — guard with c.get('contract_end_date') and continue if empty/missing; query is harmless but field access must be defensive.",
+    "server.py approve_form_submission (~2238) and reject_form_submission (~2254) — add `await assert_scope_ownership(current_user, 'companies', company)` after fetching the company, mirroring how /sales-leads/{id}/payment does it.",
+    "Optional code cleanup: server.py:1759 dead code after `return companies` (carried over from iter 28)."
+  ],
+  "critical_code_review_comments": [
+    "Mongo $ne:'' matches missing field docs; always use .get() before subscript access throughout notifications builder.",
+    "approve-form/reject-form bypass scope ownership while every other resource (sales/members/projects/meetings/tasks) enforces it. Inconsistent security posture.",
+    "submit_public_form (server.py:2214) does not validate whether `data` keys are in COMPANY_FORM_FIELDS or custom fields; an attacker could spam pending_form_data with any keys (limited to enabled list which mitigates partly, but `data` typing is `dict`, not Pydantic model — consider tightening).",
+    "Companies.jsx:62 — pending-badge testid only on card variant; table variant uses inline 📩 emoji span without a testid. Consider adding data-testid={`pending-row-${id}`} on the 📩 span for parity.",
+    "Both approve-form and reject-form return generic strings; consider returning the updated company doc for SPA refresh efficiency."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration29_payment_method_form_approval.py"],
+  "success_rate": {"backend": "85% (12/14)", "frontend": "100%"},
+  "test_credentials": "Admin: settings@marsol.az/marsol123 ; Sales: satis@marsol.az/marsol123",
+  "seed_data_creation": "Created/deleted TEST29_*, TEST29X_*, TEST29UI_*, TEST29UI2_*, PFM_* companies and ad-hoc sales-lead. All cleaned up via DELETE in teardown. For scope test, sales role permissions/scopes were temporarily mutated (companies:write + scope=own) and restored in finally block.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter 29 backend test file: test_iteration29_payment_method_form_approval.py. Login response uses 'access_token' (not 'token'). Public-form route is /form/:token (NOT /public/form/:token). Detail view is opened by clicking the first action button (eye icon) in companies row — buttons in the row currently lack data-testid. pending-badge-{id} testid only renders in card variant; table variant uses 📩 emoji text. Backend approve-form has scope bug — fix by adding `await assert_scope_ownership(current_user,'companies',company)` after the existence check. Notifications 500 is independent of iter 29 but blocks header bell.",
+  "rca of the issue": "(1) Notifications 500: Mongo's $ne semantics include documents where field is missing/null. Companies created in tests have no contract_end_date, get matched, then `c['contract_end_date']` throws KeyError. Fix: change to `c.get('contract_end_date')` and `if not v: continue`. (2) approve-form scope bypass: endpoint declares Depends(check_permission('companies','write')) which only enforces module-level permission, NOT row-level scope ownership. Other endpoints call assert_scope_ownership(...) after fetching the record; approve-form/reject-form do not."
+}

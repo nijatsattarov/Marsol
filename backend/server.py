@@ -191,6 +191,7 @@ class IncomeCreate(BaseModel):
     currency: Optional[str] = "AZN"
     contract_start_date: Optional[str] = ""
     contract_end_date: Optional[str] = ""
+    payment_method: Optional[str] = ""
 
 class ExpenseCreate(BaseModel):
     expense_name: str
@@ -203,6 +204,7 @@ class ExpenseCreate(BaseModel):
     department: Optional[str] = ""
     responsible_person: Optional[str] = ""
     payment_type: Optional[str] = ""
+    payment_method: Optional[str] = ""
     status: Optional[str] = "Ödənilib"
 
 # Task Model
@@ -634,6 +636,7 @@ async def update_company_finance(company_id: str, data: dict, current_user: dict
             "amount": payment_amount,
             "date": data.get("payment_date", datetime.now(timezone.utc).strftime("%Y-%m-%d")),
             "note": data.get("payment_note", ""),
+            "payment_method": data.get("payment_method", ""),
             "recorded_by": current_user.get("name", ""),
             "created_at": datetime.now(timezone.utc).isoformat()
         }
@@ -1378,6 +1381,7 @@ async def add_lead_payment(lead_id: str, data: dict, current_user: dict = Depend
             "amount": float(amount),
             "date": data.get("payment_date", datetime.now(timezone.utc).strftime("%Y-%m-%d")),
             "note": data.get("payment_note", ""),
+            "payment_method": data.get("payment_method", ""),
             "added_by": current_user.get("name", ""),
             "added_at": datetime.now(timezone.utc).isoformat()
         }
@@ -2214,17 +2218,51 @@ async def submit_public_form(token: str, data: dict):
     company_id = form_token["company_id"]
     settings = await db.setting_lists.find_one({"key": "forum_enabled_fields"}, {"_id": 0})
     enabled = settings.get("values", []) if settings else [f["key"] for f in COMPANY_FORM_FIELDS]
-    update_data = {}
+    pending_data = {}
     for key in enabled:
         if key in data:
-            update_data[key] = data[key]
-    # Also accept owners as a full array
+            pending_data[key] = data[key]
     if "owners" in data and "owners" in enabled:
-        update_data["owners"] = data["owners"]
-    if update_data:
-        update_data["form_submitted_at"] = datetime.now(timezone.utc).isoformat()
-        await db.companies.update_one({"id": company_id}, {"$set": update_data})
-    return {"message": "Məlumatlar uğurla göndərildi. Təşəkkür edirik!"}
+        pending_data["owners"] = data["owners"]
+    if pending_data:
+        # Store as PENDING — admin must approve
+        await db.companies.update_one({"id": company_id}, {"$set": {
+            "pending_form_data": pending_data,
+            "pending_form_submitted_at": datetime.now(timezone.utc).isoformat(),
+            "pending_form_status": "Gözləyir",
+        }})
+    return {"message": "Məlumatlar uğurla göndərildi. Admin təsdiqindən sonra məlumatlar yenilənəcək."}
+
+
+@api_router.post("/companies/{company_id}/approve-form")
+async def approve_form_submission(company_id: str, current_user: dict = Depends(check_permission("companies", "write"))):
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
+    pending = company.get("pending_form_data") or {}
+    if not pending:
+        raise HTTPException(status_code=400, detail="Təsdiq olunacaq məlumat yoxdur")
+    update = {**pending, "form_submitted_at": company.get("pending_form_submitted_at") or datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()}
+    await db.companies.update_one({"id": company_id}, {
+        "$set": update,
+        "$unset": {"pending_form_data": "", "pending_form_status": "", "pending_form_submitted_at": ""}
+    })
+    return {"message": "Təsdiqləndi və məlumatlar yeniləndi"}
+
+
+@api_router.post("/companies/{company_id}/reject-form")
+async def reject_form_submission(company_id: str, data: Optional[dict] = None, current_user: dict = Depends(check_permission("companies", "write"))):
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
+    if not company.get("pending_form_data"):
+        raise HTTPException(status_code=400, detail="Təsdiq olunacaq məlumat yoxdur")
+    reject_reason = (data or {}).get("reason", "")
+    await db.companies.update_one({"id": company_id}, {
+        "$unset": {"pending_form_data": "", "pending_form_submitted_at": ""},
+        "$set": {"pending_form_status": "Rədd edildi", "pending_form_reject_reason": reject_reason, "updated_at": datetime.now(timezone.utc).isoformat()}
+    })
+    return {"message": "Forma rədd edildi"}
 
 
 
@@ -3387,7 +3425,25 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
         except (ValueError, TypeError):
             pass
 
-    # 3. Meeting reminders (görüş xatırlatmaları)
+    # 3.5 Pending form submissions (üzvlük formu təsdiq gözləyir)
+    pending_form_companies = await db.companies.find(
+        {"pending_form_data": {"$exists": True, "$ne": {}}},
+        {"_id": 0}
+    ).to_list(500)
+    for c in pending_form_companies:
+        if not (c.get("pending_form_data") or {}):
+            continue
+        notifications.append({
+            "id": f"form-pending-{c['id']}",
+            "type": "form_submission",
+            "severity": "medium",
+            "title": f"Forum dəyişikliyi: {c.get('brand_name', '')}",
+            "message": f"Üzvlük forumu doldurulub, təsdiq gözləyir.",
+            "company_id": c["id"],
+            "date": (c.get("pending_form_submitted_at") or "")[:10] or today
+        })
+
+    # 4. Meeting reminders (görüş xatırlatmaları)
     meeting_reminders = await db.notifications.find({"type": "reminder"}, {"_id": 0}).to_list(500)
     for r in meeting_reminders:
         severity = "low"

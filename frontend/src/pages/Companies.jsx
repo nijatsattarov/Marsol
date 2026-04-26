@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import {
   Plus, Search, Download, Loader2, Building2, User, Phone, Mail,
-  Eye, Pencil, Trash2, ArrowLeft, Filter, X, CreditCard, Upload, Link, PlusCircle, MinusCircle
+  Eye, Pencil, Trash2, ArrowLeft, Filter, X, CreditCard, Upload, Link, PlusCircle, MinusCircle,
+  CheckCircle2, XCircle
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -58,6 +59,9 @@ const CompanyCard = ({ company, index, onView, onEdit, onDelete }) => (
       </div>
       <Badge className={company.status === 'Aktiv' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}>{company.status}</Badge>
     </div>
+    {company.pending_form_data && Object.keys(company.pending_form_data).length > 0 && (
+      <Badge className="bg-amber-100 text-amber-700 mb-2 text-[10px]" data-testid={`pending-badge-${company.id}`}>📩 Forum dəyişikliyi gözləyir</Badge>
+    )}
     <div className="space-y-1.5 text-sm text-slate-600 mb-3">
       {company.owner_first_name && <div className="flex items-center gap-2"><User className="w-3.5 h-3.5 flex-shrink-0" /><span>{company.owner_first_name} {company.owner_last_name}</span></div>}
       {company.company_phone && <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 flex-shrink-0" /><span>{company.company_phone}</span></div>}
@@ -327,6 +331,65 @@ export default function Companies() {
               }} data-testid="forum-link-btn"><Link className="w-4 h-4 mr-1" />Forum linki</Button>
             </div>
           </div>
+
+          {/* Pending form approval banner */}
+          {v.pending_form_data && Object.keys(v.pending_form_data || {}).length > 0 && (
+            <div className="mb-4 p-4 border border-amber-200 bg-amber-50/60 rounded-lg" data-testid="pending-form-banner">
+              <div className="flex items-start gap-3">
+                <div className="text-2xl">📩</div>
+                <div className="flex-1">
+                  <p className="font-semibold text-amber-800">Forum dəyişikliyi təsdiq gözləyir</p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    Göndərilmə tarixi: {(v.pending_form_submitted_at || '').split('T')[0]}
+                  </p>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="text-xs w-full border border-amber-200 bg-white rounded-md">
+                      <thead className="bg-amber-100/50">
+                        <tr>
+                          <th className="text-left px-2 py-1.5 font-semibold text-amber-800">Sahə</th>
+                          <th className="text-left px-2 py-1.5 font-semibold text-slate-500">Cari</th>
+                          <th className="text-left px-2 py-1.5 font-semibold text-emerald-700">Yeni göndərilən</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(v.pending_form_data).map(([key, value]) => (
+                          <tr key={key} className="border-t border-amber-100">
+                            <td className="px-2 py-1.5 text-slate-700 font-medium capitalize">{key.replace(/_/g, ' ')}</td>
+                            <td className="px-2 py-1.5 text-slate-500 max-w-xs truncate">{typeof v[key] === 'object' ? JSON.stringify(v[key]) : String(v[key] || '—')}</td>
+                            <td className="px-2 py-1.5 text-emerald-700 font-medium max-w-xs truncate">{typeof value === 'object' ? JSON.stringify(value) : String(value || '—')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="approve-form-btn" onClick={async () => {
+                      try {
+                        await axios.post(`${API}/companies/${v.id}/approve-form`, {}, { headers });
+                        toast.success('Təsdiqləndi və məlumatlar yeniləndi');
+                        fetchCompanies();
+                        const updated = await axios.get(`${API}/companies?status=all`, { headers });
+                        const upd = updated.data.find(x => x.id === v.id);
+                        setViewingCompany(upd);
+                      } catch { toast.error('Xəta baş verdi'); }
+                    }}><CheckCircle2 className="w-4 h-4 mr-1" />Təsdiqlə</Button>
+                    <Button size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50" data-testid="reject-form-btn" onClick={async () => {
+                      const reason = window.prompt('Rədd səbəbi (məcburi deyil):', '');
+                      if (reason === null) return;
+                      try {
+                        await axios.post(`${API}/companies/${v.id}/reject-form`, { reason }, { headers });
+                        toast.success('Forma rədd edildi');
+                        fetchCompanies();
+                        const updated = await axios.get(`${API}/companies?status=all`, { headers });
+                        const upd = updated.data.find(x => x.id === v.id);
+                        setViewingCompany(upd);
+                      } catch { toast.error('Xəta baş verdi'); }
+                    }}><XCircle className="w-4 h-4 mr-1" />Rədd et</Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           <Tabs defaultValue="company">
             <TabsList className="flex-wrap gap-1 mb-4">
               <TabsTrigger value="company" className="text-xs">Şirkət</TabsTrigger>
@@ -431,7 +494,7 @@ export default function Companies() {
               filteredCompanies.map((c, i) => (
                 <tr key={c.id} className="border-b border-slate-50 hover:bg-slate-50/50">
                   <td className="px-3 py-3 text-sm font-mono text-slate-500">{i+1}</td>
-                  <td className="px-3 py-3"><p className="font-medium text-sm text-[#3D4F6F]">{c.brand_name}</p>{c.legal_name && <p className="text-xs text-slate-400">{c.legal_name}</p>}</td>
+                  <td className="px-3 py-3"><p className="font-medium text-sm text-[#3D4F6F]">{c.brand_name}{c.pending_form_data && Object.keys(c.pending_form_data).length > 0 && <span className="ml-1.5 text-amber-600" title="Forum dəyişikliyi gözləyir">📩</span>}</p>{c.legal_name && <p className="text-xs text-slate-400">{c.legal_name}</p>}</td>
                   <td className="px-3 py-3 text-sm text-slate-600">{c.sector}</td>
                   <td className="px-3 py-3"><Badge className="bg-[#3D4F6F] text-white text-xs">{c.package}</Badge></td>
                   <td className="px-3 py-3 text-sm">{c.owner_name || `${c.owner_first_name || ''} ${c.owner_last_name || ''}`.trim()}</td>

@@ -41,7 +41,7 @@ export default function Finance() {
   const [expenseForm, setExpenseForm] = useState({
     expense_name: '', category: '', sub_category: '', amount: 0, currency: 'AZN',
     date: new Date().toISOString().split('T')[0], project: '', department: '',
-    responsible_person: '', payment_type: '', status: 'Ödənilib'
+    responsible_person: '', payment_method: '', status: 'Ödənilib'
   });
 
   // Note modal
@@ -53,7 +53,7 @@ export default function Finance() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentCompany, setPaymentCompany] = useState(null);
   const [paymentForm, setPaymentForm] = useState({
-    new_payment_amount: '', payment_date: '', payment_note: '',
+    new_payment_amount: '', payment_date: '', payment_note: '', payment_method: '',
     finance_contract_number: '', payment_due_date: '', voen: '',
     e_invoice_date: '', e_invoice_number: '', follow_up: ''
   });
@@ -143,6 +143,7 @@ export default function Finance() {
       new_payment_amount: '',
       payment_date: new Date().toISOString().split('T')[0],
       payment_note: '',
+      payment_method: '',
       contract_number: sale.contract_number || '',
       payment_due_date: sale.payment_due_date || '',
       voen: sale.voen || '',
@@ -218,7 +219,7 @@ export default function Finance() {
   const openPaymentEdit = async (company) => {
     setPaymentCompany(company);
     setPaymentForm({
-      new_payment_amount: '', payment_date: new Date().toISOString().split('T')[0], payment_note: '',
+      new_payment_amount: '', payment_date: new Date().toISOString().split('T')[0], payment_note: '', payment_method: '',
       finance_contract_number: company.finance_contract_number || '',
       payment_due_date: company.payment_due_date || '',
       voen: company.voen || '',
@@ -280,7 +281,7 @@ export default function Finance() {
     setExpenseForm({
       expense_name: '', category: '', sub_category: '', amount: 0, currency: 'AZN',
       date: new Date().toISOString().split('T')[0], project: '', department: '',
-      responsible_person: '', payment_type: '', status: 'Ödənilib'
+      responsible_person: '', payment_method: '', status: 'Ödənilib'
     });
   };
 
@@ -321,7 +322,7 @@ export default function Finance() {
       'Layihə': e.project || '',
       'Şöbə': e.department || '',
       'Məsul şəxs': e.responsible_person || '',
-      'Ödəniş növü': e.payment_type || '',
+      'Ödəniş üsulu': e.payment_method || e.payment_type || '',
       'Status': e.status || '',
     }));
     const ws2 = XLSX.utils.json_to_sheet(expenseData);
@@ -643,13 +644,14 @@ export default function Finance() {
                     <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Kateqoriya</th>
                     <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Tarix</th>
                     <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Məbləğ</th>
+                    <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Ödəniş üsulu</th>
                     <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Status</th>
                     <th className="text-right px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Əməliyyat</th>
                   </tr>
                 </thead>
                 <tbody>
                   {expenses.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center py-8 text-slate-400">Xərc yoxdur</td></tr>
+                    <tr><td colSpan={7} className="text-center py-8 text-slate-400">Xərc yoxdur</td></tr>
                   ) : (
                     expenses.map(exp => (
                       <tr key={exp.id} className="border-b border-slate-50 hover:bg-slate-50">
@@ -657,6 +659,7 @@ export default function Finance() {
                         <td className="px-4 py-3 text-sm text-slate-600">{exp.category}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{exp.date}</td>
                         <td className="px-4 py-3 text-sm font-medium text-red-600">{(exp.amount || 0).toLocaleString()} AZN</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{exp.payment_method || exp.payment_type || '—'}</td>
                         <td className="px-4 py-3"><Badge className="bg-green-100 text-green-700 text-xs">{exp.status}</Badge></td>
                         <td className="px-4 py-3 text-right">
                           <DropdownMenu>
@@ -851,7 +854,22 @@ export default function Finance() {
                   <div><Label className="text-xs">Məbləğ (AZN)</Label><Input type="number" value={salePaymentForm.new_payment_amount || ''} onChange={e => setSalePaymentForm({ ...salePaymentForm, new_payment_amount: e.target.value })} className="text-sm" placeholder="0" data-testid="finance-sale-payment-amount" /></div>
                   <div><Label className="text-xs">Tarix</Label><Input type="date" value={salePaymentForm.payment_date || ''} onChange={e => setSalePaymentForm({ ...salePaymentForm, payment_date: e.target.value })} className="text-sm" data-testid="finance-sale-payment-date" /></div>
                 </div>
-                <div className="mt-2"><Label className="text-xs">Qeyd</Label><Input value={salePaymentForm.payment_note || ''} onChange={e => setSalePaymentForm({ ...salePaymentForm, payment_note: e.target.value })} className="text-sm" placeholder="Ödəniş qeydi" /></div>
+                <div className="mt-2 grid grid-cols-2 gap-3">
+                  <div><Label className="text-xs">Qeyd</Label><Input value={salePaymentForm.payment_note || ''} onChange={e => setSalePaymentForm({ ...salePaymentForm, payment_note: e.target.value })} className="text-sm" placeholder="Ödəniş qeydi" /></div>
+                  <div>
+                    <Label className="text-xs">Ödəniş üsulu</Label>
+                    <Select value={salePaymentForm.payment_method || 'none'} onValueChange={(v) => setSalePaymentForm({ ...salePaymentForm, payment_method: v === 'none' ? '' : v })}>
+                      <SelectTrigger className="text-sm" data-testid="sale-payment-method"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Seçilməyib</SelectItem>
+                        <SelectItem value="Köçürmə">Köçürmə</SelectItem>
+                        <SelectItem value="Nəğd">Nəğd</SelectItem>
+                        <SelectItem value="Posterminal">Posterminal</SelectItem>
+                        <SelectItem value="CTC">CTC</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
 
               {/* Finance metadata */}
@@ -973,9 +991,24 @@ export default function Finance() {
                   <Input type="date" value={paymentForm.payment_date} onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })} className="text-sm" data-testid="payment-date-input" />
                 </div>
               </div>
-              <div className="mt-2">
-                <Label className="text-xs">Qeyd</Label>
-                <Input value={paymentForm.payment_note} onChange={(e) => setPaymentForm({ ...paymentForm, payment_note: e.target.value })} className="text-sm" placeholder="Ödəniş haqqında qeyd" />
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Qeyd</Label>
+                  <Input value={paymentForm.payment_note} onChange={(e) => setPaymentForm({ ...paymentForm, payment_note: e.target.value })} className="text-sm" placeholder="Ödəniş haqqında qeyd" />
+                </div>
+                <div>
+                  <Label className="text-xs">Ödəniş üsulu</Label>
+                  <Select value={paymentForm.payment_method || 'none'} onValueChange={(v) => setPaymentForm({ ...paymentForm, payment_method: v === 'none' ? '' : v })}>
+                    <SelectTrigger className="text-sm" data-testid="company-payment-method"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Seçilməyib</SelectItem>
+                      <SelectItem value="Köçürmə">Köçürmə</SelectItem>
+                      <SelectItem value="Nəğd">Nəğd</SelectItem>
+                      <SelectItem value="Posterminal">Posterminal</SelectItem>
+                      <SelectItem value="CTC">CTC</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
@@ -1081,6 +1114,19 @@ export default function Finance() {
                 </Select>
               </div>
               <div><Label className="text-xs">Məsul şəxs</Label><Input value={expenseForm.responsible_person} onChange={(e) => setExpenseForm({ ...expenseForm, responsible_person: e.target.value })} className="text-sm" /></div>
+              <div>
+                <Label className="text-xs">Ödəniş üsulu</Label>
+                <Select value={expenseForm.payment_method} onValueChange={(v) => setExpenseForm({ ...expenseForm, payment_method: v === 'none' ? '' : v })}>
+                  <SelectTrigger className="text-sm" data-testid="expense-payment-method"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Seçilməyib</SelectItem>
+                    <SelectItem value="Köçürmə">Köçürmə</SelectItem>
+                    <SelectItem value="Nəğd">Nəğd</SelectItem>
+                    <SelectItem value="Posterminal">Posterminal</SelectItem>
+                    <SelectItem value="CTC">CTC</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => { setShowExpenseModal(false); setEditingExpense(null); }}>Ləğv et</Button>

@@ -132,7 +132,7 @@ export default function PublicForm() {
 
   if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#3D4F6F]" /></div>;
   if (error && !submitted) return <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4"><div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center"><AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" /><h2 className="text-lg font-bold text-red-600 mb-2">Xəta</h2><p className="text-slate-500">{error}</p></div></div>;
-  if (submitted) return <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4"><div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center"><CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" /><h2 className="text-xl font-bold text-[#3D4F6F] mb-2">Təşəkkür edirik!</h2><p className="text-slate-500">Məlumatlarınız uğurla göndərildi.</p></div></div>;
+  if (submitted) return <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4"><div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center"><CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" /><h2 className="text-xl font-bold text-[#3D4F6F] mb-2">Təşəkkür edirik!</h2><p className="text-slate-500">Məlumatlarınız uğurla göndərildi.</p><p className="text-xs text-amber-600 mt-3 bg-amber-50 px-3 py-2 rounded">Admin təsdiqindən sonra məlumatlar profilinizdə yenilənəcək.</p></div></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4">
