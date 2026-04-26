@@ -930,18 +930,25 @@ async def attendance_system_sessions(
             return None
 
     out = []
+    now_dt = datetime.now(timezone.utc)
     for s in sessions:
         login_dt = _parse(s.get("login_at"))
         logout_dt = _parse(s.get("logout_at"))
         last_dt = _parse(s.get("last_active_at"))
-        end = logout_dt or last_dt or login_dt
+        is_open = s.get("logout_at") is None
+        # For open sessions report a LIVE duration (now - login) so the UI is
+        # accurate without waiting for the next heartbeat.
+        if is_open:
+            end = now_dt
+        else:
+            end = logout_dt or last_dt or login_dt
         active_seconds = 0
         if login_dt and end:
             active_seconds = max(0, int((end - login_dt).total_seconds()))
         out.append({
             **s,
             "active_seconds": active_seconds,
-            "is_open": s.get("logout_at") is None,
+            "is_open": is_open,
         })
     return out
 
