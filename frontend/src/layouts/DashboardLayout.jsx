@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import axios from 'axios';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { Sidebar, MobileHeader, SidebarProvider, useSidebar } from '../components/Sidebar';
 import NotificationBell from '../components/NotificationBell';
@@ -14,6 +15,22 @@ const DashboardContent = () => {
       navigate('/login');
     }
   }, [navigate]);
+
+  // System session heartbeat — fires every minute so server can compute active duration
+  useEffect(() => {
+    const ping = () => {
+      const tk = localStorage.getItem('token');
+      if (!tk) return;
+      axios
+        .post(`${process.env.REACT_APP_BACKEND_URL}/api/auth/heartbeat`, {}, {
+          headers: { Authorization: `Bearer ${tk}` },
+        })
+        .catch(() => {});
+    };
+    ping();
+    const id = setInterval(ping, 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">

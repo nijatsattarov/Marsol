@@ -416,11 +416,48 @@ async def login(user_data: UserLogin):
     user_dict = {"id": user["id"], "email": user["email"], "name": user["name"], "role": user["role"]}
     perms = await get_user_permissions(user)
     user_dict["permissions"] = perms
+    # Record system session (for Davamiyyət — Sistem fəaliyyəti)
+    try:
+        now = datetime.now(timezone.utc)
+        await db.user_sessions.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": user["id"],
+            "user_email": user["email"],
+            "user_name": user["name"],
+            "login_at": now.isoformat(),
+            "last_active_at": now.isoformat(),
+            "logout_at": None,
+        })
+    except Exception as e:
+        logging.error("Session record failed: %s", e)
     return Token(
         access_token=access_token,
         token_type="bearer",
         user=user_dict
     )
+
+@api_router.post("/auth/logout")
+async def logout(current_user: dict = Depends(get_current_user)):
+    """Mark the user's most recent open session as closed."""
+    now = datetime.now(timezone.utc).isoformat()
+    await db.user_sessions.update_one(
+        {"user_id": current_user["id"], "logout_at": None},
+        {"$set": {"logout_at": now, "last_active_at": now}},
+        upsert=False,
+    )
+    return {"ok": True}
+
+@api_router.post("/auth/heartbeat")
+async def heartbeat(current_user: dict = Depends(get_current_user)):
+    """Bumps last_active_at on the latest open session so we can compute
+    accurate active duration even when the user closes the tab without logout."""
+    now = datetime.now(timezone.utc).isoformat()
+    await db.user_sessions.update_one(
+        {"user_id": current_user["id"], "logout_at": None},
+        {"$set": {"last_active_at": now}},
+        upsert=False,
+    )
+    return {"ok": True, "ts": now}
 
 @api_router.get("/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
@@ -864,6 +901,49 @@ async def attendance_stats(month: Optional[str] = None, current_user: dict = Dep
 async def delete_attendance(record_id: str, current_user: dict = Depends(check_permission("hr", "write"))):
     await db.attendance.delete_one({"id": record_id})
     return {"message": "Qeyd silindi"}
+
+@api_router.get("/attendance/system-sessions")
+async def attendance_system_sessions(
+    date: Optional[str] = None,
+    user_id: Optional[str] = None,
+    current_user: dict = Depends(check_permission("hr", "read")),
+):
+    """Returns user login/logout sessions with active duration in seconds.
+
+    - `date` filter (YYYY-MM-DD) keeps sessions whose login_at is on that day
+    - Open sessions (logout_at is null) report active_seconds based on last_active_at
+    """
+    query: Dict[str, Any] = {}
+    if user_id:
+        query["user_id"] = user_id
+    if date:
+        # date filter on login_at prefix (ISO strings start with YYYY-MM-DD)
+        query["login_at"] = {"$regex": f"^{date}"}
+    sessions = await db.user_sessions.find(query, {"_id": 0}).sort("login_at", -1).to_list(2000)
+
+    def _parse(ts: Optional[str]) -> Optional[datetime]:
+        if not ts:
+            return None
+        try:
+            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    out = []
+    for s in sessions:
+        login_dt = _parse(s.get("login_at"))
+        logout_dt = _parse(s.get("logout_at"))
+        last_dt = _parse(s.get("last_active_at"))
+        end = logout_dt or last_dt or login_dt
+        active_seconds = 0
+        if login_dt and end:
+            active_seconds = max(0, int((end - login_dt).total_seconds()))
+        out.append({
+            **s,
+            "active_seconds": active_seconds,
+            "is_open": s.get("logout_at") is None,
+        })
+    return out
 
 # ==================== LEAVE REQUESTS (MƏZUNİYYƏT SORĞULARI) ====================
 

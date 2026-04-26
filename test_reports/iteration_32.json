@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 32 — System sessions (Davamiyyət -> Sistem fəaliyyəti) feature fully tested. 10/10 backend tests passed. Frontend e2e: sidebar restructure (HR/Finance expandable groups), heartbeat-on-mount, system-sessions tab with full table, and logout -> /api/auth/logout flow all confirmed working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/heartbeat & /api/auth/logout", "issue": "Backend uses update_one() with filter {user_id, logout_at: None} but no sort — if a user has multiple stale open sessions, heartbeat/logout updates an arbitrary one rather than the most recent. In practice OK (browser keeps single session), but stale sessions accumulate forever (user_sessions collection has no TTL/cleanup). Recommend: add sort by login_at desc on the update OR add a cleanup job/TTL index."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Davamiyyət — Sistem fəaliyyəti", "issues": ["Aktiv müddət column shows '—' for most open sessions because last_active_at == login_at until heartbeat lands. Cosmetic — once first heartbeat fires (60s post-login), it shows duration. Could pre-compute (now - login_at) for is_open rows on backend so users see something immediately."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration32_system_sessions.py",
+    "/app/test_reports/pytest/pytest_iter32.xml"
+  ],
+  "action_items": [
+    "(Optional) Add periodic cleanup or TTL on user_sessions collection (sessions persist forever per design; could grow unbounded).",
+    "(Optional) Sort update_one() filter for heartbeat/logout by login_at desc so the most recent open session is always the one updated.",
+    "(Optional) On is_open rows, compute active_seconds against now() instead of last_active_at so the UI shows live duration without waiting for heartbeat."
+  ],
+  "critical_code_review_comments": [
+    "/api/attendance/system-sessions correctly excludes _id via projection {_id:0}.",
+    "Route ordering: GET /attendance/system-sessions is defined AFTER DELETE /attendance/{id} — safe (different methods), no shadowing.",
+    "Login path catches session-insert exceptions gracefully (try/except around insert_one) — login won't fail if user_sessions write breaks.",
+    "RBAC: /api/attendance/system-sessions requires hr:read — verified Sales user receives 403.",
+    "Frontend Sidebar.handleLogout fires POST /api/auth/logout BEFORE clearing localStorage and navigating — verified via network capture.",
+    "DashboardLayout heartbeat: fires on mount and every 60s. In dev StrictMode it double-fires on mount (cosmetic, harmless).",
+    "server.py is 4428 lines — exceeds the >700-line guideline; consider modularising routes (auth, attendance, hr, finance, etc.) into separate routers."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration32_system_sessions.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin: settings@marsol.az / marsol123 ; Sales: satis@marsol.az / marsol123 ; Mühasib: muhasib@marsol.az / marsol123",
+  "seed_data_creation": "Each test login adds a row to user_sessions collection (by design). Logout test closes one. Attendance regression test creates and deletes a TEST_iter32 attendance record on a real employee.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file: /app/backend/tests/test_iteration32_system_sessions.py covers login session-record, heartbeat, logout, system-sessions endpoint (with date filter, RBAC), and full attendance regression. user_sessions collection grows unbounded — consider TTL or cleanup if testing repeatedly. Login response key is 'access_token'. heartbeat returns {ok:true, ts:<iso>}. The Aktiv müddət column on Sistem fəaliyyəti tab will show '—' for sessions whose login_at == last_active_at (active_seconds=0); after heartbeat or for closed sessions, it shows duration like '1d 46san' (1 dəqiqə 46 saniyə).",
+  "rca of the issue": "No bugs blocking. The flagged minor issues (heartbeat update_one without sort, unbounded user_sessions growth, '—' display for fresh open sessions) are all low-impact edge cases worth tracking but not blockers."
+}

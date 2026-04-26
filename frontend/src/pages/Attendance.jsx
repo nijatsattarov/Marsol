@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
-import { Loader2, Calendar as CalendarIcon, Users, Check, X, Clock, Plane, Stethoscope, Home, Download, Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, Users, Check, X, Clock, Plane, Stethoscope, Home, Download, Plus, Trash2, ChevronLeft, ChevronRight, Activity, LogIn, LogOut } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -51,6 +51,11 @@ export default function Attendance() {
   const [leaveForm, setLeaveForm] = useState({ employee_id: '', type: 'Məzuniyyət', start_date: '', end_date: '', reason: '' });
   const [leaveFilter, setLeaveFilter] = useState('all');
 
+  // System sessions (giriş/çıxış vaxtları)
+  const [sessions, setSessions] = useState([]);
+  const [sessionsDate, setSessionsDate] = useState(today());
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+
   const fetchEmployees = useCallback(async () => {
     try { const r = await axios.get(`${API}/employees?status=Aktiv`, { headers }); setEmployees(r.data); }
     catch { setEmployees([]); }
@@ -70,6 +75,17 @@ export default function Attendance() {
     try { const r = await axios.get(`${API}/leave-requests`, { headers }); setLeaves(r.data); }
     catch { setLeaves([]); }
   }, []);
+
+  const fetchSessions = useCallback(async (d) => {
+    setSessionsLoading(true);
+    try {
+      const r = await axios.get(`${API}/attendance/system-sessions?date=${d}`, { headers });
+      setSessions(r.data);
+    } catch { setSessions([]); }
+    finally { setSessionsLoading(false); }
+  }, []);
+
+  useEffect(() => { if (tab === 'system') fetchSessions(sessionsDate); }, [tab, sessionsDate, fetchSessions]);
 
   useEffect(() => {
     (async () => { await Promise.all([fetchEmployees(), fetchRecords(date), fetchStats(month), fetchLeaves()]); setLoading(false); })();
@@ -157,6 +173,38 @@ export default function Attendance() {
 
   const filteredLeaves = leaves.filter(l => leaveFilter === 'all' || l.status === leaveFilter);
 
+  const fmtTime = (iso) => {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      return d.toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch { return iso; }
+  };
+  const fmtDuration = (sec) => {
+    if (!sec || sec < 0) return '—';
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (h > 0) return `${h}s ${m}d`;
+    if (m > 0) return `${m}d ${s}san`;
+    return `${s}san`;
+  };
+  const exportSessions = () => {
+    const data = sessions.map(s => ({
+      'Ad Soyad': s.user_name || '',
+      'Email': s.user_email || '',
+      'Giriş vaxtı': s.login_at ? new Date(s.login_at).toLocaleString('az-AZ') : '',
+      'Çıxış vaxtı': s.logout_at ? new Date(s.logout_at).toLocaleString('az-AZ') : 'Aktiv',
+      'Son fəaliyyət': s.last_active_at ? new Date(s.last_active_at).toLocaleString('az-AZ') : '',
+      'Aktiv qalma müddəti (saat:dəq:san)': new Date((s.active_seconds || 0) * 1000).toISOString().substr(11, 8),
+      'Status': s.is_open ? 'Aktiv' : 'Bağlı',
+    }));
+    const wb = XLSX.utils.book_new(); const ws = XLSX.utils.json_to_sheet(data);
+    ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 18 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws, `Sistem ${sessionsDate}`);
+    XLSX.writeFile(wb, `sistem_fealiyyet_${sessionsDate}.xlsx`);
+  };
+
   // Daily stats
   const dailyStats = STATUSES.reduce((acc, s) => ({ ...acc, [s]: records.filter(r => r.status === s).length }), {});
   const notMarked = employees.length - records.length;
@@ -178,6 +226,7 @@ export default function Attendance() {
           <TabsTrigger value="daily" data-testid="tab-daily">Günlük</TabsTrigger>
           <TabsTrigger value="monthly" data-testid="tab-monthly">Aylıq Hesabat</TabsTrigger>
           <TabsTrigger value="leaves" data-testid="tab-leaves">Məzuniyyət Sorğuları</TabsTrigger>
+          <TabsTrigger value="system" data-testid="tab-system">Sistem fəaliyyəti</TabsTrigger>
         </TabsList>
 
         {/* DAILY TAB */}
@@ -348,6 +397,63 @@ export default function Attendance() {
                             </>}
                             <button onClick={() => deleteLeave(l.id)} className="p-1.5 hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
                           </div>}
+                        </td>
+                      </tr>
+                    ))
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* SYSTEM SESSIONS TAB */}
+        <TabsContent value="system">
+          <div className="bg-white rounded-xl shadow-sm border p-3 mb-4 flex flex-wrap items-center gap-3">
+            <Activity className="w-4 h-4 text-[#3D4F6F]" />
+            <Input type="date" value={sessionsDate} onChange={e => setSessionsDate(e.target.value)} className="w-[160px] text-sm" data-testid="sessions-date-picker" />
+            <Button onClick={() => setSessionsDate(today())} variant="outline" size="sm" className="text-xs">Bu gün</Button>
+            <Button onClick={() => fetchSessions(sessionsDate)} variant="outline" size="sm" className="text-xs">Yenilə</Button>
+            <div className="flex-1"></div>
+            <Button onClick={exportSessions} variant="outline" className="text-[#3D4F6F]" data-testid="export-sessions-btn"><Download className="w-4 h-4 mr-1" />Excel</Button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+            <div className="bg-white rounded-lg p-3 border" data-testid="stat-sessions-total"><p className="text-lg font-bold text-[#3D4F6F]">{sessions.length}</p><p className="text-[10px] text-slate-500">Cəmi sessiya</p></div>
+            <div className="bg-white rounded-lg p-3 border border-green-100" data-testid="stat-sessions-active"><p className="text-lg font-bold text-green-600">{sessions.filter(s => s.is_open).length}</p><p className="text-[10px] text-slate-500">Aktiv</p></div>
+            <div className="bg-white rounded-lg p-3 border" data-testid="stat-sessions-users"><p className="text-lg font-bold text-[#3D4F6F]">{new Set(sessions.map(s => s.user_id)).size}</p><p className="text-[10px] text-slate-500">Unikal istifadəçi</p></div>
+            <div className="bg-white rounded-lg p-3 border" data-testid="stat-sessions-time"><p className="text-lg font-bold text-[#3D4F6F]">{fmtDuration(sessions.reduce((acc, s) => acc + (s.active_seconds || 0), 0))}</p><p className="text-[10px] text-slate-500">Ümumi aktiv vaxt</p></div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-slate-50 border-b">
+                    <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">İstifadəçi</th>
+                    <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Email</th>
+                    <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]"><LogIn className="w-3.5 h-3.5 inline mr-1" />Giriş</th>
+                    <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]"><LogOut className="w-3.5 h-3.5 inline mr-1" />Çıxış</th>
+                    <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]"><Clock className="w-3.5 h-3.5 inline mr-1" />Son fəaliyyət</th>
+                    <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Aktiv müddət</th>
+                    <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessionsLoading ? <tr><td colSpan={7} className="text-center py-12"><Loader2 className="w-6 h-6 animate-spin text-[#3D4F6F] mx-auto" /></td></tr> :
+                    sessions.length === 0 ? <tr><td colSpan={7} className="text-center py-12 text-slate-400 text-sm">Bu tarixdə sessiya qeydə alınmayıb</td></tr> :
+                    sessions.map(s => (
+                      <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50" data-testid={`session-${s.id}`}>
+                        <td className="px-3 py-2.5 text-sm font-medium text-[#3D4F6F]">{s.user_name}</td>
+                        <td className="px-3 py-2.5 text-xs text-slate-500">{s.user_email}</td>
+                        <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">{fmtTime(s.login_at)}</td>
+                        <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">{s.logout_at ? fmtTime(s.logout_at) : <span className="text-green-600 font-medium">— hələ aktiv —</span>}</td>
+                        <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">{fmtTime(s.last_active_at)}</td>
+                        <td className="px-3 py-2.5 text-xs font-semibold text-[#3D4F6F] whitespace-nowrap">{fmtDuration(s.active_seconds)}</td>
+                        <td className="px-3 py-2.5">
+                          {s.is_open
+                            ? <Badge className="bg-green-100 text-green-700 text-[10px]">Aktiv</Badge>
+                            : <Badge className="bg-slate-100 text-slate-600 text-[10px]">Bağlı</Badge>}
                         </td>
                       </tr>
                     ))

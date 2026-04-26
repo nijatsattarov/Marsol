@@ -44,6 +44,16 @@ const salesSubItems = [
   { path: '/sales/contact-lists', label: 'Siyahılar', icon: ClipboardList, module: 'sales' },
 ];
 
+const hrSubItems = [
+  { path: '/hr', label: 'İşçilər', icon: Users2, module: 'hr' },
+  { path: '/attendance', label: 'Davamiyyət', icon: FileCheck, module: 'hr' },
+];
+
+const financeSubItems = [
+  { path: '/finance', label: 'Mühasibat', icon: Wallet, module: 'finance' },
+  { path: '/barter', label: 'Barter', icon: ArrowLeftRight, module: 'finance' },
+];
+
 const organizationSubItems = [
   { path: '/organization', label: 'İdarə paneli', icon: LayoutDashboard, module: 'organization' },
   { path: '/organization/venues', label: 'Məkanlar', icon: Building2, module: 'organization' },
@@ -58,15 +68,13 @@ const organizationSubItems = [
 
 const menuItems = [
   { path: '/companies', label: 'Şirkət Məlumatları', icon: Building2, module: 'companies' },
-  { path: '/hr', label: 'İnsan Resursları', icon: UserCog, module: 'hr' },
-  { path: '/attendance', label: 'Davamiyyət', icon: FileCheck, module: 'hr' },
+  { path: '/hr', label: 'İnsan Resursları', icon: UserCog, children: hrSubItems, module: 'hr' },
   { path: '/sales', label: 'Satış', icon: TrendingUp, children: salesSubItems, module: 'sales' },
   { path: '/marketing', label: 'Marketinq', icon: Megaphone, module: 'marketing' },
   { path: '/projects', label: 'Layihələr', icon: FolderKanban, module: 'projects' },
   { path: '/activities', label: 'Fəaliyyətlər', icon: Calendar, module: 'organization' },
   { path: '/organization', label: 'Təşkilatçılıq', icon: Users2, children: organizationSubItems, module: 'organization' },
-  { path: '/finance', label: 'Maliyyə', icon: Wallet, module: 'finance' },
-  { path: '/barter', label: 'Barter', icon: ArrowLeftRight, module: 'finance' },
+  { path: '/finance', label: 'Maliyyə', icon: Wallet, children: financeSubItems, module: 'finance' },
   { path: '/reports', label: 'Hesabatlar', icon: BarChart3, module: 'reports' },
   { path: '/meetings', label: 'Görüşlər', icon: Calendar, module: 'meetings' },
   { path: '/assembly', label: 'İclas', icon: Presentation, module: 'assembly' },
@@ -249,6 +257,15 @@ export const Sidebar = () => {
   };
 
   const handleLogout = () => {
+    const tk = localStorage.getItem('token');
+    if (tk) {
+      // Fire-and-forget — close server-side session record before clearing token
+      axios
+        .post(`${process.env.REACT_APP_BACKEND_URL}/api/auth/logout`, {}, {
+          headers: { Authorization: `Bearer ${tk}` },
+        })
+        .catch(() => {});
+    }
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     navigate('/login');
