@@ -17,11 +17,13 @@ import * as XLSX from 'xlsx';
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export default function Obligations() {
+  const currentYear = new Date().getFullYear();
   const [data, setData] = useState({ obligations: [], stats: {} });
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPackage, setFilterPackage] = useState('all');
   const [filterUrgency, setFilterUrgency] = useState('all');
+  const [filterYear, setFilterYear] = useState(String(currentYear));
   const [sortBy, setSortBy] = useState('priority');
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [companyDetail, setCompanyDetail] = useState(null);
@@ -32,11 +34,13 @@ export default function Obligations() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/obligations/dashboard`, { headers });
+      const params = new URLSearchParams();
+      if (filterYear && filterYear !== 'all') params.append('year', filterYear);
+      const res = await axios.get(`${API}/obligations/dashboard?${params.toString()}`, { headers });
       setData(res.data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  }, []);
+  }, [filterYear]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -44,7 +48,9 @@ export default function Obligations() {
     setSelectedCompany(companyId);
     setDetailLoading(true);
     try {
-      const res = await axios.get(`${API}/obligations/company/${companyId}`, { headers });
+      const params = new URLSearchParams();
+      if (filterYear && filterYear !== 'all') params.append('year', filterYear);
+      const res = await axios.get(`${API}/obligations/company/${companyId}?${params.toString()}`, { headers });
       setCompanyDetail(res.data);
     } catch { toast.error('Xəta baş verdi'); }
     finally { setDetailLoading(false); }
@@ -189,6 +195,15 @@ export default function Obligations() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input placeholder="Şirkət və ya sahibkar axtar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 text-sm" data-testid="obligation-search" />
           </div>
+          <Select value={filterYear} onValueChange={setFilterYear}>
+            <SelectTrigger className="w-[120px] text-sm h-9" data-testid="obligation-year-filter"><SelectValue placeholder="İl" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Bütün illər</SelectItem>
+              {Array.from({ length: 6 }, (_, i) => currentYear + 1 - i).map(y => (
+                <SelectItem key={y} value={String(y)}>{y}{y === currentYear ? ' (cari)' : ''}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={filterPackage} onValueChange={setFilterPackage}>
             <SelectTrigger className="w-[130px] text-sm h-9"><SelectValue placeholder="Paket" /></SelectTrigger>
             <SelectContent>

@@ -14,7 +14,8 @@ import {
   ChevronDown,
   Pencil,
   Trash2,
-  MoreVertical
+  MoreVertical,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -61,7 +62,7 @@ const getSizeBadgeColor = (size) => {
 };
 
 // Mobile Card Component
-const MemberCard = ({ member, onEdit, onDelete }) => (
+const MemberCard = ({ member, onEdit, onDelete, onRenew }) => (
   <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100" data-testid={`member-card-${member.id}`}>
     <div className="flex items-start justify-between mb-3">
       <div className="flex-1 min-w-0">
@@ -73,6 +74,12 @@ const MemberCard = ({ member, onEdit, onDelete }) => (
           <Badge className={`text-xs ${getSizeBadgeColor(member.business_size)}`}>
             {member.business_size}
           </Badge>
+          {member._period && !member._period.is_current && (
+            <Badge className="text-xs bg-amber-50 text-amber-700">Tarixçə</Badge>
+          )}
+          {(member.membership_history && member.membership_history.length > 0) && (
+            <Badge className="text-xs bg-slate-100 text-slate-600">+{member.membership_history.length} il</Badge>
+          )}
         </div>
       </div>
       <DropdownMenu>
@@ -85,6 +92,10 @@ const MemberCard = ({ member, onEdit, onDelete }) => (
           <DropdownMenuItem onClick={() => onEdit(member)}>
             <Pencil className="w-4 h-4 mr-2" />
             Redaktə
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onRenew(member)} data-testid={`renew-member-${member.id}`}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Üzvlüyü Yenilə
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => onDelete(member.id)} className="text-red-600">
             <Trash2 className="w-4 h-4 mr-2" />
@@ -122,6 +133,12 @@ export default function Members() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
+  const currentYear = new Date().getFullYear();
+  const [yearFilter, setYearFilter] = useState(String(currentYear));
+  const [showRenewModal, setShowRenewModal] = useState(false);
+  const [renewMember, setRenewMember] = useState(null);
+  const [renewForm, setRenewForm] = useState({ package: '', contract_start: '', contract_end: '', carry_over_quota: false });
+
   const [searchTerm, setSearchTerm] = useState('');
   
   const [filters, setFilters] = useState({
@@ -157,6 +174,7 @@ export default function Members() {
       Object.entries(filters).forEach(([key, value]) => {
         if (value && value !== 'all') params.append(key, value);
       });
+      if (yearFilter && yearFilter !== 'all') params.append('year', yearFilter);
       
       const response = await axios.get(`${API}/members?${params.toString()}`, { headers });
       setMembers(response.data);
@@ -165,7 +183,7 @@ export default function Members() {
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, yearFilter]);
 
   const fetchOptions = async () => {
     try {
@@ -208,6 +226,33 @@ export default function Members() {
       fetchMembers();
     } catch (error) {
       toast.error('Silinmə zamanı xəta');
+    }
+  };
+
+  const handleRenew = (member) => {
+    setRenewMember(member);
+    const today = new Date().toISOString().split('T')[0];
+    const nextYear = new Date();
+    nextYear.setFullYear(nextYear.getFullYear() + 1);
+    nextYear.setDate(nextYear.getDate() - 1);
+    setRenewForm({
+      package: member.package || '',
+      contract_start: today,
+      contract_end: nextYear.toISOString().split('T')[0],
+      carry_over_quota: false,
+    });
+    setShowRenewModal(true);
+  };
+
+  const submitRenew = async () => {
+    try {
+      await axios.post(`${API}/members/${renewMember.id}/renew`, renewForm, { headers });
+      toast.success('Üzvlük yeniləndi');
+      setShowRenewModal(false);
+      setRenewMember(null);
+      fetchMembers();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Yeniləmə zamanı xəta');
     }
   };
 
@@ -357,6 +402,19 @@ export default function Members() {
             />
           </div>
           
+          {/* Year filter */}
+          <Select value={yearFilter} onValueChange={setYearFilter}>
+            <SelectTrigger className="w-[140px] text-sm h-9" data-testid="year-filter">
+              <SelectValue placeholder="İl" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Bütün illər</SelectItem>
+              {Array.from({ length: 6 }, (_, i) => currentYear + 1 - i).map(y => (
+                <SelectItem key={y} value={String(y)}>{y}{y === currentYear ? ' (cari)' : ''}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           {/* Filter Toggle */}
           <Button
             variant="outline"
@@ -498,6 +556,7 @@ export default function Members() {
               member={member} 
               onEdit={handleEdit}
               onDelete={handleDelete}
+              onRenew={handleRenew}
             />
           ))
         )}
@@ -517,12 +576,13 @@ export default function Members() {
                 <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Rəhbər</th>
                 <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Əlaqədar</th>
                 <th className="text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm">Email</th>
+                <th className="text-right font-semibold text-[#3D4F6F] px-4 py-3 text-sm w-12"></th>
               </tr>
             </thead>
             <tbody>
               {filteredMembers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-12 text-slate-500">
+                  <td colSpan={9} className="text-center py-12 text-slate-500">
                     <Building2 className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                     <p>Üzv tapılmadı</p>
                   </td>
@@ -587,6 +647,26 @@ export default function Members() {
                         <Mail className="w-3 h-3" />
                         {member.company_email}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" data-testid={`row-menu-${member.id}`}>
+                            <MoreVertical className="w-4 h-4 text-slate-400" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleEdit(member)}>
+                            <Pencil className="w-4 h-4 mr-2" />Redaktə
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleRenew(member)} data-testid={`row-renew-${member.id}`}>
+                            <RefreshCw className="w-4 h-4 mr-2" />Üzvlüyü Yenilə
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDelete(member.id)} className="text-red-600">
+                            <Trash2 className="w-4 h-4 mr-2" />Sil
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 ))
@@ -789,6 +869,56 @@ export default function Members() {
               </div>
             </form>
           </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Renew Membership Modal */}
+      <Dialog open={showRenewModal} onOpenChange={setShowRenewModal}>
+        <DialogContent className="max-w-md" data-testid="renew-modal">
+          <DialogHeader>
+            <DialogTitle className="text-[#3D4F6F]">Üzvlüyü Yenilə {renewMember?.company_name && `— ${renewMember.company_name}`}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {renewMember && (
+              <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-600">
+                <p>Cari müqavilə: <strong>{renewMember.package}</strong></p>
+                <p>Tarixlər: <strong>{renewMember.contract_start_date || '—'} → {renewMember.contract_end_date || '—'}</strong></p>
+                <p className="text-slate-500 mt-1">Cari müqavilə tarixçəyə köçürüləcək, yeni dövr başlayacaq.</p>
+              </div>
+            )}
+            <div>
+              <Label className="text-xs">Yeni paket *</Label>
+              <Select value={renewForm.package} onValueChange={(v) => setRenewForm({ ...renewForm, package: v })}>
+                <SelectTrigger className="text-sm" data-testid="renew-package"><SelectValue placeholder="Paket seçin" /></SelectTrigger>
+                <SelectContent>
+                  {(options?.packages || []).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Başlama tarixi *</Label>
+                <Input type="date" value={renewForm.contract_start} onChange={e => setRenewForm({ ...renewForm, contract_start: e.target.value })} className="text-sm" data-testid="renew-start" />
+              </div>
+              <div>
+                <Label className="text-xs">Bitmə tarixi *</Label>
+                <Input type="date" value={renewForm.contract_end} onChange={e => setRenewForm({ ...renewForm, contract_end: e.target.value })} className="text-sm" data-testid="renew-end" />
+              </div>
+            </div>
+            <label className="flex items-start gap-2 p-2 bg-amber-50 border border-amber-100 rounded-lg cursor-pointer">
+              <input type="checkbox" checked={renewForm.carry_over_quota} onChange={e => setRenewForm({ ...renewForm, carry_over_quota: e.target.checked })} className="mt-0.5 w-4 h-4 accent-[#9ACD32]" data-testid="renew-carryover" />
+              <div className="text-xs">
+                <p className="font-semibold text-[#3D4F6F]">İstifadə edilməyən kvotanı keçir</p>
+                <p className="text-slate-500">Cari dövrdən qalan kvota yeni dövrdə bonus kvota kimi əlavə olunacaq.</p>
+              </div>
+            </label>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setShowRenewModal(false)}>Ləğv et</Button>
+              <Button className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" onClick={submitRenew} data-testid="renew-submit-btn" disabled={!renewForm.package || !renewForm.contract_start || !renewForm.contract_end}>
+                <RefreshCw className="w-4 h-4 mr-1" />Yenilə
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

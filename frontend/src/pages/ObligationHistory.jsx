@@ -17,12 +17,14 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const EVENT_TYPES = ['Breakfast', 'Ofis ziyarəti', 'Mafia', 'Sosial fəaliyyət', 'Təlim', 'B2B görüş'];
 
 export default function ObligationHistory() {
+  const currentYear = new Date().getFullYear();
   const [data, setData] = useState({ obligations: [], stats: {} });
   const [events, setEvents] = useState([]);
   const [allInvitations, setAllInvitations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterEventType, setFilterEventType] = useState('all');
+  const [filterYear, setFilterYear] = useState(String(currentYear));
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -111,6 +113,7 @@ export default function ObligationHistory() {
   // Event type stats from all invitations
   const eventTypeStats = EVENT_TYPES.map(type => {
     let invs = allInvitations.filter(i => i.event_type === type);
+    if (filterYear && filterYear !== 'all') invs = invs.filter(i => (i.event_date || '').startsWith(filterYear + '-'));
     if (filterDateFrom) invs = invs.filter(i => i.event_date >= filterDateFrom);
     if (filterDateTo) invs = invs.filter(i => i.event_date <= filterDateTo);
     const total = invs.length;
@@ -132,6 +135,7 @@ export default function ObligationHistory() {
 
   // Filtered invitations for the table
   let filteredInvitations = allInvitations;
+  if (filterYear && filterYear !== 'all') filteredInvitations = filteredInvitations.filter(i => (i.event_date || '').startsWith(filterYear + '-'));
   if (filterEventType !== 'all') filteredInvitations = filteredInvitations.filter(i => i.event_type === filterEventType);
   if (filterDateFrom) filteredInvitations = filteredInvitations.filter(i => i.event_date >= filterDateFrom);
   if (filterDateTo) filteredInvitations = filteredInvitations.filter(i => i.event_date <= filterDateTo);
@@ -207,6 +211,15 @@ export default function ObligationHistory() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input placeholder="Şirkət və ya fəaliyyət axtar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 text-sm" data-testid="history-search" />
           </div>
+          <Select value={filterYear} onValueChange={setFilterYear}>
+            <SelectTrigger className="w-[120px] text-sm h-9" data-testid="history-year-filter"><SelectValue placeholder="İl" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Bütün illər</SelectItem>
+              {Array.from({ length: 6 }, (_, i) => currentYear + 1 - i).map(y => (
+                <SelectItem key={y} value={String(y)}>{y}{y === currentYear ? ' (cari)' : ''}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={filterEventType} onValueChange={setFilterEventType}>
             <SelectTrigger className="w-[150px] text-sm h-9"><SelectValue placeholder="Fəaliyyət növü" /></SelectTrigger>
             <SelectContent>

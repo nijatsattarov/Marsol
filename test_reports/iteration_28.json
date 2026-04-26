@@ -1,0 +1,25 @@
+{
+  "summary": "Iter 28 — Membership lifecycle (year filter + renew). Backend pytest: 12/12 PASS in test_iteration28_membership_lifecycle.py. Verified: (a) GET /api/members?year=2025 includes seed via current period with _period.is_current=true, year=2030 excludes seed, no year returns all. (b) POST /api/members/{id}/renew archives current period to membership_history with status='Yenilənib' and total/used/remaining_quota + archived_at snapshot, sets new package/contract dates. (c) carry_over_quota=true increases bonus_quota by remaining; carry_over_quota=false leaves bonus_quota unchanged. (d) After renew, year=2025 returns _period.is_current=false (history) and year=2026 returns _period.is_current=true. (e) Unknown member id → 404. (f) Sales role with members:write + scopes.members='own' → renew on admin-owned member returns 403. (g) /api/obligations/dashboard?year=2030 excludes seed, ?year=2025 returns list shape {obligations:[...]}. (h) /api/obligations/company/{id}?year=2025 returns object with quota fields. Frontend Playwright (admin login → /sales/members): year-filter testid present, default text '2026 (cari)'. Row-level dropdown opens row-renew-{id} which opens renew-modal with all 5 testids (renew-package, renew-start, renew-end, renew-carryover, renew-submit-btn). /sales/obligations: obligation-year-filter present, default '2026 (cari)'. /sales/obligation-history: history-year-filter present, default '2026 (cari)'.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration28_membership_lifecycle.py",
+    "/app/test_reports/pytest/pytest_results_iter28.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:1759 — `return companies` is followed by ~22 lines of unreachable/dead code (lines 1760–1782) that map fields like company_name/director_name/business_size and compute days_until_expiry. Either delete the dead block or move it before the return; the frontend currently never receives those mapped helpers from /api/members. Members.jsx works because it reads raw fields (brand_name etc) via different paths — but cleanup is recommended.",
+    "server.py:1862 renew_member — uses event_date string range query with sentinels '0000-00-00' and '9999-99-99'; works because event_date is stored as 'YYYY-MM-DD' strings. Good.",
+    "server.py:1891 history entry status hard-coded 'Yenilənib'; consider supporting 'Bitib'/'Ləğv edilib' if non-renew terminations are needed later.",
+    "Members.jsx: renew-submit-btn was not disabled on modal open during test — verify handleRenew pre-fills form with current package/dates (intended UX) or leaves blank (in which case the disabled flag should hold). Minor UX nit.",
+    "Members.jsx:96 card variant uses data-testid=renew-member-{id}; table variant uses row-renew-{id}. Both verified, but redundant naming — consider unifying."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration28_membership_lifecycle.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin: settings@marsol.az/marsol123; Satış: satis@marsol.az/marsol123",
+  "seed_data_creation": "Created TEST28_Co_<rand> member (Standart, 2025-01-15→2025-12-31). Test renewed it 3x (→2026, →2027, →2028 in scope test). Cleaned up via DELETE in fixture teardown. Role 'Satış meneceri' scopes/permissions saved & restored after scope=own test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 28 routes are nested under /sales/*: /sales/members, /sales/obligations, /sales/obligation-history (NOT /members). Members table dropdown trigger 'button[aria-haspopup=menu]' inside the table opens row-renew-{id}; the card variant uses renew-member-{id}. Renew modal testids: renew-modal, renew-package (Select), renew-start, renew-end (date inputs), renew-carryover (checkbox), renew-submit-btn. POST /api/members/{id}/renew body: {package, contract_start, contract_end, carry_over_quota}. Backend uses calendar-year overlap via _company_covers_year (current contract OR any membership_history entry). Obligations dashboard returns {obligations:[{company_id,...}]}, NOT a flat array.",
+  "rca of the issue": "No bugs found. Dead-code block after return in /api/members noted as code-quality issue, not a functional bug."
+}

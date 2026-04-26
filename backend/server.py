@@ -1715,6 +1715,7 @@ async def get_members(
     package: Optional[str] = None,
     sector: Optional[str] = None,
     status: Optional[str] = None,
+    year: Optional[int] = None,
     current_user: dict = Depends(get_current_user)
 ):
     query = {}
@@ -1726,6 +1727,36 @@ async def get_members(
         query["status"] = status
     query = await apply_scope(query, current_user, "members")
     companies = await db.companies.find(query, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    if year is not None:
+        companies = [c for c in companies if _company_covers_year(c, year)]
+    # Annotate each company with the membership-period applicable to that year (or current)
+    for c in companies:
+        if year is not None:
+            cs_y_cur = (c.get("contract_start_date") or "")[:4]
+            ce_y_cur = (c.get("contract_end_date") or "")[:4]
+            try:
+                cs_yi = int(cs_y_cur) if cs_y_cur else 0
+                ce_yi = int(ce_y_cur) if ce_y_cur else 9999
+            except (ValueError, TypeError):
+                cs_yi, ce_yi = 0, 9999
+            if cs_yi <= year <= ce_yi:
+                c["_period"] = {
+                    "package": c.get("package", ""),
+                    "contract_start": c.get("contract_start_date", ""),
+                    "contract_end": c.get("contract_end_date", ""),
+                    "is_current": True
+                }
+            else:
+                for h in (c.get("membership_history") or []):
+                    try:
+                        hcs_y = int((h.get("contract_start") or "")[:4]) if h.get("contract_start") else 0
+                        hce_y = int((h.get("contract_end") or "")[:4]) if h.get("contract_end") else 9999
+                    except (ValueError, TypeError):
+                        hcs_y, hce_y = 0, 9999
+                    if hcs_y <= year <= hce_y:
+                        c["_period"] = { **h, "is_current": False }
+                        break
+    return companies
     # Map fields for frontend compatibility
     now = datetime.now(timezone.utc)
     members = []
@@ -1826,6 +1857,62 @@ async def delete_member(member_id: str, current_user: dict = Depends(check_permi
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Üzv tapılmadı")
     return {"message": "Üzv silindi"}
+
+@api_router.post("/members/{member_id}/renew")
+async def renew_member(member_id: str, data: dict, current_user: dict = Depends(check_permission("members", "write"))):
+    """Archive current membership period to history, then start a new period.
+    Body: {package, contract_start, contract_end, carry_over_quota?: bool}.
+    """
+    company = await db.companies.find_one({"id": member_id}, {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=404, detail="Üzv tapılmadı")
+    await assert_scope_ownership(current_user, "members", company)
+
+    # Snapshot current period's used_quota (counts invitations during current contract period)
+    quotas = await get_package_quotas()
+    cur_total_quota = quotas.get(company.get("package", ""), 0)
+    cur_used_quota = await db.invitations.count_documents({
+        "company_id": member_id,
+        "obligation_deducted": True,
+        "event_date": {
+            "$gte": company.get("contract_start_date") or "0000-00-00",
+            "$lte": company.get("contract_end_date") or "9999-99-99"
+        }
+    })
+
+    history_entry = {
+        "id": str(uuid.uuid4()),
+        "package": company.get("package", ""),
+        "contract_start": company.get("contract_start_date", ""),
+        "contract_end": company.get("contract_end_date", ""),
+        "total_quota": cur_total_quota,
+        "used_quota": cur_used_quota,
+        "remaining_quota": max(cur_total_quota - cur_used_quota, 0),
+        "status": "Yenilənib",
+        "archived_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Build update
+    history = company.get("membership_history") or []
+    history.append(history_entry)
+    
+    new_package = data.get("package", company.get("package", ""))
+    update = {
+        "membership_history": history,
+        "package": new_package,
+        "contract_start_date": data.get("contract_start", ""),
+        "contract_end_date": data.get("contract_end", ""),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+
+    # Carry-over (track as bonus quota)
+    carry_over = bool(data.get("carry_over_quota"))
+    if carry_over:
+        update["bonus_quota"] = (company.get("bonus_quota") or 0) + history_entry["remaining_quota"]
+    
+    await db.companies.update_one({"id": member_id}, {"$set": update})
+    updated = await db.companies.find_one({"id": member_id}, {"_id": 0})
+    return updated
 
 @api_router.post("/sales-leads/{lead_id}/create-meeting")
 async def create_meeting_from_lead(lead_id: str, data: dict, current_user: dict = Depends(check_permission("sales", "write"))):
@@ -3003,13 +3090,47 @@ async def delete_invitation(inv_id: str, current_user: dict = Depends(get_curren
 
 # ==================== OBLIGATIONS (ÖHDƏLİKLƏR) ====================
 
-async def _get_company_obligation(company: dict) -> dict:
-    package = company.get("package", "")
+async def _get_company_obligation(company: dict, year: Optional[int] = None) -> dict:
+    """Compute obligation stats. If year given, use period covering that year (current or from history) and only count invitations whose event_date is in that year."""
     quotas = await get_package_quotas()
-    total_quota = quotas.get(package, 0)
     company_id = company.get("id", "")
-    start_date = company.get("contract_start_date", "")
-    end_date = company.get("contract_end_date", "")
+
+    # Find the applicable period
+    current = {
+        "package": company.get("package", ""),
+        "contract_start": company.get("contract_start_date", ""),
+        "contract_end": company.get("contract_end_date", ""),
+    }
+    history = company.get("membership_history", []) or []
+    
+    def period_covers_year(period, y):
+        try:
+            cs = period.get("contract_start") or period.get("contract_start_date") or ""
+            ce = period.get("contract_end") or period.get("contract_end_date") or ""
+            cs_y = int(cs[:4]) if cs else 0
+            ce_y = int(ce[:4]) if ce else 9999
+            return cs_y <= y <= ce_y
+        except (ValueError, TypeError):
+            return False
+
+    period = current
+    if year is not None:
+        # Try current first; else search history
+        if not period_covers_year(current, year):
+            for h in history:
+                if period_covers_year(h, year):
+                    period = {
+                        "package": h.get("package", ""),
+                        "contract_start": h.get("contract_start", ""),
+                        "contract_end": h.get("contract_end", ""),
+                    }
+                    break
+    
+    package = period["package"]
+    total_quota = quotas.get(package, 0)
+    start_date = period["contract_start"]
+    end_date = period["contract_end"]
+    
     now = datetime.now(timezone.utc)
     days_remaining = 365
     if end_date:
@@ -3018,20 +3139,27 @@ async def _get_company_obligation(company: dict) -> dict:
             days_remaining = max((end_dt - now.replace(tzinfo=None)).days, 0)
         except (ValueError, TypeError):
             pass
-    used_quota = await db.invitations.count_documents({
-        "company_id": company_id,
-        "obligation_deducted": True
-    })
+    
+    # Build invitation filter — by year if given, else by current period dates
+    inv_filter = {"company_id": company_id, "obligation_deducted": True}
+    inv_all_filter = {"company_id": company_id}
+    if year is not None:
+        # Match invitations whose event_date is in that calendar year
+        date_re = f"^{year}-"
+        inv_filter["event_date"] = {"$regex": date_re}
+        inv_all_filter["event_date"] = {"$regex": date_re}
+    
+    used_quota = await db.invitations.count_documents(inv_filter)
     remaining = max(total_quota - used_quota, 0)
     priority_score = 0
     if days_remaining > 0 and remaining > 0:
         priority_score = remaining * (365 / max(days_remaining, 1))
     elif days_remaining == 0 and remaining > 0:
         priority_score = remaining * 1000
-    total_invited = await db.invitations.count_documents({"company_id": company_id})
-    total_attended = await db.invitations.count_documents({"company_id": company_id, "participation_status": "Qatılır"})
-    total_declined = await db.invitations.count_documents({"company_id": company_id, "participation_status": "Qatılmır"})
-    total_no_answer = await db.invitations.count_documents({"company_id": company_id, "call_status": "Cavab vermədi"})
+    total_invited = await db.invitations.count_documents(inv_all_filter)
+    total_attended = await db.invitations.count_documents({**inv_all_filter, "participation_status": "Qatılır"})
+    total_declined = await db.invitations.count_documents({**inv_all_filter, "participation_status": "Qatılmır"})
+    total_no_answer = await db.invitations.count_documents({**inv_all_filter, "call_status": "Cavab vermədi"})
     return {
         "company_id": company_id,
         "company_name": company.get("brand_name", ""),
@@ -3053,12 +3181,30 @@ async def _get_company_obligation(company: dict) -> dict:
         "status": company.get("status", "Aktiv"),
     }
 
+def _company_covers_year(company: dict, year: int) -> bool:
+    """True if any membership period (current or in history) covers the given calendar year."""
+    def cov(cs, ce):
+        try:
+            cs_y = int(cs[:4]) if cs else 0
+            ce_y = int(ce[:4]) if ce else 9999
+            return cs_y <= year <= ce_y
+        except (ValueError, TypeError):
+            return False
+    if cov(company.get("contract_start_date", ""), company.get("contract_end_date", "")):
+        return True
+    for h in (company.get("membership_history") or []):
+        if cov(h.get("contract_start", ""), h.get("contract_end", "")):
+            return True
+    return False
+
 @api_router.get("/obligations/dashboard")
-async def get_obligations_dashboard(current_user: dict = Depends(get_current_user)):
+async def get_obligations_dashboard(year: Optional[int] = None, current_user: dict = Depends(get_current_user)):
     companies = await db.companies.find({"status": "Aktiv"}, {"_id": 0}).to_list(2000)
+    if year is not None:
+        companies = [c for c in companies if _company_covers_year(c, year)]
     obligations = []
     for c in companies:
-        obl = await _get_company_obligation(c)
+        obl = await _get_company_obligation(c, year=year)
         obligations.append(obl)
     obligations.sort(key=lambda x: x["priority_score"], reverse=True)
     total = len(obligations)
@@ -3078,12 +3224,15 @@ async def get_obligations_dashboard(current_user: dict = Depends(get_current_use
     }
 
 @api_router.get("/obligations/company/{company_id}")
-async def get_company_obligation(company_id: str, current_user: dict = Depends(get_current_user)):
+async def get_company_obligation(company_id: str, year: Optional[int] = None, current_user: dict = Depends(get_current_user)):
     company = await db.companies.find_one({"id": company_id}, {"_id": 0})
     if not company:
         raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
-    obl = await _get_company_obligation(company)
-    invitations = await db.invitations.find({"company_id": company_id}, {"_id": 0}).sort("event_date", -1).to_list(500)
+    obl = await _get_company_obligation(company, year=year)
+    inv_filter = {"company_id": company_id}
+    if year is not None:
+        inv_filter["event_date"] = {"$regex": f"^{year}-"}
+    invitations = await db.invitations.find(inv_filter, {"_id": 0}).sort("event_date", -1).to_list(500)
     type_breakdown = {}
     for inv in invitations:
         et = inv.get("event_type", "Digər")
