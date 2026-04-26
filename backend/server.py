@@ -18,6 +18,9 @@ import shutil
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+# Email notification service (Resend)
+from email_service import notify as _email_notify  # noqa: E402
+
 # MongoDB connection
 mongo_url = os.environ.get('MONGO_URL')
 if not mongo_url:
@@ -357,6 +360,25 @@ async def assert_scope_ownership(user: dict, module: str, record: Optional[dict]
     if any(record.get(f) == user_name for f in fields):
         return
     raise HTTPException(status_code=403, detail="Bu qeyd sizə aid deyil")
+
+
+async def _user_email_by_name(name: str) -> Optional[str]:
+    """Look up a system user's email by display name."""
+    if not name:
+        return None
+    user = await db.users.find_one({"name": name}, {"_id": 0, "email": 1})
+    return user.get("email") if user else None
+
+
+async def _email_notify_safe(**kwargs) -> bool:
+    """Wrapper that logs but never raises so notifications never break the API.
+    Returns True if at least one recipient received the email."""
+    try:
+        from email_service import notify as _en
+        return bool(await _en(**kwargs))
+    except Exception as e:
+        logging.error("Email notify failed: %s", e)
+        return False
 
 # ==================== AUTH ROUTES ====================
 
@@ -1236,6 +1258,23 @@ async def create_meeting(data: dict, current_user: dict = Depends(check_permissi
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.notifications.insert_one(notif_doc)
+    
+    # Email notify the meeting employee + setter (and admin)
+    emp_email = await _user_email_by_name(meeting_doc.get("employee", ""))
+    setter_email = await _user_email_by_name(meeting_doc.get("meeting_setter", ""))
+    body = f"""<p>Yeni görüş təyin edildi:</p>
+    <table cellpadding='6' cellspacing='0' style='width:100%;border:1px solid #e2e8f0;border-radius:8px;font-size:13px'>
+      <tr><td style='color:#64748b'>Tarix</td><td style='font-weight:600'>{meeting_doc.get('date', '')} {meeting_doc.get('time', '')}</td></tr>
+      <tr><td style='color:#64748b'>Şirkət</td><td>{meeting_doc.get('company') or '—'}</td></tr>
+      <tr><td style='color:#64748b'>Növ</td><td>{meeting_doc.get('meeting_type', '')}</td></tr>
+      <tr><td style='color:#64748b'>Məkan</td><td>{meeting_doc.get('location') or meeting_doc.get('meeting_mode', '')}</td></tr>
+      <tr><td style='color:#64748b'>Əməkdaş</td><td>{meeting_doc.get('employee', '')}</td></tr>
+    </table>"""
+    await _email_notify_safe(
+        title=f"Görüş təyin edildi: {meeting_doc.get('date', '')}",
+        body_html=body,
+        extra_recipients=[emp_email, setter_email],
+    )
     return meeting_doc
 
 @api_router.put("/meetings/{meeting_id}")
@@ -1694,6 +1733,26 @@ async def update_sales_lead(lead_id: str, data: dict, current_user: dict = Depen
                 await db.companies.insert_one(company_doc)
     
     doc = await db.sales_leads.find_one({"id": lead_id}, {"_id": 0})
+    
+    # Email notify on status transition to "Satıldı"/"Üzv oldu"
+    if new_status in ("Satıldı", "Üzv oldu") and lead.get("status") not in ("Satıldı", "Üzv oldu"):
+        curator_email = await _user_email_by_name(doc.get("curator", ""))
+        amount = doc.get("total_amount") or 0
+        body = f"""<p>🎉 Yeni satış bağlandı!</p>
+        <table cellpadding='6' cellspacing='0' style='width:100%;border:1px solid #e2e8f0;border-radius:8px;font-size:13px'>
+          <tr><td style='color:#64748b'>Şirkət</td><td style='font-weight:600'>{doc.get('company_name', '')}</td></tr>
+          <tr><td style='color:#64748b'>Sahibkar</td><td>{doc.get('contact_name', '')}</td></tr>
+          <tr><td style='color:#64748b'>Növ</td><td>{doc.get('sale_type', '')}</td></tr>
+          <tr><td style='color:#64748b'>Status</td><td><span style='background:#dcfce7;color:#166534;padding:2px 8px;border-radius:4px'>{new_status}</span></td></tr>
+          <tr><td style='color:#64748b'>Məbləğ</td><td style='font-weight:600;color:#166534'>{amount} AZN</td></tr>
+          <tr><td style='color:#64748b'>Kurator</td><td>{doc.get('curator', '')}</td></tr>
+        </table>"""
+        await _email_notify_safe(
+            title=f"Yeni satış: {doc.get('company_name', '')}",
+            body_html=body,
+            extra_recipients=[curator_email],
+        )
+    return doc
     return doc
 
 @api_router.delete("/sales-leads/{lead_id}")
@@ -2231,6 +2290,18 @@ async def submit_public_form(token: str, data: dict):
             "pending_form_submitted_at": datetime.now(timezone.utc).isoformat(),
             "pending_form_status": "Gözləyir",
         }})
+        # Email notify admin + curator
+        company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+        curator_email = await _user_email_by_name((company or {}).get("curator", ""))
+        rows = "".join(f"<tr><td style='padding:4px 8px;color:#64748b'>{k}</td><td style='padding:4px 8px;color:#0f172a;font-weight:600'>{v}</td></tr>" for k, v in pending_data.items())
+        body = f"""<p><strong>{(company or {}).get('brand_name', '')}</strong> şirkəti üzvlük formunu doldurub. Admin təsdiqi gözləyir.</p>
+        <table cellpadding='0' cellspacing='0' style='width:100%;border:1px solid #e2e8f0;border-radius:8px;margin-top:8px;font-size:13px'>{rows}</table>
+        <p style='margin-top:12px;color:#64748b;font-size:12px'>Sistemə daxil olub Şirkət Məlumatları → həmin şirkətə klikləyin və Təsdiqlə/Rədd et seçin.</p>"""
+        await _email_notify_safe(
+            title="Forum dəyişikliyi təsdiq gözləyir",
+            body_html=body,
+            extra_recipients=[curator_email],
+        )
     return {"message": "Məlumatlar uğurla göndərildi. Admin təsdiqindən sonra məlumatlar yenilənəcək."}
 
 
@@ -3509,8 +3580,8 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
                     "id": f"expired-{c['id']}",
                     "type": "membership_expired",
                     "severity": "high",
-                    "title": f"Üzvlük bitib: {c['brand_name']}",
-                    "message": f"{abs(diff)} gün əvvəl bitib ({c['contract_end_date']})",
+                    "title": f"Üzvlük bitib: {c.get('brand_name', '')}",
+                    "message": f"{abs(diff)} gün əvvəl bitib ({end_str})",
                     "company_id": c["id"],
                     "date": today
                 })
@@ -3522,6 +3593,52 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
     notifications.sort(key=lambda x: severity_order.get(x["severity"], 3))
     
     return {"notifications": notifications, "count": len(notifications), "high_count": sum(1 for n in notifications if n["severity"] == "high")}
+
+
+@api_router.post("/notifications/dispatch-emails")
+async def dispatch_notification_emails(current_user: dict = Depends(get_current_user)):
+    """Send email for any new computed notifications (idempotent by id).
+    Called periodically by frontend (e.g. on dashboard load).
+    Each unique notification id gets sent at most once."""
+    full = await get_notifications(current_user)
+    notifications = full.get("notifications", [])
+    if not notifications:
+        return {"sent": 0, "skipped": 0}
+    # Find which ones already dispatched
+    ids = [n["id"] for n in notifications]
+    already = await db.notification_email_log.find({"id": {"$in": ids}}, {"_id": 0, "id": 1}).to_list(2000)
+    already_ids = {a["id"] for a in already}
+    sent = 0
+    for n in notifications:
+        if n["id"] in already_ids:
+            continue
+        # Resolve curator email if company-related
+        curator_email = None
+        if n.get("company_id"):
+            comp = await db.companies.find_one({"id": n["company_id"]}, {"_id": 0, "curator": 1})
+            curator_email = await _user_email_by_name((comp or {}).get("curator", ""))
+        severity_label = {"high": "🔴 Yüksək", "medium": "🟡 Orta", "low": "🟢 Aşağı"}.get(n.get("severity", "low"), "")
+        body = f"""<p>{severity_label} prioritetli sistem bildirişi:</p>
+        <table cellpadding='6' cellspacing='0' style='width:100%;border:1px solid #e2e8f0;border-radius:8px;font-size:13px'>
+          <tr><td style='color:#64748b'>Başlıq</td><td style='font-weight:600'>{n.get('title', '')}</td></tr>
+          <tr><td style='color:#64748b'>Mesaj</td><td>{n.get('message', '')}</td></tr>
+          <tr><td style='color:#64748b'>Tarix</td><td>{n.get('date', '')}</td></tr>
+        </table>
+        <p style='margin-top:12px;color:#64748b;font-size:12px'>Sistemə daxil olub aydınlaşdırın.</p>"""
+        await _email_notify_safe(
+            title=n.get("title", "Bildiriş"),
+            body_html=body,
+            extra_recipients=[curator_email],
+        )
+        # Log every dispatch attempt so we don't retry on subsequent fetches
+        await db.notification_email_log.insert_one({
+            "id": n["id"],
+            "type": n.get("type", ""),
+            "sent_at": datetime.now(timezone.utc).isoformat(),
+        })
+        sent += 1
+    return {"sent": sent, "skipped": len(notifications) - sent}
+
 
 # Root
 @api_router.get("/")

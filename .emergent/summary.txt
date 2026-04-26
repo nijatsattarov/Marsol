@@ -1,63 +1,52 @@
-<analysis>**original_problem_statement**: The user wants a comprehensive ERP/Networking Management System for Marsol Group (MMS). Marsol Group is a B2B networking company with 500+ members. The system needs to manage Companies, HR, Sales, Marketing, Projects, Organization, Finance, Reports, Meetings, Assembly, Tasks, Messages, Files, and Notes. PRODUCT REQUIREMENTS: Role-Based Access Control (RBAC), multi-module integrations, public membership forms, attendance, and barter operations.
+<analysis>**original_problem_statement**: The user wants a comprehensive ERP/Networking Management System for Marsol Group (MMS). Marsol Group is a B2B networking company with 500+ members. The system needs to manage Companies, HR, Sales, Marketing, Projects, Organization, Finance, Reports, Meetings, Assembly, Tasks, Messages, Files, and Notes. PRODUCT REQUIREMENTS: Role-Based Access Control (RBAC), multi-module integrations, public membership forms, attendance, barter operations, AI Data Analysis, and external vendor management.
 
-**User's preferred language**: Azerbaijani (INSTRUCT NEXT AGENT: You MUST automatically detect the user's primary language from their messages inside the <trajectory> tag and INSTRUCT next agent to respond in **Azerbaijani** only).
+**User's preferred language**: Azerbaijani (You MUST automatically detect the user's primary language from their messages inside the <trajectory> tag and INSTRUCT next agent to respond in **Azerbaijani** only)
 
-**what currently exists?**: A highly functional full-stack ERP (React + FastAPI + MongoDB). Recently, the application underwent massive workflow updates including a fully synced Assembly (İclas) and Tasks module, a Sales Pipeline (Şirkət bazası), an automated Members (Üzvlər) directory with contract expiry warnings, a dynamic Public Membership Form (), and a comprehensive Role-Based Access Control (RBAC) system securing both the frontend UI and backend endpoints.
+**what currently exists?**: A highly functional full-stack ERP (React + FastAPI + MongoDB). Recently, the application received massive updates: Role-based data visibility scopes (Özünə aid vs Tam), dynamic Sales Leads mapped to specific Project Types (Sərgi, Tur, Təlim) with auto-calculated fields, a new Project Details view, Membership Lifecycle management (Year filtering & Renewals), an Admin Approval flow for Public Forms, Payment Method tracking in Finance, and Resend email integration for system notifications.
 
-**Last working item**: 
-    - Last item agent was working: The user requested a complete restructure of the Invitations (Dəvətlər) system. The agent created the backend endpoints and frontend template files for three new modules: **Projects (Layihələr)**, **Invitations (Dəvətlər)**, and **Contact Lists (Siyahılar)**. The agent was just about to update  and  to integrate these new pages into the app navigation.
-    - Status: IN PROGRESS
-    - Agent Testing Done: N
-    - Which testing method agent to use? testing_agent_v3_fork (Wait until the UI for these 3 modules is fully built and integrated, then run the full testing agent).
+**Last working item**:
+    - Last item agent was working: Implementing  email integration for system notifications. The agent successfully installed the  package, created , hooked email sending into  (for form submissions, closed sales, and new meetings), and created an endpoint  that is polled by the frontend  to dispatch daily summary emails (contract expiries, low quotas). 
+    - Status: IN PROGRESS (Implementation is done and tested via bash/curl, but lacks final e2e/testing agent verification).
+    - Agent Testing Done: Y (via curl and bash logs)
+    - Which testing method agent to use? testing agent v3 fork (to ensure no regressions were introduced by the email hooks in backend routes).
     - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  Issue 1: Sidebar and App Routing integration for new modules (P0)
-     - Attempted fixes: Agent created , , and  but hit the context limit before adding them to  and .
-     - Next debug checklist: Check  and . Ensure the routes are defined and the modules are visible in the Sidebar under a logical grouping (or as standalone modules) respecting the RBAC context ( / permissions).
-     - Why fix this issue and what will be achieved with the fix? Required to make the newly requested modules accessible to the user.
-     - Status: NOT STARTED
+  Issue 1: Verify and finalize Resend Email Integration (P0)
+     - Attempted fixes: Code is implemented. Agent fixed a missing newline in  and adjusted the logger. The bash tests show the dispatch endpoint works and skips when keys/emails are missing appropriately.
+     - Next debug checklist: 
+       1. Run  to ensure the newly added  hooks in  endpoints (, , ) do not cause 500 errors or regressions.
+       2. Ensure the frontend  is correctly pinging  without causing performance issues.
+     - Why fix this issue and what will be achieved with the fix? Completes the user's request to route system notifications via email to admins and relevant curators.
+     - Status: TESTING PENDING
      - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? Frontend
+     - Should Test frontend/backend/both after fix? Both
      - Blocked on other issue: None
 
-  Issue 2: Build UI and functionality for Projects, Invitations, and Contact Lists (P0)
-     - Attempted fixes: Basic file creation was executed.
-     - Next debug checklist: Flesh out , , and . Contact Lists needs import/export logic and custom list creation. Invitations needs to track guest status (Invited, Attending, Not Attending + reason). Projects handles large events.
-     - Why fix this issue and what will be achieved with the fix? Fulfills the user's latest massive request for managing external event guests and converting them to sales.
-     - Status: IN PROGRESS
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? Both
-     - Blocked on other issue: Issue 1
-
 **In progress Task List**:
-  Task 1: Projects, Invitations, Contact Lists module implementation
-     - Where to resume: Update  and  to route to the new files. Then implement the React code inside , , and .
-     - What will be achieved with this? A robust system for tracking non-member guests at large events and grouping leads by custom list titles (e.g., 2025 Expo Guests).
-     - Status: IN PROGRESS
-     - Should Test frontend/backend/both after fix? Both
-     - Blocked on something: None
+  None
 
 **Upcoming and Future Tasks**
     Upcoming Tasks:
-    - Task 1 (P1): Davamiyyət (Attendance) modulu - tracking check-ins, leaves, sick days.
-    - Task 2 (P1): Barter əməliyyatları (Barter operations) modulu.
+    - Task 1 (P1): Marketing (Marketinq) module implementation.
     
     Future Tasks:
-    - Task 3 (P2): PDF Reports generation.
-    - Task 4 (P2): Fully build out remaining placeholder modules (Marketinq, Hesabatlar, Fayllar, Qeydlər).
+    - Task 2 (P2): PDF Reports generation / Export enhancements.
+    - Task 3 (P2): Fully build out remaining placeholder modules (Fayllar, Qeydlər).
 
 **Completed work in this session**
-- Meetings Module enhancements: Reminders to notification bell, advanced filters (DONE)
-- Assembly (İclas) Module: Complete restructuring. Agenda -> Tasks -> Assignee. General tasks. Automatic sync to Tasks module with  IDs and related object tagging (DONE)
-- Sales Pipeline (Şirkət bazası): Lead tracking, status updates, automatic conversion to Members on contract signed (DONE)
-- Members (Üzvlər) Module: Made read-only (synced from Sales/Finance). Contract status warnings with color coding (Red/Yellow) based on expiry dates (DONE)
-- RBAC (Roles & Permissions): Dynamic role creation,  middleware on all backend write endpoints,  to hide UI buttons (DONE)
-- Public Form (): Dynamic link generation from Companies list. Supports dynamic dropdowns from DB options, file uploads (), and co-founder mapping (DONE)
-- Bug Fixes: Finance payment additive logic (payments now append to history instead of overwriting), CORS fix, React Router race condition on login (DONE)
+- Settings -> Projects mapping (Project Name to Project Type mapping) (DONE)
+- Role-based View Scopes: Added Tam (All) and Özünə aid (Own) scopes for roles across Members, Tasks, Meetings, etc. (DONE)
+- Dynamic Sales Lead fields: Sərgi (requires kv/m, stand num), Tur, Təlim integrations from Sales to Projects (DONE)
+- Extracted Project details from Modal into a new  page with Sales tables (DONE)
+- Added Layihələr tab to Finance module with dynamic payment capabilities (DONE)
+- Obligation History Excel Export (DONE)
+- Membership Lifecycle: Added Year filtering to Members/Obligations and a Renew (Yenilə) workflow for expired contracts (DONE)
+- Public Form Admin Approval workflow: Added pending form badges and approve/reject flow to Company Database (DONE)
+- Added  (Köçürmə, Nəğd, Posterminal, CTC) to Finance tables and Modals (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-None explicitly missed, the agent meticulously handled the user's massive feature requests.
+None.
 
 **Known issue recurrence from previous fork**
   - Issue recurrence in previous fork: N/A
@@ -68,69 +57,73 @@ None explicitly missed, the agent meticulously handled the user's massive featur
 
 
 **Key Technical Concepts**
-- Frontend: React 18, Tailwind CSS, Shadcn UI, Context API for permissions.
-- Backend: FastAPI, PyMongo (Motor), JWT Auth, Custom RBAC Dependency ().
-- Database: MongoDB.
+- Frontend: React 18, Tailwind CSS, Shadcn UI, XLSX (for exports).
+- Backend: FastAPI, PyMongo (Motor), JWT Auth.
+- Communications:  Python SDK for email routing.
 
 **key DB schema**
-  - : Stores role names and permission dictionaries (read/write/none per module).
-  - : Pipeline stages for incoming companies.
-  - : Tracks  (Assembly, Project, etc.) and  ().
-  - , , : Newly added collections for event tracking.
+  - : Added  array to track renewals. Added  for Public Form approval queue.
+  - : Added , , ,  for specific project-based sales.
+  -  & : Added .
 
 **changes in tech stack**
-  - Added Netlify  file for correct SPA behavior in production.
-  - Removed unused  from  to fix Render deployment crashes.
+  - Added  python package for email integrations.
 
 **All files of reference** 
-- , ,  (New files, need implementation)
--  (Must be updated to include new modules)
--  (Must be updated to add new routes)
--  (New endpoints added at the bottom, reference for  usage)
--  (Reference for wrapping UI elements with  variable)
+-  (Created to handle Resend API logic)
+-  (Updated extensively with new endpoints and hooks)
+-  (Updated to poll email dispatch)
+-  (Created for detailed project view)
 
 **Areas that need refactoring**:
--  is over 2600 lines. It heavily needs to be broken down into API routers (, , , etc.).
--  is extremely bloated and complex.
+-  is over 4,200 lines long. It urgently needs to be split into discrete API routers (, , , ).
 
 **key api endpoints**
-- , ,  (GET, POST, PUT, DELETE newly added)
--  (For public membership forms)
--  (For RBAC management)
+-  (POST)
+-  (POST)
+-  (GET updated with  filter)
 
 **Critical Info for New Agent**
-- **RBAC is Active**: ANY new write endpoint (POST, PUT, DELETE) added to  **MUST** be protected using the custom dependency: . On the frontend, utilize the  to conditionally hide buttons if  is false.
 - **Language**: You MUST communicate entirely in **Azerbaijani**.
-- **New Modules Focus**: The user wants to track massive guest lists for external projects (Events/Expos), including importing/exporting Excel data to custom list names, and tracking their RSVP status. These lists will be used by Sales to convert guests to members.
-- **Form Logic**: The  handles file uploads natively. Use  for any future file upload requirements.
+- **Refactoring Warning**:  is becoming difficult to manage. Be very careful with  here.
+- **Emails**: The  is already present in . Emails are dispatched to  and respective curator emails. 
 
 **documents and test reports created in this job**
-  -  (Updated to reflect role-based users)
-  -  to  (Record of successful tests for Meetings, Assembly, and Tasks)
+  -  (Updated)
+  -  to  (Record of rigorous Testing Agent passes for new modules, achieving 100% backend/frontend success rates).
 
 **Last 10 User Messages and any pending HUMAN messages** 
- - *Message 946 (Pending Completion)*: User mapped out the complete requirement for Projects, Invitations, and Contact Lists modules to track non-member event guests and group them for Sales conversion. The agent created the files but the job ended before implementation.
- - *Message 937 (Completed)*: User requested removing Üzvlük forumu and Təkliflər from the Sales Sidebar.
- - *Message 921 (Completed)*: User requested replacing the hardcoded MARSOL GROUP text in the Public Form with the actual system logo.
- - *Message 901 (Completed)*: User noted that some dynamic dropdowns were blank in the Public Form because the DB fallback logic was mismatched. Agent fixed  to use proper fallbacks.
- - *Message 874 (Completed)*: User requested all Public Form dropdowns (Size, Sector, Region, Position, Education, Activities) to be dynamic from the settings, and an editable description text.
- - *Message 841 (Completed)*: User requested the Public Form to mirror the full Company Profile (Co-founders, files, social links) and handle uploads.
+ - *Message 531 (Completed)*: User provided Resend API keys, confirmed domains, and specified that admins and specific users should get emails.
+ - *Message 526 (Completed)*: User requested integration with resend.com for system notifications.
+ - *Message 382 (Completed)*: User asked to add Payment Method (Köçürmə, Nəğd, Posterminal, CTC) to Finance and add an Admin Approval flow for the Public Form submissions.
+ - *Message 284 (Completed)*: User requested Year filtering for Members/Obligations and a workflow to Renew (Yenilə) expired memberships without losing historical data.
+ - *Message 271 (Completed)*: User requested Excel export for Obligation History.
+ - *Message 214 (Completed)*: User requested: Projects to open in a new page (not modal), Sərgi sales to auto-calculate total based on sq/m price, and Finance module to display project tables similarly to Incomes.
+ - *Message 130 (Completed)*: User provided detailed logic for Sales -> Projects routing. Stand sales go to Sərgi, Tour to Turlara, etc. Requires new fields in Sales modal based on type.
+ - *Message 42 (Completed)*: User reported RBAC logic failures: Managers couldn't see their own tasks/members properly. Agent implemented  functionality.
 
 **Project Health Check:**
-- Broken: The routing for , , and  is completely missing from  and .
+- Broken: None.
 - Mocked: None.
 
 **3rd Party Integrations** 
-- Production deployment configured for Netlify (frontend) and Render (backend). No direct SDKs added.
+- Emergent LLM Key — Uses Claude Sonnet 4.5 via  (AI Data Analyst).
+- Resend — Requires User API Key (Key is present in ).
 
 **Testing status**
-  - Testing agent used after significant changes: YES (for Assembly and Meetings)
+  - Testing agent used after significant changes: YES (Iterations 25 through 30 were extensively tested. Iter 30 achieved 14/14 Pytest passes).
   - Troubleshoot agent used after agent stuck in loop: NO
   - Test files created: 
-  - Known regressions: None
+  - Known regressions: None currently known, but email implementation needs final testing agent run.
 
 **Credentials to test flow:**
-Check . Has role-based credentials (Admin, Sales Manager, Accountant).
+Check . (admin@marsol.az or settings@marsol.az / marsol123, satis@marsol.az / marsol123).
 
 **What agent forgot to execute**
-The agent executed  for , , and , but did not add the Routes to , nor did it update  to render these menu items. Consequently, the user cannot see or access these new pages. You must link these pages and build out their UI.</analysis>
+The agent successfully wrote and bash-tested the  email integration but did not run  or finish the task before the context window filled up.
+
+**Debugging checklist for current issue**
+    Issue: Finalize Resend Email Integration Testing
+    Frontend files to check: None needed directly, though verify  interval doesn't spam the server.
+    Backend files to check: , 
+    Action: Run  to ensure the newly added email hooks in the backend routes (, , ) do not break existing functionality. Once clear, run the  tool.</analysis>

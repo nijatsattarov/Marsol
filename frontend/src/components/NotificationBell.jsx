@@ -17,6 +17,8 @@ export default function NotificationBell() {
     try {
       const res = await axios.get(`${API}/notifications`, { headers });
       setData(res.data);
+      // Fire-and-forget email dispatch for new notifications
+      axios.post(`${API}/notifications/dispatch-emails`, {}, { headers }).catch(() => {});
     } catch (err) { console.error(err); }
   }, []);
 
