@@ -1,0 +1,24 @@
+{
+  "summary": "Iter 30 RETEST of the 2 backend bugs from iter 29 (notifications 500 + approve-form scope ownership). Re-ran the existing comprehensive pytest suite test_iteration29_payment_method_form_approval.py: 14/14 PASS (was 12/14 in iter 29). (1) GET /api/notifications now returns 200 with form_submission entries — server.py:3402-3431 and 3489-3518 use defensive .get() and 'if not end_str: continue' guards before subscript access. (2) approve_form_submission (server.py:2237) and reject_form_submission (server.py:2254) now call `await assert_scope_ownership(current_user, 'companies', company)` after the existence check; sales user with scope=own attempting to approve admin's company correctly receives 403 'Bu əməliyyat üçün icazəniz yoxdur'. Regression checks all pass: payment_method persists in expenses (Köçürmə/Nəğd/Posterminal/CTC), incomes, companies/finance payment_history, sales-leads/payment payment_history; public form submit writes only to pending_form_data (main fields untouched); approve-form moves pending → real fields and clears pending_*; reject-form clears pending_form_data, sets status='Rədd edildi' with reject_reason; both 400 when no pending data. Frontend smoke (admin login, viewport 1920x1080): GET /api/notifications fetched in-page returned 200, Companies page loads cleanly, Finance → Xərclər tab → 'Xərc əlavə et' modal renders with [data-testid='expense-payment-method'] Select for Ödəniş üsulu. Zero /api/ errors observed during the full UI walkthrough.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration29_payment_method_form_approval.py",
+    "/app/test_reports/pytest/pytest_results_iter30.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:3512 still uses c['brand_name'] and c['contract_end_date'] directly inside the membership_expired branch — currently safe because of the prior 'if not end_str: continue' guard and the projection includes both fields, but for parity with the rest of the function consider switching to c.get(...). Not a blocker.",
+    "submit_public_form (server.py:2213) accepts an untyped dict; an attacker could spam keys (mitigated since only enabled-field keys are written to pending_form_data). Consider Pydantic typing in a future iteration.",
+    "approve-form/reject-form return generic strings ({'message': '...'}); returning the updated company doc would let SPA refresh in one round-trip and avoid a follow-up GET.",
+    "Companies.jsx table variant uses inline 📩 emoji span without a testid; only the card variant has pending-badge-{id}. Consider data-testid='pending-row-{id}' on the table 📩 for E2E parity (carry-over from iter 29)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (14/14)", "frontend": "100%"},
+  "test_credentials": "Admin: settings@marsol.az/marsol123 ; Sales: satis@marsol.az/marsol123",
+  "seed_data_creation": "Test fixtures auto-create/cleanup TEST29_*, TEST29X_*, PFM_* companies and ad-hoc sales-lead. Sales role permissions/scopes temporarily mutated (companies:write + scope=own) for the scope test and restored in finally block. All cleaned up at module teardown.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 30 confirms iter 29's two backend bugs are resolved. Public URL is https://marsol-biz-hub.preview.emergentagent.com (NOT erp-debugger). Login response key is 'access_token'. Comprehensive tests live in /app/backend/tests/test_iteration29_payment_method_form_approval.py — reuse for regression. Frontend testids of interest: pending-form-banner, approve-form-btn, reject-form-btn (Companies detail), expense-payment-method, company-payment-method, sale-payment-method (Finance modals), pending-badge-{id} (card variant only).",
+  "rca of the issue": "Iter 29 reported (1) Mongo $ne semantics also match docs missing the field, causing KeyError on direct subscript access in the notifications builder; and (2) approve-form/reject-form enforced only module-level permission via Depends(check_permission('companies','write')) without row-level assert_scope_ownership. Iter 30 verified the two patches: defensive .get()+continue guards in the notifications builder (server.py:3402-3431 and 3489-3518), and `await assert_scope_ownership(current_user, 'companies', company)` calls inserted at server.py:2242 (approve) and 2259 (reject). Both pytest cases that previously failed now pass."
+}

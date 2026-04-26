@@ -2239,6 +2239,7 @@ async def approve_form_submission(company_id: str, current_user: dict = Depends(
     company = await db.companies.find_one({"id": company_id}, {"_id": 0})
     if not company:
         raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
+    await assert_scope_ownership(current_user, "companies", company)
     pending = company.get("pending_form_data") or {}
     if not pending:
         raise HTTPException(status_code=400, detail="Təsdiq olunacaq məlumat yoxdur")
@@ -2255,6 +2256,7 @@ async def reject_form_submission(company_id: str, data: Optional[dict] = None, c
     company = await db.companies.find_one({"id": company_id}, {"_id": 0})
     if not company:
         raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
+    await assert_scope_ownership(current_user, "companies", company)
     if not company.get("pending_form_data"):
         raise HTTPException(status_code=400, detail="Təsdiq olunacaq məlumat yoxdur")
     reject_reason = (data or {}).get("reason", "")
@@ -3399,16 +3401,19 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
     # 2. Contract expiring soon (müqavilə xitamı yaxınlaşan)
     all_companies = await db.companies.find({"contract_end_date": {"$ne": ""}}, {"_id": 0}).to_list(500)
     for c in all_companies:
+        end_str = c.get("contract_end_date")
+        if not end_str:
+            continue
         try:
-            end_date = datetime.strptime(c["contract_end_date"], "%Y-%m-%d")
+            end_date = datetime.strptime(end_str, "%Y-%m-%d")
             diff = (end_date - now.replace(tzinfo=None)).days
             if diff < 0:
                 notifications.append({
                     "id": f"contract-expired-{c['id']}",
                     "type": "contract_expired",
                     "severity": "high",
-                    "title": f"Müqavilə bitib: {c['brand_name']}",
-                    "message": f"Müqavilə {abs(diff)} gün əvvəl bitib ({c['contract_end_date']})",
+                    "title": f"Müqavilə bitib: {c.get('brand_name', '')}",
+                    "message": f"Müqavilə {abs(diff)} gün əvvəl bitib ({end_str})",
                     "company_id": c["id"],
                     "date": today
                 })
@@ -3417,8 +3422,8 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
                     "id": f"contract-expiring-{c['id']}",
                     "type": "contract_expiring",
                     "severity": "medium",
-                    "title": f"Müqavilə bitir: {c['brand_name']}",
-                    "message": f"{diff} gün sonra bitəcək ({c['contract_end_date']})",
+                    "title": f"Müqavilə bitir: {c.get('brand_name', '')}",
+                    "message": f"{diff} gün sonra bitəcək ({end_str})",
                     "company_id": c["id"],
                     "date": today
                 })
@@ -3483,16 +3488,19 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
             pass
     expiring = await db.companies.find({"contract_end_date": {"$ne": ""}}, {"_id": 0, "id": 1, "brand_name": 1, "contract_end_date": 1, "curator": 1}).to_list(500)
     for c in expiring:
+        end_str = c.get("contract_end_date")
+        if not end_str:
+            continue
         try:
-            end_dt = datetime.strptime(c["contract_end_date"], "%Y-%m-%d")
+            end_dt = datetime.strptime(end_str, "%Y-%m-%d")
             diff = (end_dt - now.replace(tzinfo=None)).days
             if 0 < diff <= warning_days:
                 notifications.append({
                     "id": f"expiry-{c['id']}",
                     "type": "membership_expiry",
                     "severity": "high" if diff <= 3 else "medium",
-                    "title": f"Üzvlük bitir: {c['brand_name']}",
-                    "message": f"{diff} gün sonra bitəcək ({c['contract_end_date']})",
+                    "title": f"Üzvlük bitir: {c.get('brand_name', '')}",
+                    "message": f"{diff} gün sonra bitəcək ({end_str})",
                     "company_id": c["id"],
                     "date": today
                 })
