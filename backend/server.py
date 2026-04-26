@@ -195,6 +195,7 @@ class IncomeCreate(BaseModel):
     contract_start_date: Optional[str] = ""
     contract_end_date: Optional[str] = ""
     payment_method: Optional[str] = ""
+    marsol_company: Optional[str] = ""
 
 class ExpenseCreate(BaseModel):
     expense_name: str
@@ -209,6 +210,7 @@ class ExpenseCreate(BaseModel):
     payment_type: Optional[str] = ""
     payment_method: Optional[str] = ""
     status: Optional[str] = "Ödənilib"
+    marsol_company: Optional[str] = ""
 
 # Task Model
 class TaskCreate(BaseModel):
@@ -705,7 +707,7 @@ async def update_company_finance(company_id: str, data: dict, current_user: dict
     for key in ["finance_note", "total_amount", "payment_amount", "last_payment_date",
                 "contract_start_date", "contract_end_date", "contract_status",
                 "finance_contract_number", "payment_due_date", "voen",
-                "e_invoice_date", "e_invoice_number", "follow_up"]:
+                "e_invoice_date", "e_invoice_number", "follow_up", "marsol_company"]:
         if key in data and key != "new_payment_amount":
             update_data[key] = data[key]
     
@@ -1495,7 +1497,7 @@ async def add_lead_payment(lead_id: str, data: dict, current_user: dict = Depend
     updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
     
     # Metadata updates (all optional)
-    for k in ("contract_number", "e_invoice_date", "e_invoice_number", "voen", "payment_due_date", "follow_up", "notes"):
+    for k in ("contract_number", "e_invoice_date", "e_invoice_number", "voen", "payment_due_date", "follow_up", "notes", "marsol_company"):
         if k in data:
             updates[k] = data[k]
     
@@ -1754,6 +1756,7 @@ async def create_sales_lead(data: dict, current_user: dict = Depends(check_permi
         "hall_number": data.get("hall_number", ""),
         "total_amount": data.get("total_amount"),
         "participant_count": data.get("participant_count"),
+        "marsol_company": data.get("marsol_company", ""),
         "curator": current_user.get("name", ""),
         "created_by": current_user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()

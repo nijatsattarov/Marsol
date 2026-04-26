@@ -33,7 +33,7 @@ const emptyForm = {
   company_name: '', contact_name: '', position: '', phone: '', email: '',
   source: '', sale_type: '', status: 'Yeni', notes: '',
   project_id: '', package: '', kv_m: '', price_per_sqm: '', stand_number: '', hall_number: '',
-  total_amount: '', participant_count: ''
+  total_amount: '', participant_count: '', marsol_company: ''
 };
 
 const emptyMeetingForm = { date: '', time: '', meeting_type: 'Müştəri görüşü', meeting_mode: 'Offline', location: '', notes: '' };
@@ -45,6 +45,7 @@ export default function CompanyDatabase() {
   const [projectTypes, setProjectTypes] = useState([]);
   const [projects, setProjects] = useState([]);
   const [packages, setPackages] = useState([]);
+  const [marsolCompanies, setMarsolCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showMeetingModal, setShowMeetingModal] = useState(false);
@@ -64,13 +65,14 @@ export default function CompanyDatabase() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [lRes, sRes, oRes, ptRes, pRes, pkgRes] = await Promise.all([
+      const [lRes, sRes, oRes, ptRes, pRes, pkgRes, mcRes] = await Promise.all([
         axios.get(`${API}/sales-leads`, { headers }),
         axios.get(`${API}/sales-leads/stats`, { headers }),
         axios.get(`${API}/options/all`, { headers }),
         axios.get(`${API}/settings/projects`, { headers }),
         axios.get(`${API}/project-events`, { headers }),
         axios.get(`${API}/settings/packages`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/settings/marsol-companies`, { headers }).catch(() => ({ data: [] })),
       ]);
       setLeads(lRes.data);
       setStats(sRes.data);
@@ -78,6 +80,7 @@ export default function CompanyDatabase() {
       setProjectTypes(ptRes.data || []);
       setProjects(pRes.data || []);
       setPackages(pkgRes.data || []);
+      setMarsolCompanies(mcRes.data || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, []);
@@ -516,6 +519,20 @@ export default function CompanyDatabase() {
                 <div>
                   <Label className="text-xs">Yekun məbləğ (AZN) *</Label>
                   <Input type="number" value={form.total_amount} onChange={(e) => setForm({ ...form, total_amount: e.target.value })} className="text-sm font-semibold" data-testid="lead-total-input" />
+                </div>
+
+                {/* Marsol entity (which Marsol company signs the contract) */}
+                <div>
+                  <Label className="text-xs">Müqavilə Marsol müəssisəsi *</Label>
+                  <Select value={form.marsol_company || ''} onValueChange={(v) => setForm({ ...form, marsol_company: v })}>
+                    <SelectTrigger className="text-sm" data-testid="lead-marsol-company"><SelectValue placeholder="Müəssisə seçin" /></SelectTrigger>
+                    <SelectContent>
+                      {marsolCompanies.length === 0
+                        ? <SelectItem value="__none" disabled>Müəssisə yoxdur — Tənzimləmələrdə əlavə edin</SelectItem>
+                        : marsolCompanies.map(m => <SelectItem key={m.id || m.name} value={m.name}>{m.name}</SelectItem>)
+                      }
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             )}

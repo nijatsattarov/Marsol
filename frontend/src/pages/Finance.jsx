@@ -33,6 +33,7 @@ export default function Finance() {
   const [allCompanies, setAllCompanies] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [options, setOptions] = useState(null);
+  const [marsolCompanies, setMarsolCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Expense modal
@@ -41,7 +42,7 @@ export default function Finance() {
   const [expenseForm, setExpenseForm] = useState({
     expense_name: '', category: '', sub_category: '', amount: 0, currency: 'AZN',
     date: new Date().toISOString().split('T')[0], project: '', department: '',
-    responsible_person: '', payment_method: '', status: 'Ödənilib'
+    responsible_person: '', payment_method: '', status: 'Ödənilib', marsol_company: ''
   });
 
   // Note modal
@@ -55,7 +56,7 @@ export default function Finance() {
   const [paymentForm, setPaymentForm] = useState({
     new_payment_amount: '', payment_date: '', payment_note: '', payment_method: '',
     finance_contract_number: '', payment_due_date: '', voen: '',
-    e_invoice_date: '', e_invoice_number: '', follow_up: ''
+    e_invoice_date: '', e_invoice_number: '', follow_up: '', marsol_company: ''
   });
   const [paymentHistory, setPaymentHistory] = useState([]);
 
@@ -63,6 +64,7 @@ export default function Finance() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({ package: '', marsol_representative: '', status: '', project: '' });
+  const [expenseMarsolFilter, setExpenseMarsolFilter] = useState('all');
 
   // Projects for expense dropdown
   const [projects, setProjects] = useState([]);
@@ -85,18 +87,20 @@ export default function Finance() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [companiesRes, expensesRes, optionsRes, projectsRes, eventsRes] = await Promise.all([
+      const [companiesRes, expensesRes, optionsRes, projectsRes, eventsRes, marsolRes] = await Promise.all([
         axios.get(`${API}/companies`, { headers }),
         axios.get(`${API}/finance/expenses`, { headers }),
         axios.get(`${API}/options/all`, { headers }),
         axios.get(`${API}/settings/projects`, { headers }),
         axios.get(`${API}/project-events`, { headers }),
+        axios.get(`${API}/settings/marsol-companies`, { headers }),
       ]);
       setAllCompanies(companiesRes.data);
       setExpenses(expensesRes.data);
       setOptions(optionsRes.data);
       setProjects(projectsRes.data);
       setProjectEvents(eventsRes.data || []);
+      setMarsolCompanies(marsolRes.data || []);
     } catch (error) {
       console.error('Error:', error);
     } finally {
@@ -150,7 +154,8 @@ export default function Finance() {
       e_invoice_date: sale.e_invoice_date || '',
       e_invoice_number: sale.e_invoice_number || '',
       follow_up: sale.follow_up || '',
-      notes: sale.notes || ''
+      notes: sale.notes || '',
+      marsol_company: sale.marsol_company || ''
     });
     try {
       const res = await axios.get(`${API}/sales-leads/${sale.id}/payments`, { headers });
@@ -199,6 +204,11 @@ export default function Finance() {
 
   const activeFilterCount = Object.values(filters).filter(v => v && v !== 'all').length;
 
+  // Filtered expenses (by Marsol entity)
+  const filteredExpenses = expenses.filter(e =>
+    expenseMarsolFilter === 'all' || (e.marsol_company || '') === expenseMarsolFilter
+  );
+
   // Note handlers
   const openNote = (company) => {
     setNoteCompany(company);
@@ -225,7 +235,8 @@ export default function Finance() {
       voen: company.voen || '',
       e_invoice_date: company.e_invoice_date || '',
       e_invoice_number: company.e_invoice_number || '',
-      follow_up: company.follow_up || ''
+      follow_up: company.follow_up || '',
+      marsol_company: company.marsol_company || ''
     });
     try {
       const res = await axios.get(`${API}/companies/${company.id}/payments`, { headers });
@@ -281,7 +292,7 @@ export default function Finance() {
     setExpenseForm({
       expense_name: '', category: '', sub_category: '', amount: 0, currency: 'AZN',
       date: new Date().toISOString().split('T')[0], project: '', department: '',
-      responsible_person: '', payment_method: '', status: 'Ödənilib'
+      responsible_person: '', payment_method: '', status: 'Ödənilib', marsol_company: ''
     });
   };
 
@@ -300,13 +311,14 @@ export default function Finance() {
       'Ödənilib': c.paid_amount || 0,
       'Borc': c.debt_amount || 0,
       'Son ödəniş tarixi': c.last_payment_date || '',
+      'Müəssisə': c.marsol_company || '',
       'Status': c.status || '',
       'Qeyd': c.finance_note || '',
     }));
     const ws1 = XLSX.utils.json_to_sheet(incomeData);
     ws1['!cols'] = [
       { wch: 5 }, { wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 18 },
-      { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 25 },
+      { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 10 }, { wch: 25 },
     ];
     XLSX.utils.book_append_sheet(wb, ws1, 'Gəlirlər');
 
@@ -323,12 +335,13 @@ export default function Finance() {
       'Şöbə': e.department || '',
       'Məsul şəxs': e.responsible_person || '',
       'Ödəniş üsulu': e.payment_method || e.payment_type || '',
+      'Müəssisə': e.marsol_company || '',
       'Status': e.status || '',
     }));
     const ws2 = XLSX.utils.json_to_sheet(expenseData);
     ws2['!cols'] = [
       { wch: 5 }, { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 12 },
-      { wch: 8 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 14 }, { wch: 10 },
+      { wch: 8 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 10 },
     ];
     XLSX.utils.book_append_sheet(wb, ws2, 'Xərclər');
 
@@ -472,6 +485,46 @@ export default function Finance() {
               )}
             </div>
           </div>
+
+          {/* MÜƏSSİSƏYƏ GÖRƏ İCMAL */}
+          {marsolCompanies.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mt-4" data-testid="marsol-summary">
+              <h3 className="font-semibold text-[#3D4F6F] mb-3">Müəssisəyə görə icmal</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 text-xs font-semibold text-slate-500">Müəssisə</th>
+                      <th className="text-right py-2 text-xs font-semibold text-green-600">Gəlir (Ödənilib)</th>
+                      <th className="text-right py-2 text-xs font-semibold text-amber-600">Borc</th>
+                      <th className="text-right py-2 text-xs font-semibold text-red-600">Xərc</th>
+                      <th className="text-right py-2 text-xs font-semibold text-[#3D4F6F]">Xalis</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...marsolCompanies.map(m => m.name), ''].map(name => {
+                      const cs = allCompanies.filter(c => (c.marsol_company || '') === name);
+                      const exps = expenses.filter(e => (e.marsol_company || '') === name);
+                      if (cs.length === 0 && exps.length === 0) return null;
+                      const paid = cs.reduce((s, c) => s + (c.paid_amount || 0), 0);
+                      const debt = cs.reduce((s, c) => s + (c.debt_amount || 0), 0);
+                      const exp = exps.reduce((s, e) => s + (e.amount || 0), 0);
+                      const net = paid - exp;
+                      return (
+                        <tr key={name || 'unassigned'} className="border-b border-slate-50" data-testid={`marsol-row-${name || 'unassigned'}`}>
+                          <td className="py-2 font-medium text-[#3D4F6F]">{name || <span className="text-slate-400 italic">Müəssisə təyin edilməyib</span>}</td>
+                          <td className="py-2 text-right text-green-600 font-semibold">{paid.toLocaleString()} AZN</td>
+                          <td className="py-2 text-right text-amber-600">{debt.toLocaleString()} AZN</td>
+                          <td className="py-2 text-right text-red-600">{exp.toLocaleString()} AZN</td>
+                          <td className={`py-2 text-right font-bold ${net >= 0 ? 'text-[#9ACD32]' : 'text-red-600'}`}>{net.toLocaleString()} AZN</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         {/* INCOMES TAB - Shows all companies */}
@@ -635,6 +688,21 @@ export default function Finance() {
 
         {/* EXPENSES TAB */}
         <TabsContent value="expenses">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 mb-3 flex items-center gap-3 flex-wrap">
+            <Label className="text-xs whitespace-nowrap">Müəssisə filteri:</Label>
+            <Select value={expenseMarsolFilter} onValueChange={setExpenseMarsolFilter}>
+              <SelectTrigger className="text-sm w-[220px]" data-testid="expense-marsol-filter"><SelectValue placeholder="Hamısı" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Hamısı</SelectItem>
+                {marsolCompanies.map(m => <SelectItem key={m.id || m.name} value={m.name}>{m.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {expenseMarsolFilter !== 'all' && (
+              <span className="text-xs text-slate-500">
+                {filteredExpenses.length} qeyd · Cəmi: <strong className="text-red-600">{filteredExpenses.reduce((s, e) => s + (e.amount || 0), 0).toLocaleString()} AZN</strong>
+              </span>
+            )}
+          </div>
           <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full" data-testid="expenses-table">
@@ -645,21 +713,23 @@ export default function Finance() {
                     <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Tarix</th>
                     <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Məbləğ</th>
                     <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Ödəniş üsulu</th>
+                    <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Müəssisə</th>
                     <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Status</th>
                     <th className="text-right px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Əməliyyat</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {expenses.length === 0 ? (
-                    <tr><td colSpan={7} className="text-center py-8 text-slate-400">Xərc yoxdur</td></tr>
+                  {filteredExpenses.length === 0 ? (
+                    <tr><td colSpan={8} className="text-center py-8 text-slate-400">Xərc yoxdur</td></tr>
                   ) : (
-                    expenses.map(exp => (
+                    filteredExpenses.map(exp => (
                       <tr key={exp.id} className="border-b border-slate-50 hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium">{exp.expense_name}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{exp.category}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{exp.date}</td>
                         <td className="px-4 py-3 text-sm font-medium text-red-600">{(exp.amount || 0).toLocaleString()} AZN</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{exp.payment_method || exp.payment_type || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{exp.marsol_company || '—'}</td>
                         <td className="px-4 py-3"><Badge className="bg-green-100 text-green-700 text-xs">{exp.status}</Badge></td>
                         <td className="px-4 py-3 text-right">
                           <DropdownMenu>
@@ -882,6 +952,16 @@ export default function Finance() {
                   <div><Label className="text-xs">E-qaimə tarixi</Label><Input type="date" value={salePaymentForm.e_invoice_date || ''} onChange={e => setSalePaymentForm({ ...salePaymentForm, e_invoice_date: e.target.value })} className="text-sm" /></div>
                   <div><Label className="text-xs">E-qaimə №</Label><Input value={salePaymentForm.e_invoice_number || ''} onChange={e => setSalePaymentForm({ ...salePaymentForm, e_invoice_number: e.target.value })} className="text-sm" placeholder="EQN123456" data-testid="finance-sale-einvoice" /></div>
                   <div><Label className="text-xs">Follow-up</Label><Input value={salePaymentForm.follow_up || ''} onChange={e => setSalePaymentForm({ ...salePaymentForm, follow_up: e.target.value })} className="text-sm" placeholder="Zəng, email..." /></div>
+                  <div>
+                    <Label className="text-xs">Marsol müəssisəsi</Label>
+                    <Select value={salePaymentForm.marsol_company || 'none'} onValueChange={(v) => setSalePaymentForm({ ...salePaymentForm, marsol_company: v === 'none' ? '' : v })}>
+                      <SelectTrigger className="text-sm" data-testid="sale-marsol-company"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Seçilməyib</SelectItem>
+                        {marsolCompanies.map(m => <SelectItem key={m.id || m.name} value={m.name}>{m.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="mt-2"><Label className="text-xs">Qeyd</Label><textarea value={salePaymentForm.notes || ''} onChange={e => setSalePaymentForm({ ...salePaymentForm, notes: e.target.value })} className="w-full min-h-[50px] p-2 text-sm border rounded-lg resize-none" /></div>
               </div>
@@ -1040,6 +1120,16 @@ export default function Finance() {
                   <Label className="text-xs">Təqib</Label>
                   <Input value={paymentForm.follow_up} onChange={(e) => setPaymentForm({ ...paymentForm, follow_up: e.target.value })} className="text-sm" placeholder="Zəng et, e-mail göndər..." data-testid="finance-followup" />
                 </div>
+                <div>
+                  <Label className="text-xs">Marsol müəssisəsi</Label>
+                  <Select value={paymentForm.marsol_company || 'none'} onValueChange={(v) => setPaymentForm({ ...paymentForm, marsol_company: v === 'none' ? '' : v })}>
+                    <SelectTrigger className="text-sm" data-testid="finance-marsol-company"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Seçilməyib</SelectItem>
+                      {marsolCompanies.map(m => <SelectItem key={m.id || m.name} value={m.name}>{m.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
@@ -1124,6 +1214,16 @@ export default function Finance() {
                     <SelectItem value="Nəğd">Nəğd</SelectItem>
                     <SelectItem value="Posterminal">Posterminal</SelectItem>
                     <SelectItem value="CTC">CTC</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Marsol müəssisəsi</Label>
+                <Select value={expenseForm.marsol_company || 'none'} onValueChange={(v) => setExpenseForm({ ...expenseForm, marsol_company: v === 'none' ? '' : v })}>
+                  <SelectTrigger className="text-sm" data-testid="expense-marsol-company"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Seçilməyib</SelectItem>
+                    {marsolCompanies.map(m => <SelectItem key={m.id || m.name} value={m.name}>{m.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

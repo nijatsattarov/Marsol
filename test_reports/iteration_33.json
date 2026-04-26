@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 33 — marsol_company field across Finance/Sales endpoints. Backend: 7/7 pytest passed (settings/marsol-companies auth, expense create/update with marsol_company + regression, companies/{id}/finance update, sales-leads create/update/payment). Frontend smoke verified: Maliyyə Overview shows Müəssisəyə görə icmal panel; Xərclər tab has Müəssisə column + filter + Xərc əlavə et modal with Marsol müəssisəsi dropdown; Gəlirlər payment edit modal has Marsol müəssisəsi dropdown (pre-selected for existing data); CompanyDatabase Lead-edit modal with Üzv oldu status renders Müqavilə Marsol müəssisəsi dropdown with data-testid lead-marsol-company.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/settings/marsol-companies", "issue": "Spec says admin-only but get/post/delete only require get_current_user (any authenticated user). Acceptable per problem statement (verify auth required), but consider check_permission('settings','write') for create/delete to prevent non-admins from mutating the master list."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration33_marsol_company.py",
+    "/app/test_reports/pytest/pytest_iter33.xml"
+  ],
+  "action_items": [
+    "(Optional) Tighten RBAC on POST/DELETE /api/settings/marsol-companies to admin only (currently any authenticated user can mutate)."
+  ],
+  "critical_code_review_comments": [
+    "IncomeCreate model has marsol_company field but POST /api/finance/incomes is not in the test scope; ensured ExpenseCreate dump includes the field via model_dump().",
+    "PUT /api/finance/expenses uses dict-based update with `if v is not None` filter — passing marsol_company='' will set it to empty string (falsy, not None) so it persists correctly.",
+    "PUT /api/companies/{id}/finance only updates marsol_company when the key is present in payload — safe; new_payment_amount path coexists.",
+    "POST /api/sales-leads/{id}/payment metadata loop covers marsol_company — verified.",
+    "Frontend Finance.jsx marsolCompanies fetch uses /api/settings/marsol-companies; defaults from backend (4 entities) when empty — verified.",
+    "Marsol müəssisəsi dropdowns use Select with value='none' sentinel for empty — proper UX.",
+    "server.py is 4438 lines (still over 700-line guideline) — modularising recommended (carry-over from iter 32)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration33_marsol_company.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin: settings@marsol.az / marsol123 ; Sales: satis@marsol.az / marsol123",
+  "seed_data_creation": "Each test run creates and immediately deletes a TEST_iter33 expense (via admin) and a TEST_iter33_lead sales lead (via Sales user). One company in DB has marsol_company='Marsol Media' set by the company-finance update test (not cleaned up — non-destructive metadata change). One +1 AZN payment_history record on the first company (TEST_iter33 note).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file: /app/backend/tests/test_iteration33_marsol_company.py. Login response key is 'access_token'. /api/settings/marsol-companies returns a list (4 default entities if collection empty). Frontend uses data-testid 'lead-marsol-company' for the CompanyDatabase sales-lead Müqavilə Marsol müəssisəsi dropdown. Finance.jsx populates Müəssisəyə görə icmal table by filtering allCompanies and expenses on marsol_company; rows with empty marsol_company are bucketed under 'Müəssisə təyin edilməyib'.",
+  "rca of the issue": "No bugs found. All marsol_company end-to-end paths (backend persistence + frontend forms/filters/breakdown panel) work correctly."
+}
