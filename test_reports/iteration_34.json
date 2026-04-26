@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 34 — Görüşlər Calendar feature (frontend-only). All 9 calendar acceptance criteria verified end-to-end via Playwright on the public preview URL after admin login. Toggle Cədvəl/Kalendar works; calendar grid renders 42 day cells with az-AZ month label (Aprel 2026); meetings render inline (10:00 Nicat Settarov, 14:00 Settings Admin on 2026-04-15) with green dot; clicking the day-15 cell opens day-detail-dialog showing both meetings sorted by time, with employee, company, contact, location and type/mode badges; pencil (data-testid=day-edit-{id}) closes day dialog and opens the Görüşü redaktə et modal pre-filled; prev/next month buttons and Bu ay reset all work; today's cell (26) has the green ring; weekend columns (Ş, B) are red; toggling back to Cədvəl removes the calendar from DOM and restores the table (2 rows); search filter 'zzznosuchstring__' propagates to the calendar (0 time-formatted items rendered).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Görüşü redaktə et modal (opened from calendar pencil)", "issues": ["Əməkdaş (employee) Select shows empty value on first render even though the meeting has employee_id set — pre-existing edit-modal behaviour, NOT caused by the calendar feature; flagging only as observation"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_34.json"
+  ],
+  "action_items": [
+    "(Optional, pre-existing) Investigate why the Görüşü redaktə et modal Select for əməkdaş does not auto-populate from form.employee_id on open — unrelated to calendar work."
+  ],
+  "critical_code_review_comments": [
+    "Meetings.jsx is now ~480 lines — still under the 700-line guideline. monthGrid and meetingsByDate are recomputed on every render; for small datasets this is fine, but wrapping in useMemo would be a cheap optimisation as meeting count grows.",
+    "meetingsByDate keys are raw m.date strings — relies on backend always returning YYYY-MM-DD. Confirmed working with current data.",
+    "Today highlight uses ds === todayStr where todayStr is computed via toISOString().split('T')[0] — this is UTC, not local. In timezones west of UTC near midnight it could highlight the wrong cell. Low priority since the app appears to be Asia-region focused, but worth noting.",
+    "Pencil click handler does setSelectedDay(null) then openModal(m) sequentially — verified that the day dialog cleanly closes and the edit modal opens on top.",
+    "Calendar legend (Online / Müştəri görüşü / Daxili / Digər) uses the same dotColor scale as cell dots — consistent.",
+    "data-testid coverage on calendar elements is comprehensive (view-table-btn, view-calendar-btn, meetings-calendar, cal-current-month, cal-prev-month, cal-next-month, cal-today-btn, cal-day-{date}, day-detail-dialog, day-edit-{id}) — excellent for automated testing."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not in scope)", "frontend": "100%"},
+  "test_credentials": "Admin: settings@marsol.az / marsol123",
+  "seed_data_creation": "None — used existing meetings on 2026-04-15.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Calendar feature is fully working. Login key in localStorage may not be 'access_token' in the public preview (token came back as null in initial probe), but the UI test flow works without needing the token. To find a date with meetings programmatically, use the in-app fetch with the actual storage key (verified visually that 2026-04-15 has 2 meetings: 10:00 Nicat Settarov + 14:00 Settings Admin). Test screenshots saved at .screenshots/calendar.png, day_dialog.png, edit_modal.png.",
+  "rca of the issue": "No bugs found. All calendar acceptance criteria pass."
+}

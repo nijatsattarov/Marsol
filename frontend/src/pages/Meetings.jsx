@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Plus, Search, Loader2, Calendar, Clock, MapPin, Users2,
   Pencil, Trash2, Video, Building2, Filter, Bell, X,
-  Monitor, User
+  Monitor, User, ChevronLeft, ChevronRight, List, CalendarDays
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -39,6 +39,14 @@ export default function Meetings() {
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Calendar view state
+  const [viewMode, setViewMode] = useState('table'); // 'table' | 'calendar'
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth() }; // month 0-indexed
+  });
+  const [selectedDay, setSelectedDay] = useState(null); // 'YYYY-MM-DD' or null
 
   const token = localStorage.getItem('token');
   const { permissions } = usePermissions();
@@ -136,6 +144,70 @@ export default function Meetings() {
     ...employees.map(e => `${e.first_name || ''} ${e.last_name || ''}`.trim()).filter(Boolean),
   ])];
 
+  // ========== Calendar helpers ==========
+  const AZ_MONTHS = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'İyun', 'İyul', 'Avqust', 'Sentyabr', 'Oktyabr', 'Noyabr', 'Dekabr'];
+  const AZ_DAYS = ['B.e', 'Ç.a', 'Ç', 'C.a', 'C', 'Ş', 'B'];
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // Group meetings by date (uses already-filtered meetings)
+  const meetingsByDate = filtered.reduce((acc, m) => {
+    if (!m.date) return acc;
+    (acc[m.date] = acc[m.date] || []).push(m);
+    return acc;
+  }, {});
+
+  // Build month grid (6 rows × 7 cols, Mon-first)
+  const monthGrid = (() => {
+    const { year, month } = calendarMonth;
+    const first = new Date(year, month, 1);
+    const last = new Date(year, month + 1, 0);
+    const startDow = (first.getDay() + 6) % 7; // Monday-first (0=Mon)
+    const cells = [];
+    // padding from previous month
+    for (let i = 0; i < startDow; i++) {
+      const d = new Date(year, month, -startDow + i + 1);
+      cells.push({ date: d, currentMonth: false });
+    }
+    for (let day = 1; day <= last.getDate(); day++) {
+      cells.push({ date: new Date(year, month, day), currentMonth: true });
+    }
+    while (cells.length % 7 !== 0 || cells.length < 42) {
+      const d = new Date(cells[cells.length - 1].date);
+      d.setDate(d.getDate() + 1);
+      cells.push({ date: d, currentMonth: d.getMonth() === month });
+    }
+    return cells;
+  })();
+
+  const fmtDate = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const shiftMonth = (delta) => {
+    setCalendarMonth(prev => {
+      const d = new Date(prev.year, prev.month + delta, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+  };
+
+  const goToCurrentMonth = () => {
+    const d = new Date();
+    setCalendarMonth({ year: d.getFullYear(), month: d.getMonth() });
+  };
+
+  // Color stripes for meeting modes
+  const dotColor = (m) => {
+    if (m.meeting_mode === 'Online') return 'bg-blue-500';
+    if (m.meeting_type === 'Müştəri görüşü') return 'bg-emerald-500';
+    if (m.meeting_type === 'Daxili görüş') return 'bg-amber-500';
+    return 'bg-[#9ACD32]';
+  };
+
+  const selectedDayMeetings = selectedDay ? (meetingsByDate[selectedDay] || []) : [];
+
   if (loading) return <div className="flex items-center justify-center h-[60vh]"><Loader2 className="w-8 h-8 animate-spin" style={{ color: '#3D4F6F' }} /></div>;
 
   return (
@@ -148,9 +220,28 @@ export default function Meetings() {
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Görüşlər</h1>
           <p className="text-slate-500 text-sm mt-1">{filtered.length} görüş</p>
         </div>
-        {_canEdit && <Button onClick={() => openModal()} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="add-meeting-btn">
-          <Plus className="w-4 h-4 mr-1" />Yeni Görüş
-        </Button>}
+        <div className="flex items-center gap-2">
+          {/* View mode toggle */}
+          <div className="flex bg-slate-100 rounded-lg p-1" data-testid="meeting-view-toggle">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${viewMode === 'table' ? 'bg-white text-[#3D4F6F] shadow-sm' : 'text-slate-500 hover:text-[#3D4F6F]'}`}
+              data-testid="view-table-btn"
+            >
+              <List className="w-3.5 h-3.5" />Cədvəl
+            </button>
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${viewMode === 'calendar' ? 'bg-white text-[#3D4F6F] shadow-sm' : 'text-slate-500 hover:text-[#3D4F6F]'}`}
+              data-testid="view-calendar-btn"
+            >
+              <CalendarDays className="w-3.5 h-3.5" />Kalendar
+            </button>
+          </div>
+          {_canEdit && <Button onClick={() => openModal()} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="add-meeting-btn">
+            <Plus className="w-4 h-4 mr-1" />Yeni Görüş
+          </Button>}
+        </div>
       </div>
 
       {/* Filters */}
@@ -186,7 +277,8 @@ export default function Meetings() {
         </div>
       </div>
 
-      {/* Table */}
+      {/* TABLE VIEW */}
+      {viewMode === 'table' && (
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full" data-testid="meetings-table">
@@ -255,6 +347,143 @@ export default function Meetings() {
           </table>
         </div>
       </div>
+      )}
+
+      {/* CALENDAR VIEW */}
+      {viewMode === 'calendar' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4" data-testid="meetings-calendar">
+          {/* Calendar header */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <button onClick={() => shiftMonth(-1)} className="p-2 rounded-lg hover:bg-slate-100" data-testid="cal-prev-month"><ChevronLeft className="w-4 h-4 text-[#3D4F6F]" /></button>
+              <h3 className="text-sm sm:text-base font-bold text-[#3D4F6F] min-w-[160px] text-center" data-testid="cal-current-month">
+                {AZ_MONTHS[calendarMonth.month]} {calendarMonth.year}
+              </h3>
+              <button onClick={() => shiftMonth(1)} className="p-2 rounded-lg hover:bg-slate-100" data-testid="cal-next-month"><ChevronRight className="w-4 h-4 text-[#3D4F6F]" /></button>
+            </div>
+            <Button variant="outline" size="sm" onClick={goToCurrentMonth} className="text-xs" data-testid="cal-today-btn">Bu ay</Button>
+          </div>
+
+          {/* Day-of-week headers */}
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {AZ_DAYS.map((d, i) => (
+              <div key={d} className={`text-[10px] sm:text-xs font-semibold text-center py-1.5 ${i >= 5 ? 'text-red-500' : 'text-slate-500'}`}>{d}</div>
+            ))}
+          </div>
+
+          {/* Month grid */}
+          <div className="grid grid-cols-7 gap-1">
+            {monthGrid.map((cell, idx) => {
+              const ds = fmtDate(cell.date);
+              const dayMtgs = meetingsByDate[ds] || [];
+              const isToday = ds === todayStr;
+              const isWeekend = cell.date.getDay() === 0 || cell.date.getDay() === 6;
+              return (
+                <button
+                  key={idx}
+                  onClick={() => setSelectedDay(ds)}
+                  className={`
+                    min-h-[70px] sm:min-h-[90px] p-1.5 rounded-lg border text-left transition-all
+                    ${cell.currentMonth ? 'bg-white border-slate-200 hover:border-[#9ACD32] hover:shadow-sm' : 'bg-slate-50/50 border-slate-100 opacity-50'}
+                    ${isToday ? 'ring-2 ring-[#9ACD32] border-[#9ACD32]' : ''}
+                    ${dayMtgs.length > 0 && cell.currentMonth ? 'cursor-pointer' : 'cursor-default'}
+                  `}
+                  data-testid={`cal-day-${ds}`}
+                >
+                  <div className={`text-xs sm:text-sm font-semibold mb-1 ${isToday ? 'text-[#3D4F6F]' : isWeekend && cell.currentMonth ? 'text-red-400' : 'text-slate-700'}`}>
+                    {cell.date.getDate()}
+                  </div>
+                  {dayMtgs.length > 0 && (
+                    <div className="space-y-0.5">
+                      {dayMtgs.slice(0, 3).map(m => (
+                        <div key={m.id} className="flex items-center gap-1 truncate">
+                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotColor(m)}`}></span>
+                          <span className="text-[9px] sm:text-[10px] text-slate-600 truncate">
+                            {m.time && <span className="text-slate-400 mr-0.5">{m.time}</span>}
+                            <span className="font-medium">{m.employee}</span>
+                          </span>
+                        </div>
+                      ))}
+                      {dayMtgs.length > 3 && (
+                        <div className="text-[9px] sm:text-[10px] text-[#3D4F6F] font-semibold">+{dayMtgs.length - 3} daha</div>
+                      )}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Legend */}
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-[10px] sm:text-xs text-slate-500">
+            <span className="font-semibold text-[#3D4F6F]">İzah:</span>
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500"></span>Online</span>
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500"></span>Müştəri görüşü</span>
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500"></span>Daxili</span>
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#9ACD32]"></span>Digər</span>
+          </div>
+        </div>
+      )}
+
+      {/* Day-Detail Dialog (calendar click) */}
+      <Dialog open={!!selectedDay} onOpenChange={(o) => !o && setSelectedDay(null)}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" data-testid="day-detail-dialog">
+          <DialogHeader>
+            <DialogTitle style={{ color: '#3D4F6F' }}>
+              <Calendar className="w-4 h-4 inline mr-2" />
+              {selectedDay} — {selectedDayMeetings.length} görüş
+            </DialogTitle>
+          </DialogHeader>
+          {selectedDayMeetings.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-sm">Bu gün üçün görüş qeydə alınmayıb</div>
+          ) : (
+            <div className="space-y-2">
+              {selectedDayMeetings
+                .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+                .map(m => (
+                  <div key={m.id} className="border border-slate-200 rounded-lg p-3 hover:bg-slate-50 transition-colors" data-testid={`day-meeting-${m.id}`}>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${dotColor(m)}`}></span>
+                        <span className="text-sm font-bold text-[#3D4F6F]">{m.time || '—'}</span>
+                        <Badge className="bg-slate-100 text-slate-700 text-[10px]">{m.meeting_type}</Badge>
+                        <Badge className={`text-[10px] ${m.meeting_mode === 'Online' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
+                          {m.meeting_mode}
+                        </Badge>
+                      </div>
+                      {_canEdit && (
+                        <button onClick={() => { setSelectedDay(null); openModal(m); }} className="p-1 hover:bg-slate-100 rounded" data-testid={`day-edit-${m.id}`}>
+                          <Pencil className="w-3.5 h-3.5 text-slate-400" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="text-xs space-y-1">
+                      <div className="flex items-center gap-1.5 text-slate-700">
+                        <User className="w-3 h-3 text-slate-400" />
+                        <span className="font-medium">{m.employee}</span>
+                        {m.meeting_setter && <span className="text-slate-400">• Təyin edən: {m.meeting_setter}</span>}
+                      </div>
+                      {m.company && (
+                        <div className="flex items-center gap-1.5 text-slate-600">
+                          <Building2 className="w-3 h-3 text-slate-400" />
+                          {m.company}
+                          {m.contact_person && <span className="text-slate-400">• {m.contact_person}</span>}
+                        </div>
+                      )}
+                      {m.location && (
+                        <div className="flex items-center gap-1.5 text-slate-600">
+                          <MapPin className="w-3 h-3 text-slate-400" />
+                          {m.location}
+                        </div>
+                      )}
+                      {m.notes && <div className="text-slate-500 mt-1 pt-1 border-t border-slate-100 text-[11px]">{m.notes}</div>}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Meeting Form Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
