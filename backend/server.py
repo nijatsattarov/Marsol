@@ -4239,28 +4239,53 @@ async def ai_analyze(data: dict, current_user: dict = Depends(get_current_user))
     if len(prompt) > 2000:
         raise HTTPException(status_code=400, detail="Prompt çox uzundur (max 2000 simvol)")
 
+    openai_key = os.environ.get("OPENAI_API_KEY")
     emergent_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not emergent_key:
-        raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY mövcud deyil")
-
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except ImportError:
-        raise HTTPException(status_code=500, detail="emergentintegrations kitabxanası yüklü deyil")
+    if not openai_key and not emergent_key:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY və ya EMERGENT_LLM_KEY mövcud deyil")
 
     import json as _json
-    session_id = f"ai-analyst-{current_user.get('id', 'unknown')}-{uuid.uuid4().hex[:8]}"
-    # Model is configurable via env; defaults to Claude Sonnet 4.5 (OpenAI GPT-5.2 experiencing timeouts)
-    ai_provider = os.environ.get("AI_ANALYST_PROVIDER", "anthropic")
-    ai_model = os.environ.get("AI_ANALYST_MODEL", "claude-sonnet-4-5-20250929")
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     system_prompt = AI_SYSTEM_PROMPT.replace("{today}", today_str)
-    chat = LlmChat(api_key=emergent_key, session_id=session_id, system_message=system_prompt).with_model(ai_provider, ai_model)
+    ai_model = os.environ.get("AI_ANALYST_MODEL", "gpt-4o-mini")
 
-    try:
-        ai_text = await chat.send_message(UserMessage(text=prompt))
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI cavab vermədi: {str(e)[:200]}")
+    ai_text: Optional[str] = None
+    last_err: Optional[str] = None
+
+    # Path 1: Direct OpenAI SDK (works on Render — no private deps)
+    if openai_key:
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=openai_key)
+            resp = await client.chat.completions.create(
+                model=ai_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.2,
+                timeout=60,
+            )
+            ai_text = resp.choices[0].message.content
+        except Exception as e:
+            last_err = f"OpenAI: {str(e)[:200]}"
+            logging.warning("OpenAI AI Analyst failed, trying fallback: %s", e)
+
+    # Path 2: Fallback to emergentintegrations (local pod only)
+    if ai_text is None and emergent_key:
+        try:
+            from emergentintegrations.llm.chat import LlmChat, UserMessage  # type: ignore
+            session_id = f"ai-analyst-{current_user.get('id', 'unknown')}-{uuid.uuid4().hex[:8]}"
+            ai_provider = os.environ.get("AI_ANALYST_PROVIDER", "anthropic")
+            fallback_model = os.environ.get("AI_ANALYST_FALLBACK_MODEL", "claude-sonnet-4-5-20250929")
+            chat = LlmChat(api_key=emergent_key, session_id=session_id, system_message=system_prompt).with_model(ai_provider, fallback_model)
+            ai_text = await chat.send_message(UserMessage(text=prompt))
+        except Exception as e:
+            last_err = (last_err + " | " if last_err else "") + f"Emergent: {str(e)[:200]}"
+
+    if ai_text is None:
+        raise HTTPException(status_code=502, detail=f"AI cavab vermədi: {last_err or 'naməlum xəta'}")
 
     # Parse AI response
     cleaned = (ai_text or "").strip()
