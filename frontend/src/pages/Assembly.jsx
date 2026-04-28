@@ -61,6 +61,67 @@ function PersonTags({ selected, options, onChange, placeholder, testId }) {
   );
 }
 
+// Generic dynamic-list field (declared at module scope so its identity is stable
+// between renders; otherwise <Input> would unmount on every keystroke and lose focus).
+function ListField({ label, items, placeholder, onAdd, onUpdate, onRemove, testId }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <Label className="text-xs">{label}</Label>
+        <button type="button" onClick={onAdd} className="text-[10px] text-[#9ACD32] hover:underline font-medium">+ Əlavə et</button>
+      </div>
+      {items.map((item, idx) => (
+        <div key={idx} className="flex items-center gap-1.5 mb-1.5">
+          <Input value={item} onChange={(e) => onUpdate(idx, e.target.value)} placeholder={placeholder} className="text-sm h-8" data-testid={testId ? `${testId}-${idx}` : undefined} />
+          {items.length > 1 && (
+            <button type="button" onClick={() => onRemove(idx)} className="p-1 hover:bg-red-100 rounded flex-shrink-0"><X className="w-3 h-3 text-red-500" /></button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Shared task row (module-scope for stable identity across renders).
+function TaskRow({ task, onUpdate, onRemove, canRemove, prefix, employeeNames }) {
+  return (
+    <div className="space-y-1.5 bg-slate-50/80 rounded-md p-2 border border-slate-100" data-testid={`${prefix}`}>
+      <div className="flex items-center gap-1.5">
+        <Input value={task.title} onChange={(e) => onUpdate('title', e.target.value)} placeholder="Tapşırıq" className="text-sm h-7 flex-1" />
+        <div className="w-[120px]">
+          <Input type="date" value={task.deadline} onChange={(e) => onUpdate('deadline', e.target.value)} className="text-sm h-7" />
+        </div>
+        {canRemove && (
+          <button type="button" onClick={onRemove} className="p-1 hover:bg-red-100 rounded flex-shrink-0"><X className="w-3 h-3 text-red-500" /></button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        <div>
+          <span className="text-[10px] text-slate-400">Məsul şəxslər</span>
+          <PersonTags selected={task.responsible_persons} options={employeeNames} onChange={(v) => onUpdate('responsible_persons', v)} placeholder="Məsul seçin" testId={`${prefix}-resp`} />
+        </div>
+        <div>
+          <span className="text-[10px] text-slate-400">Əməkdaşlar</span>
+          <PersonTags selected={task.assignees} options={employeeNames} onChange={(v) => onUpdate('assignees', v)} placeholder="Əməkdaş seçin" testId={`${prefix}-assign`} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Detail task row for expanded view (module-scope).
+function DetailTaskRow({ t }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs py-1">
+      <ListChecks className="w-3 h-3 text-amber-500 flex-shrink-0" />
+      <span className="text-slate-700 font-medium">{t.title}</span>
+      {t.deadline && <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{t.deadline}</span>}
+      {(t.responsible_persons || []).map((p, i) => <Badge key={`r${i}`} className="bg-purple-50 text-purple-600 text-[10px]">{p}</Badge>)}
+      {(t.assignees || []).map((p, i) => <Badge key={`a${i}`} className="bg-blue-50 text-blue-600 text-[10px]">{p}</Badge>)}
+    </div>
+  );
+}
+
 export default function Assembly() {
   const [assemblies, setAssemblies] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -264,59 +325,6 @@ export default function Assembly() {
     toast.success('Excel fayli yuklendi');
   };
 
-  const ListField = ({ label, field, placeholder }) => (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <Label className="text-xs">{label}</Label>
-        <button type="button" onClick={() => addItem(field)} className="text-[10px] text-[#9ACD32] hover:underline font-medium">+ Əlavə et</button>
-      </div>
-      {form[field].map((item, idx) => (
-        <div key={idx} className="flex items-center gap-1.5 mb-1.5">
-          <Input value={item} onChange={(e) => updateItem(field, idx, e.target.value)} placeholder={placeholder} className="text-sm h-8" />
-          {form[field].length > 1 && (
-            <button type="button" onClick={() => removeItem(field, idx)} className="p-1 hover:bg-red-100 rounded flex-shrink-0"><X className="w-3 h-3 text-red-500" /></button>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-
-  // Shared task row component
-  const TaskRow = ({ task, onUpdate, onRemove, canRemove, prefix }) => (
-    <div className="space-y-1.5 bg-slate-50/80 rounded-md p-2 border border-slate-100" data-testid={`${prefix}`}>
-      <div className="flex items-center gap-1.5">
-        <Input value={task.title} onChange={(e) => onUpdate('title', e.target.value)} placeholder="Tapşırıq" className="text-sm h-7 flex-1" />
-        <div className="w-[120px]">
-          <Input type="date" value={task.deadline} onChange={(e) => onUpdate('deadline', e.target.value)} className="text-sm h-7" />
-        </div>
-        {canRemove && (
-          <button type="button" onClick={onRemove} className="p-1 hover:bg-red-100 rounded flex-shrink-0"><X className="w-3 h-3 text-red-500" /></button>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-1.5">
-        <div>
-          <span className="text-[10px] text-slate-400">Məsul şəxslər</span>
-          <PersonTags selected={task.responsible_persons} options={employeeNames} onChange={(v) => onUpdate('responsible_persons', v)} placeholder="Məsul seçin" testId={`${prefix}-resp`} />
-        </div>
-        <div>
-          <span className="text-[10px] text-slate-400">Əməkdaşlar</span>
-          <PersonTags selected={task.assignees} options={employeeNames} onChange={(v) => onUpdate('assignees', v)} placeholder="Əməkdaş seçin" testId={`${prefix}-assign`} />
-        </div>
-      </div>
-    </div>
-  );
-
-  // Detail task row for expanded view
-  const DetailTaskRow = ({ t }) => (
-    <div className="flex flex-wrap items-center gap-2 text-xs py-1">
-      <ListChecks className="w-3 h-3 text-amber-500 flex-shrink-0" />
-      <span className="text-slate-700 font-medium">{t.title}</span>
-      {t.deadline && <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{t.deadline}</span>}
-      {(t.responsible_persons || []).map((p, i) => <Badge key={`r${i}`} className="bg-purple-50 text-purple-600 text-[10px]">{p}</Badge>)}
-      {(t.assignees || []).map((p, i) => <Badge key={`a${i}`} className="bg-blue-50 text-blue-600 text-[10px]">{p}</Badge>)}
-    </div>
-  );
-
   if (loading) return <div className="flex items-center justify-center h-[60vh]"><Loader2 className="w-8 h-8 animate-spin" style={{ color: '#3D4F6F' }} /></div>;
 
   return (
@@ -508,6 +516,7 @@ export default function Assembly() {
                     </div>
                     {agenda.tasks.map((task, tIdx) => (
                       <TaskRow key={tIdx} task={task} prefix={`task-${aIdx}-${tIdx}`}
+                        employeeNames={employeeNames}
                         onUpdate={(f, v) => updateTask(aIdx, tIdx, f, v)}
                         onRemove={() => removeTask(aIdx, tIdx)}
                         canRemove={agenda.tasks.length > 1} />
@@ -526,6 +535,7 @@ export default function Assembly() {
               <div className="space-y-2">
                 {form.general_tasks.map((task, idx) => (
                   <TaskRow key={idx} task={task} prefix={`general-task-${idx}`}
+                    employeeNames={employeeNames}
                     onUpdate={(f, v) => updateGeneralTask(idx, f, v)}
                     onRemove={() => removeGeneralTask(idx)}
                     canRemove={form.general_tasks.length > 1} />
@@ -533,8 +543,16 @@ export default function Assembly() {
               </div>
             </div>
 
-            <ListField label="Müzakirə mövzuları" field="discussion_topics" placeholder="Müzakirə mövzusu" />
-            <ListField label="Qəbul edilən qərarlar" field="decisions" placeholder="Qərar" />
+            <ListField label="Müzakirə mövzuları" items={form.discussion_topics} placeholder="Müzakirə mövzusu"
+              onAdd={() => addItem('discussion_topics')}
+              onUpdate={(idx, v) => updateItem('discussion_topics', idx, v)}
+              onRemove={(idx) => removeItem('discussion_topics', idx)}
+              testId="discussion-topic" />
+            <ListField label="Qəbul edilən qərarlar" items={form.decisions} placeholder="Qərar"
+              onAdd={() => addItem('decisions')}
+              onUpdate={(idx, v) => updateItem('decisions', idx, v)}
+              onRemove={(idx) => removeItem('decisions', idx)}
+              testId="decision" />
             <div>
               <Label className="text-xs">Növbəti iclas tarixi</Label>
               <Input type="date" value={form.next_assembly_date} onChange={(e) => setForm({ ...form, next_assembly_date: e.target.value })} className="text-sm" data-testid="assembly-next-date" />
