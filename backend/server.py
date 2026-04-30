@@ -4313,6 +4313,11 @@ async def list_files(
 async def create_file(data: dict, current_user: dict = Depends(check_permission("files", "write"))):
     if not data.get("url") or not data.get("public_id"):
         raise HTTPException(status_code=400, detail="url və public_id məcburidir")
+    # Reject URLs that aren't from our Cloudinary cloud — prevents metadata spoofing.
+    cloud = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+    expected_prefix = f"https://res.cloudinary.com/{cloud}/" if cloud else "https://res.cloudinary.com/"
+    if not str(data["url"]).startswith(expected_prefix):
+        raise HTTPException(status_code=400, detail="Yanlış Cloudinary URL-i")
     doc = {
         "id": str(uuid.uuid4()),
         "name": data.get("name") or data.get("original_filename") or "Untitled",
