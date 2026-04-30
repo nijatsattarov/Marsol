@@ -21,6 +21,9 @@ load_dotenv(ROOT_DIR / '.env')
 # Email notification service (Resend)
 from email_service import notify as _email_notify  # noqa: E402
 
+# Cloudinary upload service
+from cloudinary_service import upload_file as _cl_upload, delete_asset as _cl_delete  # noqa: E402
+
 # MongoDB connection
 mongo_url = os.environ.get('MONGO_URL')
 if not mongo_url:
@@ -2665,25 +2668,36 @@ async def delete_project(project_id: str, current_user: dict = Depends(get_curre
 
 @api_router.post("/upload")
 async def upload_file(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
-    ext = Path(file.filename).suffix
-    filename = f"{uuid.uuid4()}{ext}"
-    filepath = UPLOAD_DIR / filename
-    with open(filepath, "wb") as f:
-        content = await file.read()
-        f.write(content)
-    url = f"/uploads/{filename}"
-    return {"url": url, "filename": file.filename, "stored_name": filename}
+    """Legacy upload — now backed by Cloudinary so files survive Render restarts.
+
+    Returns the same shape as before (url + filename) plus Cloudinary metadata.
+    """
+    raw = await file.read()
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"Fayl çox böyükdür (max {MAX_UPLOAD_BYTES // (1024*1024)} MB)")
+    try:
+        result = _cl_upload(raw, file.filename or "file", "marsol/files")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Yükləmə alınmadı: {str(e)[:200]}")
+    return {
+        "url": result["url"],
+        "filename": file.filename,
+        "stored_name": result["public_id"],
+        "public_id": result["public_id"],
+        "resource_type": result["resource_type"],
+    }
 
 @api_router.post("/public/upload")
 async def public_upload_file(file: UploadFile = File(...)):
-    ext = Path(file.filename).suffix
-    filename = f"{uuid.uuid4()}{ext}"
-    filepath = UPLOAD_DIR / filename
-    with open(filepath, "wb") as f:
-        content = await file.read()
-        f.write(content)
-    url = f"/uploads/{filename}"
-    return {"url": url, "filename": file.filename}
+    """Public unauthenticated upload (used by public forms). Cloudinary-backed."""
+    raw = await file.read()
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"Fayl çox böyükdür (max {MAX_UPLOAD_BYTES // (1024*1024)} MB)")
+    try:
+        result = _cl_upload(raw, file.filename or "file", "marsol/files")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Yükləmə alınmadı: {str(e)[:200]}")
+    return {"url": result["url"], "filename": file.filename, "public_id": result["public_id"]}
 
 # ==================== BRANDING (LOGOLAR) ====================
 
@@ -4229,6 +4243,108 @@ def _scan_forbidden_operators(obj) -> Optional[str]:
             if found:
                 return found
     return None
+
+# =====================================================
+# CLOUDINARY UPLOADS — files, company logos, employee avatars, project media
+# =====================================================
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
+ALLOWED_FOLDER_PREFIXES = (
+    "marsol/files",       # general files module
+    "marsol/companies",   # company logos
+    "marsol/employees",   # employee avatars
+    "marsol/projects",    # project media
+)
+
+
+@api_router.post("/uploads")
+async def upload_asset(
+    file: UploadFile = File(...),
+    folder: str = Form("marsol/files"),
+    current_user: dict = Depends(get_current_user),
+):
+    """Stream a file to Cloudinary and return its CDN url + public_id.
+
+    Folders are restricted to the four whitelisted prefixes; the caller is
+    responsible for storing the returned url/public_id on whatever entity
+    consumes it (company, employee, file record, etc.).
+    """
+    folder = (folder or "marsol/files").strip()
+    if not any(folder.startswith(p) for p in ALLOWED_FOLDER_PREFIXES):
+        raise HTTPException(status_code=400, detail=f"İcazə verilməyən qovluq: {folder}")
+    raw = await file.read()
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"Fayl çox böyükdür (max {MAX_UPLOAD_BYTES // (1024*1024)} MB)")
+    try:
+        result = _cl_upload(raw, file.filename or "file", folder)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Yükləmə alınmadı: {str(e)[:200]}")
+    return result
+
+
+@api_router.delete("/uploads")
+async def delete_uploaded_asset(
+    public_id: str,
+    resource_type: str = "image",
+    current_user: dict = Depends(get_current_user),
+):
+    """Remove an asset from Cloudinary by public_id."""
+    ok = _cl_delete(public_id, resource_type=resource_type)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Asset tapılmadı və ya silinə bilmədi")
+    return {"ok": True}
+
+
+# =====================================================
+# FILES MODULE — CRUD wrapping uploaded asset metadata
+# =====================================================
+@api_router.get("/files")
+async def list_files(
+    folder: Optional[str] = None,
+    current_user: dict = Depends(check_permission("files", "read")),
+):
+    query: Dict[str, Any] = {}
+    if folder:
+        query["folder"] = folder
+    files = await db.files.find(query, {"_id": 0}).sort("uploaded_at", -1).to_list(2000)
+    return files
+
+
+@api_router.post("/files")
+async def create_file(data: dict, current_user: dict = Depends(check_permission("files", "write"))):
+    if not data.get("url") or not data.get("public_id"):
+        raise HTTPException(status_code=400, detail="url və public_id məcburidir")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": data.get("name") or data.get("original_filename") or "Untitled",
+        "description": data.get("description", ""),
+        "tags": data.get("tags", []),
+        "folder": data.get("folder", "marsol/files"),
+        "url": data["url"],
+        "public_id": data["public_id"],
+        "resource_type": data.get("resource_type", "raw"),
+        "format": data.get("format"),
+        "bytes": data.get("bytes"),
+        "mime_type": data.get("mime_type"),
+        "width": data.get("width"),
+        "height": data.get("height"),
+        "uploaded_by_id": current_user.get("id"),
+        "uploaded_by_name": current_user.get("name"),
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.files.insert_one(doc.copy())
+    return doc
+
+
+@api_router.delete("/files/{file_id}")
+async def delete_file_record(file_id: str, current_user: dict = Depends(check_permission("files", "write"))):
+    rec = await db.files.find_one({"id": file_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Fayl tapılmadı")
+    _cl_delete(rec["public_id"], resource_type=rec.get("resource_type", "image"))
+    await db.files.delete_one({"id": file_id})
+    return {"ok": True}
+
+
 
 @api_router.post("/ai/analyze")
 async def ai_analyze(data: dict, current_user: dict = Depends(get_current_user)):
