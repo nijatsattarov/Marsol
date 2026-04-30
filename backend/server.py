@@ -10,6 +10,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uuid
+import io
 from datetime import datetime, timezone, timedelta
 import jwt
 import bcrypt
@@ -645,6 +646,112 @@ async def create_company(company_data: dict, current_user: dict = Depends(check_
     await db.companies.insert_one(company_doc)
     company_doc.pop("_id", None)
     return company_doc
+
+@api_router.post("/companies/import-excel")
+async def import_companies_excel(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(check_permission("companies", "write")),
+):
+    """Bulk-import companies from a 2-column Excel file.
+
+    Expected columns (header row, case-insensitive — first match wins):
+      - Şirkət adı | Brand name | Company | Ad
+      - Paket     | Package
+
+    Behavior: existing company matched by brand_name (case-insensitive trim) →
+    `package` field is updated. New rows → company created with sensible
+    defaults so the row passes validation; user can edit other fields later.
+    Returns counts: {created, updated, skipped, total, errors[]}.
+    """
+    from openpyxl import load_workbook
+    raw = await file.read()
+    try:
+        wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+        ws = wb.active
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Excel oxuna bilmədi: {str(e)[:120]}")
+
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return {"created": 0, "updated": 0, "skipped": 0, "total": 0, "errors": []}
+
+    # Detect column indexes from header row
+    header = [str(c or "").strip().lower() for c in rows[0]]
+    name_aliases = {"şirkət adı", "sirket adi", "brand name", "company", "company name", "ad", "name", "şirkət"}
+    pkg_aliases = {"paket", "package", "paket adı"}
+    name_idx = next((i for i, h in enumerate(header) if h in name_aliases), None)
+    pkg_idx = next((i for i, h in enumerate(header) if h in pkg_aliases), None)
+    if name_idx is None:
+        raise HTTPException(status_code=400, detail="'Şirkət adı' sütunu tapılmadı (header row)")
+    if pkg_idx is None:
+        raise HTTPException(status_code=400, detail="'Paket' sütunu tapılmadı (header row)")
+
+    created = updated = skipped = 0
+    errors: List[str] = []
+    now_iso = datetime.now(timezone.utc).isoformat()
+    actor = current_user.get("name", "")
+
+    # Pre-load existing companies by lowercased brand_name for O(1) match
+    existing = {}
+    async for doc in db.companies.find({}, {"_id": 0, "id": 1, "brand_name": 1}):
+        bn = (doc.get("brand_name") or "").strip().lower()
+        if bn:
+            existing[bn] = doc["id"]
+
+    for line, row in enumerate(rows[1:], start=2):
+        if not row or row[name_idx] is None:
+            continue
+        brand_name = str(row[name_idx]).strip()
+        package = str(row[pkg_idx] or "").strip() if pkg_idx < len(row) else ""
+        if not brand_name:
+            continue
+        try:
+            key = brand_name.lower()
+            if key in existing:
+                # Update package on the matched company
+                await db.companies.update_one(
+                    {"id": existing[key]},
+                    {"$set": {"package": package, "updated_at": now_iso, "updated_by": actor}},
+                )
+                updated += 1
+            else:
+                # Create with defaults — only brand_name + package have user values
+                doc = {
+                    "id": str(uuid.uuid4()),
+                    "brand_name": brand_name,
+                    "legal_name": "",
+                    "sector": "",
+                    "company_size": "",
+                    "owner_name": "",
+                    "owner_phone": "",
+                    "owner_email": "",
+                    "marsol_representative": "",
+                    "joined_project": "Üzvlük",
+                    "package": package,
+                    "total_amount": 0,
+                    "paid_amount": 0,
+                    "debt_amount": 0,
+                    "status": "Aktiv",
+                    "created_at": now_iso,
+                    "created_by": actor,
+                    "imported_via": "excel",
+                }
+                await db.companies.insert_one(doc.copy())
+                existing[key] = doc["id"]
+                created += 1
+        except Exception as e:
+            skipped += 1
+            errors.append(f"Sətir {line} ({brand_name}): {str(e)[:120]}")
+
+    return {
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "total": created + updated + skipped,
+        "errors": errors[:50],
+    }
+
+
 
 @api_router.get("/companies/{company_id}")
 async def get_company(company_id: str, current_user: dict = Depends(get_current_user)):

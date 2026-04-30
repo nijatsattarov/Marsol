@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import {
   Plus, Search, Download, Loader2, Building2, User, Phone, Mail,
@@ -268,6 +268,34 @@ export default function Companies() {
     const o = [...formData.owners]; o[ownerIdx] = { ...o[ownerIdx], children: (o[ownerIdx].children || []).filter((_, i) => i !== childIdx) }; setFormData({ ...formData, owners: o });
   };
 
+  const importInputRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+
+  const handleExcelImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await axios.post(`${API}/companies/import-excel`, fd, {
+        headers: { ...headers, 'Content-Type': 'multipart/form-data' },
+      });
+      const { created, updated, skipped, errors = [] } = res.data;
+      toast.success(`İdxal: ${created} yeni, ${updated} yeniləndi${skipped ? `, ${skipped} atlandı` : ''}`);
+      if (errors.length) {
+        toast.error(`${errors.length} sətirdə xəta: ${errors[0]}`);
+      }
+      fetchCompanies();
+    } catch (err) {
+      const detail = err?.response?.data?.detail || err.message;
+      toast.error(`İdxal alınmadı: ${detail}`);
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  };
+
   const exportToExcel = () => {
     const data = filteredCompanies.map((c, i) => ({
       '№': i + 1,
@@ -462,6 +490,11 @@ export default function Companies() {
         <div><h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Şirkət Məlumatları</h1><p className="text-slate-500 text-sm mt-1">Şirkətlərin idarə edilməsi</p></div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={exportToExcel}><Download className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Excel</span></Button>
+          <Button variant="outline" size="sm" onClick={() => importInputRef.current?.click()} disabled={importing} data-testid="import-excel-btn">
+            {importing ? <Loader2 className="w-4 h-4 sm:mr-1 animate-spin" /> : <Upload className="w-4 h-4 sm:mr-1" />}
+            <span className="hidden sm:inline">{importing ? 'Yüklənir...' : 'Import'}</span>
+          </Button>
+          <input ref={importInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleExcelImport} data-testid="import-excel-input" />
           <Button onClick={() => { setEditingCompany(null); setFormData(initialFormData); setActiveTab('basic'); setShowAddModal(true); }} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" size="sm" data-testid="add-company-btn"><Plus className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Yeni Şirkət</span></Button>
         </div>
       </div>
