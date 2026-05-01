@@ -538,7 +538,7 @@ export default function Companies() {
             <tbody>{filteredCompanies.length === 0 ? <tr><td colSpan={10} className="text-center py-12 text-slate-400">Şirkət tapılmadı</td></tr> :
               filteredCompanies.map((c, i) => (
                 <tr key={c.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                  <td className="px-3 py-3 text-sm font-mono text-slate-500">{c.display_id || `#${i+1}`}</td>
+                  <td className="px-3 py-3 text-sm font-mono text-slate-500">{c.display_id || ''}</td>
                   <td className="px-3 py-3"><p className="font-medium text-sm text-[#3D4F6F]">{c.brand_name}{c.pending_form_data && Object.keys(c.pending_form_data).length > 0 && <span className="ml-1.5 text-amber-600" title="Forum dəyişikliyi gözləyir">📩</span>}</p>{c.legal_name && <p className="text-xs text-slate-400">{c.legal_name}</p>}</td>
                   <td className="px-3 py-3 text-sm text-slate-600">{c.sector}</td>
                   <td className="px-3 py-3"><Badge className="bg-[#3D4F6F] text-white text-xs">{c.package}</Badge></td>

@@ -2007,44 +2007,53 @@ async def update_sales_lead(lead_id: str, data: dict, current_user: dict = Depen
     result = await db.sales_leads.update_one({"id": lead_id}, {"$set": update_data})
     
     if new_status == "Üzv oldu" and lead.get("status") != "Üzv oldu":
-        sale_type = update_data.get("sale_type", lead.get("sale_type", ""))
+        # Merge updates into lead view so newly-supplied fields (paid_amount,
+        # total_amount, package, contract dates …) are reflected when we
+        # spin up the matching `companies` record.
+        merged = {**lead, **update_data}
+        sale_type = merged.get("sale_type", "")
         if sale_type == "Üzvlük":
             # Check if company already exists
-            existing = await db.companies.find_one({"brand_name": lead["company_name"]}, {"_id": 0})
+            existing = await db.companies.find_one({"brand_name": merged["company_name"]}, {"_id": 0})
             if not existing:
+                new_display_id = await _next_company_display_id()
+                total_amt = float(merged.get("total_amount") or 0)
+                paid_amt = float(merged.get("paid_amount") or 0)
                 company_doc = {
                     "id": str(uuid.uuid4()),
-                    "brand_name": lead["company_name"],
-                    "legal_name": lead["company_name"],
+                    "display_id": new_display_id,
+                    "brand_name": merged["company_name"],
+                    "legal_name": merged["company_name"],
                     "sector": "",
                     "company_size": "",
                     "registration_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                     "address": "",
                     "bank_details": "",
-                    "owner_name": lead.get("contact_name", ""),
-                    "owner_phone": lead.get("phone", ""),
-                    "owner_email": lead.get("email", ""),
+                    "owner_name": merged.get("contact_name", ""),
+                    "owner_phone": merged.get("phone", ""),
+                    "owner_email": merged.get("email", ""),
                     "owner_social_links": "",
                     "co_founders": [],
                     "representative_name": "",
                     "representative_phone": "",
                     "representative_email": "",
-                    "company_phone": lead.get("phone", ""),
-                    "company_email": lead.get("email", ""),
+                    "company_phone": merged.get("phone", ""),
+                    "company_email": merged.get("email", ""),
                     "website": "",
-                    "package": "",
+                    "package": merged.get("package", ""),
                     "joined_project": "Üzvlük",
-                    "contract_start_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                    "contract_end_date": "",
-                    "payment_amount": 0,
-                    "paid_amount": 0,
-                    "debt_amount": 0,
+                    "contract_start_date": merged.get("contract_start_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    "contract_end_date": merged.get("contract_end_date", ""),
+                    "payment_amount": total_amt,
+                    "total_amount": total_amt,
+                    "paid_amount": paid_amt,
+                    "debt_amount": max(total_amt - paid_amt, 0.0),
                     "payment_due_date": "",
                     "status": "Aktiv",
                     "sub_sector": "",
-                    "marsol_representative": lead.get("curator", ""),
+                    "marsol_representative": merged.get("curator", ""),
                     "source_lead_id": lead_id,
-                    "curator": lead.get("curator", ""),
+                    "curator": merged.get("curator", ""),
                     "created_at": datetime.now(timezone.utc).isoformat()
                 }
                 await db.companies.insert_one(company_doc)
@@ -2177,8 +2186,10 @@ async def get_members_options(current_user: dict = Depends(get_current_user)):
 
 @api_router.post("/members")
 async def create_member(data: dict, current_user: dict = Depends(check_permission("members", "write"))):
+    new_display_id = await _next_company_display_id()
     doc = {
         "id": str(uuid.uuid4()),
+        "display_id": new_display_id,
         "brand_name": data.get("company_name", ""),
         "legal_name": data.get("company_name", ""),
         "sector": data.get("sector", ""),
