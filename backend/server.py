@@ -679,8 +679,10 @@ async def import_companies_excel(
     header = [str(c or "").strip().lower() for c in rows[0]]
     name_aliases = {"şirkət adı", "sirket adi", "brand name", "company", "company name", "ad", "name", "şirkət"}
     pkg_aliases = {"paket", "package", "paket adı"}
+    paid_aliases = {"ödənilib", "ödənilmiş", "ödəniş", "odenilib", "paid", "paid amount", "ödənmə", "ödəniş məbləği"}
     name_idx = next((i for i, h in enumerate(header) if h in name_aliases), None)
     pkg_idx = next((i for i, h in enumerate(header) if h in pkg_aliases), None)
+    paid_idx = next((i for i, h in enumerate(header) if h in paid_aliases), None)
     if name_idx is None:
         raise HTTPException(status_code=400, detail="'Şirkət adı' sütunu tapılmadı (header row)")
     if pkg_idx is None:
@@ -716,28 +718,36 @@ async def import_companies_excel(
             continue
         brand_name = str(row[name_idx]).strip()
         package = str(row[pkg_idx] or "").strip() if pkg_idx < len(row) else ""
+        # Optional paid_amount column — accepts numbers or numeric strings.
+        paid_val = 0.0
+        if paid_idx is not None and paid_idx < len(row) and row[paid_idx] is not None:
+            try:
+                paid_val = float(str(row[paid_idx]).replace(",", ".").strip() or 0)
+            except (ValueError, TypeError):
+                paid_val = 0.0
         if not brand_name:
             continue
         try:
             key = brand_name.lower()
             price = pkg_price.get(package.lower(), 0)
+            debt = max(0.0, price - paid_val)
             if key in existing:
                 # Update package + price on the matched company AND propagate
                 # to the first contract entry if one exists.
                 existing_doc = await db.companies.find_one({"id": existing[key]}, {"_id": 0, "contracts": 1, "paid_amount": 1})
                 existing_contracts = (existing_doc or {}).get("contracts") or []
-                paid = float((existing_doc or {}).get("paid_amount") or 0)
                 if existing_contracts:
                     existing_contracts[0] = {
                         **existing_contracts[0],
                         "package": package,
                         "total_amount": price,
-                        "debt_amount": max(0.0, price - (float(existing_contracts[0].get("paid_amount") or 0))),
+                        "paid_amount": paid_val,
+                        "debt_amount": debt,
                     }
                 else:
                     existing_contracts = [{
                         "project": "Üzvlük", "package": package, "start_date": "", "end_date": "",
-                        "join_date": "", "total_amount": price, "paid_amount": 0, "debt_amount": price, "contract_file": "",
+                        "join_date": "", "total_amount": price, "paid_amount": paid_val, "debt_amount": debt, "contract_file": "",
                     }]
                 await db.companies.update_one(
                     {"id": existing[key]},
@@ -745,7 +755,8 @@ async def import_companies_excel(
                         "package": package,
                         "contracts": existing_contracts,
                         "total_amount": price,
-                        "debt_amount": max(0.0, price - paid),
+                        "paid_amount": paid_val,
+                        "debt_amount": debt,
                         "updated_at": now_iso,
                         "updated_by": actor,
                     }},
@@ -774,13 +785,13 @@ async def import_companies_excel(
                         "end_date": "",
                         "join_date": "",
                         "total_amount": price,
-                        "paid_amount": 0,
-                        "debt_amount": price,
+                        "paid_amount": paid_val,
+                        "debt_amount": debt,
                         "contract_file": "",
                     }],
                     "total_amount": price,
-                    "paid_amount": 0,
-                    "debt_amount": price,
+                    "paid_amount": paid_val,
+                    "debt_amount": debt,
                     "status": "Aktiv",
                     "created_at": now_iso,
                     "created_by": actor,
