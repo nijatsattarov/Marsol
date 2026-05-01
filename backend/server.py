@@ -2911,7 +2911,7 @@ async def delete_package(package_id: str, current_user: dict = Depends(get_curre
 # ==================== PACKAGE SERVICES (XİDMƏTLƏR) ====================
 @api_router.get("/settings/packages/{package_id}/services")
 async def list_package_services(package_id: str, current_user: dict = Depends(get_current_user)):
-    pkg = await db.packages.find_one({"id": package_id}, {"_id": 0, "services": 1})
+    pkg = await db.packages.find_one({"id": package_id}, {"_id": 0, "id": 1, "services": 1})
     if not pkg:
         raise HTTPException(status_code=404, detail="Paket tapılmadı")
     services = pkg.get("services") or []
