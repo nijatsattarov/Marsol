@@ -22,6 +22,17 @@ const fmtBytes = (n) => {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 };
 
+// Insert Cloudinary's `fl_attachment` flag right after the resource type so
+// the CDN responds with `Content-Disposition: attachment` and the browser
+// actually downloads the file instead of opening it in a new tab.
+const buildDownloadUrl = (url) => {
+  if (!url) return url;
+  return url.replace(
+    /\/(image|video|raw)\/upload\//,
+    '/$1/upload/fl_attachment/'
+  );
+};
+
 const iconFor = (rt) => {
   if (rt === 'image') return FileImage;
   if (rt === 'video') return FileVideo;
@@ -190,7 +201,7 @@ export default function Files() {
                     <a href={f.url} target="_blank" rel="noreferrer" className="flex-1 text-[10px] text-center py-1 bg-slate-100 hover:bg-slate-200 rounded text-[#3D4F6F]" data-testid={`file-open-${f.id}`}>
                       <ExternalLink className="w-3 h-3 inline mr-1" />Aç
                     </a>
-                    <a href={f.url} download={f.name} className="flex-1 text-[10px] text-center py-1 bg-slate-100 hover:bg-slate-200 rounded text-[#3D4F6F]">
+                    <a href={buildDownloadUrl(f.url)} download={f.name} className="flex-1 text-[10px] text-center py-1 bg-slate-100 hover:bg-slate-200 rounded text-[#3D4F6F]" data-testid={`file-download-${f.id}`}>
                       <Download className="w-3 h-3 inline mr-1" />Endir
                     </a>
                     <button onClick={() => handleDelete(f)} className="px-1.5 py-1 bg-red-50 hover:bg-red-100 rounded text-red-500" data-testid={`file-delete-${f.id}`}>

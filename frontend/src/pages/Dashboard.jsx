@@ -193,9 +193,9 @@ export default function Dashboard() {
           color="#64748B"
         />
         <StatCard
-          title="Mənfəət"
-          value={`${((stats.financials?.profit || 0) / 1000).toFixed(0)}K`}
-          subtitle={stats.financials?.currency || "AZN"}
+          title="Görüşlər"
+          value={stats.meetings?.total || 0}
+          subtitle={`${stats.meetings?.upcoming || 0} qarşıdan`}
           icon={CreditCard}
           color="#3D4F6F"
         />
@@ -355,90 +355,8 @@ export default function Dashboard() {
           </div>
         </ChartCard>
 
-        {/* Payments Summary */}
-        <ChartCard title="Ödənişlərin icmalı">
-          <div className="space-y-4 sm:space-y-6">
-            <div className="text-center">
-              <p className="text-2xl sm:text-3xl lg:text-4xl font-bold" style={{ color: '#3D4F6F' }}>
-                {(stats.payments?.total || 0).toLocaleString()}
-              </p>
-              <p className="text-slate-500 text-sm">{stats.payments?.currency || "AZN"}</p>
-            </div>
-
-            <div className="progress-bar">
-              <div 
-                className="progress-fill"
-                style={{ width: `${paymentProgress}%` }}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 sm:gap-4">
-              <div className="text-center p-2 sm:p-4 rounded-xl bg-green-50">
-                <p className="text-lg sm:text-xl lg:text-2xl font-bold text-green-600">
-                  {(stats.payments?.paid || 0).toLocaleString()}
-                </p>
-                <p className="text-xs sm:text-sm text-green-600/70">Ödənilib</p>
-              </div>
-              <div className="text-center p-2 sm:p-4 rounded-xl bg-amber-50">
-                <p className="text-lg sm:text-xl lg:text-2xl font-bold text-amber-600">
-                  {(stats.payments?.remaining || 0).toLocaleString()}
-                </p>
-                <p className="text-xs sm:text-sm text-amber-600/70">Qalıq</p>
-              </div>
-            </div>
-          </div>
-        </ChartCard>
-
-        {/* Income vs Expenses */}
-        <ChartCard title="Gəlir və Xərclər" className="md:col-span-2 lg:col-span-1">
-          <div className="space-y-3 sm:space-y-4">
-            <div className="flex justify-between items-center p-3 sm:p-4 rounded-xl bg-slate-50">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs sm:text-sm text-slate-500">Gəlir</p>
-                <p className="text-lg sm:text-xl lg:text-2xl font-bold" style={{ color: '#9ACD32' }}>
-                  {(stats.financials?.income || 0).toLocaleString()}
-                </p>
-              </div>
-              <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 flex-shrink-0 ml-2" style={{ color: '#9ACD32' }} />
-            </div>
-
-            <div className="flex justify-between items-center p-3 sm:p-4 rounded-xl bg-slate-50">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs sm:text-sm text-slate-500">Xərclər</p>
-                <p className="text-lg sm:text-xl lg:text-2xl font-bold text-slate-600">
-                  {(stats.financials?.expenses || 0).toLocaleString()}
-                </p>
-              </div>
-              <TrendingDown className="w-6 h-6 sm:w-8 sm:h-8 text-slate-400 flex-shrink-0 ml-2" />
-            </div>
-
-            <div className="p-3 sm:p-4 rounded-xl" style={{ backgroundColor: '#3D4F6F' }}>
-              <p className="text-xs sm:text-sm text-white/70">Xalis mənfəət</p>
-              <p className="text-lg sm:text-xl lg:text-2xl font-bold text-white">
-                {(stats.financials?.profit || 0).toLocaleString()} {stats.financials?.currency || "AZN"}
-              </p>
-            </div>
-          </div>
-        </ChartCard>
+        {/* Payments / finance widgets removed per request */}
       </div>
-
-      {/* Debt Warning */}
-      {(stats.payments?.remaining || 0) > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-amber-100">
-              <CreditCard className="w-5 h-5 text-amber-600" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-amber-800">Debitor borclar</h4>
-              <p className="text-sm text-amber-700 mt-1">
-                Ümumi {(stats.payments?.remaining || 0).toLocaleString()} AZN debitor borc mövcuddur. 
-                Gecikmiş ödənişləri yoxlamaq üçün Şirkət Məlumatları bölməsinə keçin.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -13,6 +13,9 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { ScrollArea } from '../components/ui/scroll-area';
+import PhoneInput from '../components/PhoneInput';
+import CustomFieldsView from '../components/CustomFieldsView';
+import { COUNTRIES } from '../lib/countries';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { usePermissions, canEdit } from '../context/PermissionContext';
@@ -90,7 +93,7 @@ export default function Companies() {
 
   const initialFormData = {
     brand_name: '', legal_name: '', voen: '', sector: '', sub_sector: '', company_size: '', employee_count: '', region: '',
-    registration_date: '', address: '', company_phone: '', company_website: '',
+    registration_date: '', address: '', country: 'AZ', company_phone: '', company_website: '',
     reference_source: '', reference_company_id: '', reference_company_name: '', reference_person_name: '', reference_person_surname: '', reference_person_position: '', reference_note: '',
     social_links: [],
     logo_url: '', bank_files: [],
@@ -296,36 +299,57 @@ export default function Companies() {
     }
   };
 
-  const exportToExcel = () => {
-    const data = filteredCompanies.map((c, i) => ({
-      '№': i + 1,
-      'Şirkət adı': c.brand_name || '',
-      'Hüquqi ad': c.legal_name || '',
-      'Sektor': c.sector || '',
-      'Alt sektor': c.sub_sector || '',
-      'Paket': c.package || '',
-      'Sahibkar': c.owner_name || '',
-      'Sahibkar telefon': c.owner_phone || '',
-      'Şirkət telefon': c.company_phone || '',
-      'E-poçt': c.company_email || '',
-      'Kurator': c.marsol_representative || '',
-      'Region': c.region || '',
-      'Ümumi borc': c.debt_amount || 0,
-      'Status': c.status || '',
-      'Müqavilə başlama': c.contract_start_date || '',
-      'Müqavilə bitmə': c.contract_end_date || '',
-    }));
+  // ==== Excel export with column picker ====
+  const ALL_EXPORT_COLUMNS = [
+    { key: 'no', label: '№', width: 5, get: (_, i) => i + 1 },
+    { key: 'display_id', label: 'ID', width: 8 },
+    { key: 'brand_name', label: 'Şirkət adı', width: 25 },
+    { key: 'legal_name', label: 'Hüquqi ad', width: 25 },
+    { key: 'sector', label: 'Sektor', width: 15 },
+    { key: 'sub_sector', label: 'Alt sektor', width: 15 },
+    { key: 'package', label: 'Paket', width: 12 },
+    { key: 'owner_name', label: 'Sahibkar', width: 20 },
+    { key: 'owner_phone', label: 'Sahibkar telefon', width: 18 },
+    { key: 'company_phone', label: 'Şirkət telefon', width: 18 },
+    { key: 'company_email', label: 'E-poçt', width: 25 },
+    { key: 'marsol_representative', label: 'Kurator', width: 18 },
+    { key: 'region', label: 'Region', width: 15 },
+    { key: 'country', label: 'Ölkə', width: 10 },
+    { key: 'address', label: 'Ünvan', width: 25 },
+    { key: 'voen', label: 'VÖEN', width: 14 },
+    { key: 'company_size', label: 'Ölçü', width: 10 },
+    { key: 'company_website', label: 'Veb sayt', width: 22 },
+    { key: 'total_amount', label: 'Ümumi məbləğ', width: 12, get: (c) => Number(c.total_amount || 0) },
+    { key: 'paid_amount', label: 'Ödənilib', width: 12, get: (c) => Number(c.paid_amount || 0) },
+    { key: 'debt_amount', label: 'Borc', width: 12, get: (c) => Number(c.debt_amount || 0) },
+    { key: 'status', label: 'Status', width: 10 },
+    { key: 'contract_start_date', label: 'Müqavilə başlama', width: 14 },
+    { key: 'contract_end_date', label: 'Müqavilə bitmə', width: 14 },
+    { key: 'finance_note', label: 'Maliyyə qeydi', width: 25 },
+  ];
+  const DEFAULT_EXPORT_KEYS = ['no', 'display_id', 'brand_name', 'sector', 'package', 'owner_name', 'owner_phone', 'marsol_representative', 'debt_amount', 'status'];
+  const [exportColumns, setExportColumns] = useState(DEFAULT_EXPORT_KEYS);
+  const [showExportModal, setShowExportModal] = useState(false);
+
+  const performExport = () => {
+    const cols = ALL_EXPORT_COLUMNS.filter(c => exportColumns.includes(c.key));
+    const data = filteredCompanies.map((c, i) => {
+      const row = {};
+      cols.forEach(col => {
+        row[col.label] = col.get ? col.get(c, i) : (c[col.key] ?? '');
+      });
+      return row;
+    });
     const ws = XLSX.utils.json_to_sheet(data);
-    // Set column widths
-    ws['!cols'] = [
-      { wch: 5 }, { wch: 25 }, { wch: 25 }, { wch: 15 }, { wch: 15 },
-      { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 25 },
-      { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
-    ];
+    ws['!cols'] = cols.map(c => ({ wch: c.width }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Şirkətlər');
     XLSX.writeFile(wb, `sirketler_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success(`${data.length} şirkət ixrac edildi (${cols.length} sütun)`);
+    setShowExportModal(false);
   };
+
+  const exportToExcel = () => setShowExportModal(true);
 
   const filteredCompanies = companies.filter(c => c.brand_name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.owner_name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.sector?.toLowerCase().includes(searchTerm.toLowerCase()));
   const activeFilterCount = Object.values(filters).filter(v => v && v !== 'all').length;
@@ -343,6 +367,9 @@ export default function Companies() {
           <div className="flex items-center gap-4 mb-6">
             {v.logo_url && <img src={v.logo_url} alt="Logo" className="w-14 h-14 rounded-lg object-cover border" />}
             <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                {v.display_id && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-[#3D4F6F]">{v.display_id}</span>}
+              </div>
               <h1 className="text-2xl font-bold text-[#3D4F6F]">{v.brand_name}</h1>
               <p className="text-slate-500">{v.sector}{v.sub_sector ? ` / ${v.sub_sector}` : ''} | {v.package}</p>
             </div>
@@ -436,6 +463,7 @@ export default function Companies() {
               <div><p className="text-slate-500 text-xs">Region</p><p className="font-medium">{v.region || '-'}</p></div>
               <div><p className="text-slate-500 text-xs">Telefon</p><p className="font-medium">{v.company_phone || '-'}</p></div>
               <div><p className="text-slate-500 text-xs">Ünvan</p><p className="font-medium">{v.address || '-'}</p></div>
+              <CustomFieldsView fields={customFields.filter(cf => cf.sub_tab === 'company')} entity={v} />
             </TabsContent>
             <TabsContent value="owner">
               {(v.owners || [{ first_name: v.owner_first_name || v.owner_name, last_name: v.owner_last_name, phone: v.owner_phone, email: v.owner_email }]).map((o, i) => (
@@ -451,6 +479,7 @@ export default function Companies() {
                   </div>
                 </div>
               ))}
+              <CustomFieldsView fields={customFields.filter(cf => cf.sub_tab === 'owner')} entity={v} />
             </TabsContent>
             <TabsContent value="contact" className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
               <div><p className="text-slate-500 text-xs">Ad Soyad</p><p className="font-medium">{v.contact_first_name} {v.contact_last_name}</p></div>
@@ -458,6 +487,7 @@ export default function Companies() {
               <div><p className="text-slate-500 text-xs">Telefon</p><p className="font-medium">{v.contact_phone || '-'}</p></div>
               <div><p className="text-slate-500 text-xs">Email</p><p className="font-medium">{v.contact_email || '-'}</p></div>
               <div><p className="text-slate-500 text-xs">Kurator</p><p className="font-medium">{v.marsol_representative || '-'}</p></div>
+              <div className="col-span-full"><CustomFieldsView fields={customFields.filter(cf => cf.sub_tab === 'contact')} entity={v} /></div>
             </TabsContent>
             <TabsContent value="contract">
               {(v.contracts || [{ project: v.joined_project, package: v.package, start_date: v.contract_start_date, end_date: v.contract_end_date }]).map((c, i) => (
@@ -526,7 +556,7 @@ export default function Companies() {
             <tbody>{filteredCompanies.length === 0 ? <tr><td colSpan={10} className="text-center py-12 text-slate-400">Şirkət tapılmadı</td></tr> :
               filteredCompanies.map((c, i) => (
                 <tr key={c.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                  <td className="px-3 py-3 text-sm font-mono text-slate-500">{i+1}</td>
+                  <td className="px-3 py-3 text-sm font-mono text-slate-500">{c.display_id || `#${i+1}`}</td>
                   <td className="px-3 py-3"><p className="font-medium text-sm text-[#3D4F6F]">{c.brand_name}{c.pending_form_data && Object.keys(c.pending_form_data).length > 0 && <span className="ml-1.5 text-amber-600" title="Forum dəyişikliyi gözləyir">📩</span>}</p>{c.legal_name && <p className="text-xs text-slate-400">{c.legal_name}</p>}</td>
                   <td className="px-3 py-3 text-sm text-slate-600">{c.sector}</td>
                   <td className="px-3 py-3"><Badge className="bg-[#3D4F6F] text-white text-xs">{c.package}</Badge></td>
@@ -598,12 +628,22 @@ export default function Companies() {
                 </div>
                 <div><Label className="text-xs">Qeydiyyat tarixi</Label><Input type="date" value={formData.registration_date} onChange={e => setFormData({...formData, registration_date: e.target.value})} className="text-sm" /></div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div><Label className="text-xs">Ünvan</Label><Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} className="text-sm" /></div>
-                <div><Label className="text-xs">Telefon</Label><Input value={formData.company_phone} onChange={e => setFormData({...formData, company_phone: e.target.value})} className="text-sm" /></div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div><Label className="text-xs">Ölkə</Label>
+                  <Select value={formData.country || 'AZ'} onValueChange={v => setFormData({...formData, country: v})}>
+                    <SelectTrigger className="text-sm" data-testid="company-country-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                    <SelectContent>
+                      {COUNTRIES.map(c => <SelectItem key={c.code} value={c.code}>{c.flag} {c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="sm:col-span-2"><Label className="text-xs">Ünvan</Label><Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} className="text-sm" /></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><Label className="text-xs">Telefon</Label><PhoneInput value={formData.company_phone} onChange={(v) => setFormData({...formData, company_phone: v})} testId="company-phone" /></div>
                 <div><Label className="text-xs">Veb sayt</Label><Input value={formData.company_website} onChange={e => setFormData({...formData, company_website: e.target.value})} className="text-sm" /></div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><Label className="text-xs">Referans mənbəsi</Label>
                   <Select value={formData.reference_source} onValueChange={v => setFormData({...formData, reference_source: v, reference_company_id: '', reference_company_name: '', reference_person_name: '', reference_person_surname: '', reference_person_position: '', reference_note: ''})}>
                     <SelectTrigger className="text-sm" data-testid="reference-source-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
@@ -684,7 +724,7 @@ export default function Companies() {
                         <SelectContent>{options?.positions?.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
-                    <div><Label className="text-xs">Telefon</Label><Input value={owner.phone} onChange={e => updateOwner(oi,'phone',e.target.value)} className="text-sm" /></div>
+                    <div><Label className="text-xs">Telefon</Label><PhoneInput value={owner.phone} onChange={(v) => updateOwner(oi,'phone',v)} testId={`owner-${oi}-phone`} /></div>
                     <div><Label className="text-xs">Email</Label><Input type="email" value={owner.email} onChange={e => updateOwner(oi,'email',e.target.value)} className="text-sm" /></div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -865,6 +905,49 @@ export default function Companies() {
           </div>
         </form></ScrollArea>
       </DialogContent></Dialog>
+
+      {/* Export column picker */}
+      <Dialog open={showExportModal} onOpenChange={(o) => !o && setShowExportModal(false)}>
+        <DialogContent className="max-w-xl" data-testid="export-picker-dialog">
+          <DialogHeader>
+            <DialogTitle style={{ color: '#3D4F6F' }}>Excel ixrac — sütunları seçin</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-between text-xs mb-2">
+            <span className="text-slate-500">{exportColumns.length} sütun seçilib · {filteredCompanies.length} şirkət</span>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setExportColumns(ALL_EXPORT_COLUMNS.map(c => c.key))} className="text-[#9ACD32] hover:underline">Hamısı</button>
+              <span className="text-slate-300">·</span>
+              <button type="button" onClick={() => setExportColumns(DEFAULT_EXPORT_KEYS)} className="text-[#3D4F6F] hover:underline">Default</button>
+              <span className="text-slate-300">·</span>
+              <button type="button" onClick={() => setExportColumns([])} className="text-red-500 hover:underline">Sıfırla</button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 max-h-[50vh] overflow-y-auto border rounded-md p-3 bg-slate-50">
+            {ALL_EXPORT_COLUMNS.map(col => {
+              const checked = exportColumns.includes(col.key);
+              return (
+                <label key={col.key} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${checked ? 'bg-white border border-[#9ACD32]/30' : 'hover:bg-white'}`} data-testid={`export-col-${col.key}`}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      setExportColumns(prev => e.target.checked ? [...prev, col.key] : prev.filter(k => k !== col.key));
+                    }}
+                    className="accent-[#9ACD32] w-3.5 h-3.5"
+                  />
+                  <span className="text-xs text-[#3D4F6F]">{col.label}</span>
+                </label>
+              );
+            })}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setShowExportModal(false)}>Ləğv et</Button>
+            <Button onClick={performExport} disabled={exportColumns.length === 0} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="export-confirm-btn">
+              <Download className="w-4 h-4 mr-1" />İxrac et
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import * as XLSX from 'xlsx';
+import PhoneInput from '../components/PhoneInput';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -20,7 +21,7 @@ export default function ContactLists() {
   const [showListModal, setShowListModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [listForm, setListForm] = useState({ title: '', description: '' });
-  const [contactForm, setContactForm] = useState({ name: '', surname: '', company: '', position: '', phone: '', email: '', notes: '' });
+  const [contactForm, setContactForm] = useState({ name: '', surname: '', company: '', position: '', phone: '', email: '', birthday: '', notes: '' });
   const [searchTerm, setSearchTerm] = useState('');
   const { permissions } = usePermissions();
   const _canEdit = canEdit(permissions, 'sales');
@@ -143,7 +144,7 @@ export default function ContactLists() {
               <Upload className="w-4 h-4" />Import
               <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
             </label>
-            <Button onClick={() => { setContactForm({ name: '', surname: '', company: '', position: '', phone: '', email: '', notes: '' }); setShowContactModal(true); }} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold"><Plus className="w-4 h-4 mr-1" />Kontakt</Button>
+            <Button onClick={() => { setContactForm({ name: '', surname: '', company: '', position: '', phone: '', email: '', birthday: '', notes: '' }); setShowContactModal(true); }} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold"><Plus className="w-4 h-4 mr-1" />Kontakt</Button>
           </>}
         </div>
       </div>
@@ -198,8 +199,11 @@ export default function ContactLists() {
               <div><Label className="text-xs">Vəzifə</Label><Input value={contactForm.position} onChange={e => setContactForm({...contactForm, position: e.target.value})} className="text-sm" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label className="text-xs">Telefon</Label><Input value={contactForm.phone} onChange={e => setContactForm({...contactForm, phone: e.target.value})} className="text-sm" /></div>
+              <div><Label className="text-xs">Telefon</Label><PhoneInput value={contactForm.phone} onChange={(v) => setContactForm({...contactForm, phone: v})} testId="contact-phone" /></div>
               <div><Label className="text-xs">Email</Label><Input value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})} className="text-sm" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label className="text-xs">Doğum tarixi</Label><Input type="date" value={contactForm.birthday} onChange={e => setContactForm({...contactForm, birthday: e.target.value})} className="text-sm" data-testid="contact-birthday" /></div>
             </div>
             <div><Label className="text-xs">Qeyd</Label><textarea value={contactForm.notes} onChange={e => setContactForm({...contactForm, notes: e.target.value})} className="w-full min-h-[30px] p-2 text-sm border rounded-lg resize-none" /></div>
             <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setShowContactModal(false)}>Ləğv et</Button><Button type="submit" className="bg-[#3D4F6F] text-white">Əlavə et</Button></div>

@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 36 — Companies display_id, birthday notifications, dashboard finance removal, country/phone inputs, custom fields rendering, HR XLSX export, and Files fl_attachment. Backend: 8/8 tests passed (display_id list/format, idempotent backfill, auto-increment on POST /companies, import-excel auto-assigns display_id, birthday notifs today=high & tomorrow=medium, no notif for far dates, dispatch-emails resilience). Frontend smoke: dashboard finance widgets removed; Companies table shows C0xxx badge; Excel export modal opens with 25 column checkboxes + Hamısı/Default/Sıfırla quick links; company-country-select + company-phone-dial/local present; ContactLists modal contact-birthday + contact-phone-dial/local all present; HR export produces real .xlsx (marsol_emekdaslar_2026-05-01.xlsx); Files Endir link contains '/fl_attachment/' in Cloudinary URL. One real frontend bug: Members table view (the actual rendered list at /sales/members) does NOT render display_id below company_name — code only has it in the card view (line 69), table view (line 600) is missing the badge.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Members.jsx (table view)", "issue": "display_id (C0xxx) badge missing in table view; only the card view at line 69 renders it. Spec says 'Members page shows display_id like C0001 next to company_name (small font-mono text)'. Add the same `<p className='text-[10px] font-mono text-slate-400 mb-0.5'>{member.display_id}</p>` inside the <td> at ~line 599 above the company_name <p>.", "selector": "table tr.member-row", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "ContactLists 'Kontakt əlavə et' modal", "issues": ["'Doğum tarixi' uses native browser date picker (<Input type='date'>) instead of shadcn Calendar/Popover. Minor consistency issue across the app."]},
+      {"screen": "Companies Excel export modal", "issues": ["Spec mentions 24 column checkboxes but UI renders 25 — verify if intentional (extra column added) or off-by-one."]},
+      {"screen": "Multiple modals", "issues": ["Console warnings: 'Missing Description or aria-describedby={undefined} for {DialogContent}' on companies/export modal and other Dialogs. Add <DialogDescription> for accessibility."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration36_display_id_birthdays.py",
+    "/app/test_reports/pytest/pytest_iter36.xml"
+  ],
+  "action_items": [
+    "Add display_id badge to Members.jsx table view (line ~599-600) — currently only the card view renders it.",
+    "Confirm Companies export modal column count (25 vs expected 24).",
+    "Optional: replace native date input in ContactLists with shadcn Calendar for consistency.",
+    "Optional: add DialogDescription to silence aria-describedby a11y warnings."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py is now ~4896 lines — well past the 700-line guideline. Strongly recommend splitting into routers (companies_router.py, notifications_router.py, hr_router.py).",
+    "The display_id backfill runs unconditionally on every startup; while it is idempotent, consider gating it behind an env flag for production to avoid unnecessary DB chatter on every restart.",
+    "Birthday notification id format `bday-{type}-{cid}-{md}` does not include the year — a person whose birthday was already greeted yesterday will get the same id again next year (good for idempotent dispatch). However, dispatch-emails idempotency check based purely on id will block re-sending in subsequent years. Consider including the year in the id.",
+    "_next_company_display_id() reads max via $regex+sort on every call — if companies grow large, an explicit counters collection would be more efficient and concurrency-safe (currently two simultaneous POSTs could allocate the same C-id).",
+    "Members.jsx already supports display_id in card view but not in the more commonly-used table view — visual inconsistency."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration36_display_id_birthdays.py (new)"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "~92% (one missing Members table badge)"},
+  "test_credentials": "settings@marsol.az / marsol123 (admin); login response key: access_token.",
+  "seed_data_creation": "Tests create-and-cleanup TEST_iter36_displayid + TEST_iter36_import_<ts>; birthday tests temporarily mutate one existing company's owner_birth_date and restore it via fixture teardown.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend: birthday notifications work via month-day match against today/tomorrow on owners (single+array), representatives, contacts, employees.birth_date, and contacts(contact_lists).birthday. Companies have display_id like C0001..C0283 backfilled. Use fixture pattern from test_iteration36_display_id_birthdays.py for safe mutation+restore on real companies. Frontend route for ContactLists is /sales/contact-lists (NOT /contact-lists). Members route is /sales/members. The 'Kontakt əlavə et' modal is opened by a button labeled just 'Kontakt' (icon + text) on the contact list detail page — use get_by_role('button', name='Kontakt', exact=True). HR export-btn triggers a real xlsx download — use page.expect_download(). Files page testid pattern: file-download-{id} links contain '/fl_attachment/' in href (Cloudinary URL transformation). The CustomFieldsView block only renders when an entity actually has values for the configured custom_fields — empty employees won't show 'Xüsusi sahələr' header (this is correct behavior, not a bug).",
+  "rca of the issue": "Members table view bug: pages/Members.jsx renders display_id only at line 69 inside a card-style layout, but the actual member list at line 599 is rendered inside a <table> where the <td> at line 598-605 only outputs company_name + business_size badge with no reference to member.display_id. Reproduction: navigate to /sales/members → 283 rows displayed → no C0xxx badges visible above brand names. Mitigation: insert `{member.display_id && <p className='text-[10px] font-mono text-slate-400 mb-0.5'>{member.display_id}</p>}` inside the <div> at line 599 right before the company_name <p>."
+}

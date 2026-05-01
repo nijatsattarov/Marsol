@@ -14,7 +14,9 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Toaster, toast } from 'sonner';
+import * as XLSX from 'xlsx';
 import { ScrollArea } from '../components/ui/scroll-area';
+import CustomFieldsView from '../components/CustomFieldsView';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -56,7 +58,7 @@ const ProfileAvatar = ({ employee, size = 'md' }) => {
 const getDisplayName = (emp) => emp.first_name && emp.last_name ? `${emp.first_name} ${emp.last_name}` : emp.full_name || '';
 
 // Employee Detail View
-const EmployeeDetail = ({ employee, onBack, onEdit }) => {
+const EmployeeDetail = ({ employee, onBack, onEdit, customFields = [] }) => {
   if (!employee) return null;
   const displayName = getDisplayName(employee);
   
@@ -302,6 +304,9 @@ const EmployeeDetail = ({ employee, onBack, onEdit }) => {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Custom fields — show every filled custom field grouped by sub_tab */}
+      <CustomFieldsView fields={customFields} entity={employee} groupByTab />
     </div>
   );
 };
@@ -553,20 +558,33 @@ export default function HR() {
   };
 
   const exportToExcel = () => {
-    const csvContent = [
-      ['ID', 'Ad', 'Soyad', 'Şöbə', 'Vəzifə', 'Telefon', 'Email', 'Gross', 'Net', 'Status'].join(','),
-      ...filteredEmployees.map(e => [
-        `"${e.employee_code || ''}"`, `"${e.first_name || ''}"`, `"${e.last_name || ''}"`,
-        `"${e.department}"`, `"${e.position}"`, `"${e.personal_phone}"`,
-        `"${e.personal_email || e.email || ''}"`, e.gross_salary || 0, e.net_salary || 0, `"${e.status}"`
-      ].join(','))
-    ].join('\n');
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `marsol_emekdaslar_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    toast.success('Excel faylı yükləndi');
+    const rows = filteredEmployees.map((e, i) => ({
+      '№': i + 1,
+      'ID': e.employee_code || '',
+      'Ad': e.first_name || '',
+      'Soyad': e.last_name || '',
+      'Şöbə': e.department || '',
+      'Vəzifə': e.position || '',
+      'Telefon': e.personal_phone || '',
+      'Email': e.personal_email || e.email || '',
+      'Doğum tarixi': e.birth_date || '',
+      'İşə başlama': e.hire_date || '',
+      'Vətəndaşlıq': e.citizenship || '',
+      'Təhsil': e.education || '',
+      'Gross maaş': Number(e.gross_salary || 0),
+      'Net maaş': Number(e.net_salary || 0),
+      'Status': e.status || '',
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 4 }, { wch: 8 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 22 },
+      { wch: 18 }, { wch: 26 }, { wch: 13 }, { wch: 13 }, { wch: 14 }, { wch: 18 },
+      { wch: 12 }, { wch: 12 }, { wch: 12 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, 'Əməkdaşlar');
+    XLSX.writeFile(wb, `marsol_emekdaslar_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success(`${rows.length} əməkdaş ixrac edildi`);
   };
 
   const filteredEmployees = employees.filter(e => {
@@ -583,7 +601,7 @@ export default function HR() {
     return (
       <div className="p-4 sm:p-6 lg:p-8">
         <Toaster position="top-right" richColors />
-        <EmployeeDetail employee={viewingEmployee} onBack={() => setViewingEmployee(null)} onEdit={(e) => { setViewingEmployee(null); handleEdit(e); }} />
+        <EmployeeDetail employee={viewingEmployee} customFields={customFields} onBack={() => setViewingEmployee(null)} onEdit={(e) => { setViewingEmployee(null); handleEdit(e); }} />
       </div>
     );
   }

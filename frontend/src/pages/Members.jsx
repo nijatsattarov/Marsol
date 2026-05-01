@@ -66,6 +66,7 @@ const MemberCard = ({ member, onEdit, onDelete, onRenew }) => (
   <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100" data-testid={`member-card-${member.id}`}>
     <div className="flex items-start justify-between mb-3">
       <div className="flex-1 min-w-0">
+        {member.display_id && <p className="text-[10px] font-mono text-slate-400 mb-0.5">{member.display_id}</p>}
         <h3 className="font-semibold text-[#3D4F6F] truncate">{member.company_name}</h3>
         <div className="flex flex-wrap gap-1.5 mt-1.5">
           <Badge className={`text-xs ${getPackageBadgeColor(member.package)}`}>

@@ -630,11 +630,65 @@ async def get_companies(
             c["contract_days"] = None
     return companies
 
+# =====================================================
+# COMPANIES MODULE
+# =====================================================
+async def _next_company_display_id() -> str:
+    """Return the next sequential C-prefixed company display id (e.g. C0042)."""
+    cursor = db.companies.find({"display_id": {"$regex": r"^C\d+$"}}, {"_id": 0, "display_id": 1})
+    max_n = 0
+    async for d in cursor:
+        try:
+            n = int((d.get("display_id") or "C0").lstrip("C"))
+            if n > max_n:
+                max_n = n
+        except (ValueError, TypeError):
+            continue
+    return f"C{max_n + 1:04d}"
+
+
+async def _backfill_company_display_ids():
+    """One-time backfill — assigns C0001, C0002, ... in created_at order to
+    every company that doesn't already have a display_id. Safe to call on
+    every startup (no-op when all companies already have one)."""
+    have = await db.companies.count_documents({"display_id": {"$exists": True, "$ne": None, "$ne": ""}})
+    total = await db.companies.count_documents({})
+    if have >= total:
+        return
+    # Find max existing C-id so we don't reuse numbers.
+    max_n = 0
+    async for d in db.companies.find({"display_id": {"$regex": r"^C\d+$"}}, {"_id": 0, "display_id": 1}):
+        try:
+            n = int((d.get("display_id") or "C0").lstrip("C"))
+            max_n = max(max_n, n)
+        except (ValueError, TypeError):
+            pass
+    # Assign in created_at ascending order.
+    cursor = db.companies.find(
+        {"$or": [{"display_id": {"$exists": False}}, {"display_id": None}, {"display_id": ""}]},
+        {"_id": 0, "id": 1, "created_at": 1},
+    ).sort("created_at", 1)
+    async for d in cursor:
+        max_n += 1
+        await db.companies.update_one({"id": d["id"]}, {"$set": {"display_id": f"C{max_n:04d}"}})
+
+
+@api_router.post("/companies/backfill-ids")
+async def backfill_ids(current_user: dict = Depends(check_permission("companies", "write"))):
+    """Manually trigger backfill — useful after a fresh deploy."""
+    before = await db.companies.count_documents({"display_id": {"$exists": True}})
+    await _backfill_company_display_ids()
+    after = await db.companies.count_documents({"display_id": {"$exists": True}})
+    return {"assigned": after - before, "total": after}
+
+
 @api_router.post("/companies")
 async def create_company(company_data: dict, current_user: dict = Depends(check_permission("companies", "write"))):
     company_id = str(uuid.uuid4())
+    display_id = await _next_company_display_id()
     company_doc = {
         "id": company_id,
+        "display_id": display_id,
         **company_data,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -764,8 +818,10 @@ async def import_companies_excel(
                 updated += 1
             else:
                 # Create with defaults — only brand_name + package have user values
+                new_display = await _next_company_display_id()
                 doc = {
                     "id": str(uuid.uuid4()),
+                    "display_id": new_display,
                     "brand_name": brand_name,
                     "legal_name": "",
                     "sector": "",
@@ -3858,6 +3914,88 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
         except (ValueError, TypeError):
             pass
 
+    # 5. Birthday reminders (1 day before + on the day) — for ALL contacts:
+    # company owners, representatives, contact_persons, employees, and
+    # contact_lists entries. We compare month+day so the reminder fires every
+    # year regardless of birth year.
+    today_md = now.strftime("%m-%d")
+    tomorrow_md = (now + timedelta(days=1)).strftime("%m-%d")
+
+    def _md(date_str):
+        if not date_str:
+            return None
+        try:
+            return datetime.strptime(date_str[:10], "%Y-%m-%d").strftime("%m-%d")
+        except (ValueError, TypeError):
+            return None
+
+    def _bday_notif(person_name, role, source_type, source_id, bday_str, comp_id=None):
+        md = _md(bday_str)
+        if md not in (today_md, tomorrow_md):
+            return None
+        when = "Bu gün" if md == today_md else "Sabah"
+        sev = "high" if md == today_md else "medium"
+        return {
+            "id": f"bday-{source_type}-{source_id}-{md}",
+            "type": "birthday",
+            "severity": sev,
+            "title": f"🎂 {when} ad günü: {person_name}",
+            "message": f"{role} — {bday_str}",
+            "company_id": comp_id,
+            "date": today,
+        }
+
+    # 5a. Owners + representatives + contact_person on companies
+    bday_companies = await db.companies.find(
+        {},
+        {
+            "_id": 0, "id": 1, "brand_name": 1,
+            "owner_name": 1, "owner_birth_date": 1,
+            "owners": 1,
+            "representative_name": 1, "representative_birth_date": 1,
+            "contact_first_name": 1, "contact_last_name": 1, "contact_birth_date": 1,
+        },
+    ).to_list(2000)
+    for c in bday_companies:
+        cid = c["id"]
+        # Single-owner shortcut
+        if c.get("owner_birth_date"):
+            n = _bday_notif(c.get("owner_name", ""), "Sahibkar", "owner", cid, c["owner_birth_date"], cid)
+            if n: notifications.append(n)
+        # Multiple-owners array
+        for idx, o in enumerate(c.get("owners") or []):
+            if o.get("birth_date"):
+                pname = f"{o.get('first_name','')} {o.get('last_name','')}".strip() or o.get('name','')
+                n = _bday_notif(pname, "Sahibkar", f"owner-{cid}", str(idx), o["birth_date"], cid)
+                if n: notifications.append(n)
+        if c.get("representative_birth_date"):
+            n = _bday_notif(c.get("representative_name", ""), "Nümayəndə", "rep", cid, c["representative_birth_date"], cid)
+            if n: notifications.append(n)
+        if c.get("contact_birth_date"):
+            full = f"{c.get('contact_first_name','')} {c.get('contact_last_name','')}".strip()
+            n = _bday_notif(full, "Əlaqəli şəxs", "contact", cid, c["contact_birth_date"], cid)
+            if n: notifications.append(n)
+
+    # 5b. Employees
+    employees = await db.employees.find(
+        {"birth_date": {"$exists": True, "$ne": ""}},
+        {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "birth_date": 1},
+    ).to_list(1000)
+    for e in employees:
+        full = f"{e.get('first_name','')} {e.get('last_name','')}".strip()
+        n = _bday_notif(full, "Əməkdaş", "emp", e["id"], e["birth_date"])
+        if n: notifications.append(n)
+
+    # 5c. Contact list entries
+    contacts = await db.contacts.find(
+        {"birthday": {"$exists": True, "$ne": ""}},
+        {"_id": 0, "id": 1, "name": 1, "surname": 1, "company": 1, "birthday": 1},
+    ).to_list(2000)
+    for ct in contacts:
+        full = f"{ct.get('name','')} {ct.get('surname','')}".strip()
+        n = _bday_notif(full, ct.get("company") or "Kontakt", "ctc", ct["id"], ct["birthday"])
+        if n: notifications.append(n)
+
     # Sort by severity
     severity_order = {"high": 0, "medium": 1, "low": 2}
     notifications.sort(key=lambda x: severity_order.get(x["severity"], 3))
@@ -4743,6 +4881,14 @@ app.add_middleware(
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+@app.on_event("startup")
+async def startup_backfills():
+    try:
+        await _backfill_company_display_ids()
+    except Exception as e:
+        logging.warning("Company display_id backfill failed: %s", e)
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
