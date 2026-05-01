@@ -708,10 +708,26 @@ async def import_companies_excel(
         try:
             key = brand_name.lower()
             if key in existing:
-                # Update package on the matched company
+                # Update package on the matched company AND propagate to the
+                # first contract entry if one exists — so the edit modal's
+                # <Select> for package stays in sync with the imported value.
+                existing_doc = await db.companies.find_one({"id": existing[key]}, {"_id": 0, "contracts": 1})
+                existing_contracts = (existing_doc or {}).get("contracts") or []
+                if existing_contracts:
+                    existing_contracts[0] = {**existing_contracts[0], "package": package}
+                else:
+                    existing_contracts = [{
+                        "project": "Üzvlük", "package": package, "start_date": "", "end_date": "",
+                        "join_date": "", "total_amount": 0, "paid_amount": 0, "debt_amount": 0, "contract_file": "",
+                    }]
                 await db.companies.update_one(
                     {"id": existing[key]},
-                    {"$set": {"package": package, "updated_at": now_iso, "updated_by": actor}},
+                    {"$set": {
+                        "package": package,
+                        "contracts": existing_contracts,
+                        "updated_at": now_iso,
+                        "updated_by": actor,
+                    }},
                 )
                 updated += 1
             else:
@@ -728,6 +744,19 @@ async def import_companies_excel(
                     "marsol_representative": "",
                     "joined_project": "Üzvlük",
                     "package": package,
+                    # Populate contracts array so the edit modal's package <Select>
+                    # pre-selects the imported value out-of-the-box.
+                    "contracts": [{
+                        "project": "Üzvlük",
+                        "package": package,
+                        "start_date": "",
+                        "end_date": "",
+                        "join_date": "",
+                        "total_amount": 0,
+                        "paid_amount": 0,
+                        "debt_amount": 0,
+                        "contract_file": "",
+                    }],
                     "total_amount": 0,
                     "paid_amount": 0,
                     "debt_amount": 0,
@@ -1993,6 +2022,9 @@ async def get_members(
     if year is not None:
         companies = [c for c in companies if _company_covers_year(c, year)]
     # Annotate each company with the membership-period applicable to that year (or current)
+    # and map the internal schema (brand_name, owner_name, …) to the field names
+    # Members.jsx expects (company_name, director_name, …).
+    now = datetime.now(timezone.utc)
     for c in companies:
         if year is not None:
             cs_y_cur = (c.get("contract_start_date") or "")[:4]
@@ -2017,20 +2049,16 @@ async def get_members(
                     except (ValueError, TypeError):
                         hcs_y, hce_y = 0, 9999
                     if hcs_y <= year <= hce_y:
-                        c["_period"] = { **h, "is_current": False }
+                        c["_period"] = {**h, "is_current": False}
                         break
-    return companies
-    # Map fields for frontend compatibility
-    now = datetime.now(timezone.utc)
-    members = []
-    for c in companies:
+        # Field aliases for frontend compatibility
         c["company_name"] = c.get("brand_name", "")
         c["director_name"] = c.get("owner_name", "")
         c["director_phone"] = c.get("owner_phone", "")
         c["contact_person"] = c.get("representative_name", "")
         c["contact_position"] = c.get("representative_position", "")
         c["business_size"] = c.get("company_size", "")
-        # Calculate days until expiry
+        # Calculate days until expiry (negative if already expired)
         end_date_str = c.get("contract_end_date", "")
         c["days_until_expiry"] = None
         if end_date_str:
@@ -2039,10 +2067,9 @@ async def get_members(
                 c["days_until_expiry"] = (end_dt - now.replace(tzinfo=None)).days
             except (ValueError, TypeError):
                 pass
-        members.append(c)
-    # Sort: expiring soon first (non-null days_until_expiry, ascending)
-    members.sort(key=lambda m: (m["days_until_expiry"] is None, m["days_until_expiry"] if m["days_until_expiry"] is not None else 9999))
-    return members
+    # Sort: expiring soonest first (None values go last)
+    companies.sort(key=lambda m: (m.get("days_until_expiry") is None, m.get("days_until_expiry") if m.get("days_until_expiry") is not None else 9999))
+    return companies
 
 @api_router.get("/members/options/all")
 async def get_members_options(current_user: dict = Depends(get_current_user)):
