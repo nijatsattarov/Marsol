@@ -1,0 +1,51 @@
+{
+  "summary": "Frontend integration testing of 6-item batch (Settings sidebar, Bildirişlər config, universal ExcelColumnPicker on Companies/Members/HR, HR Sənədlər tab cleanup). All 6 features PASS. Logged in as settings@marsol.az/marsol123.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "feature_verification": {
+    "settings_sidebar_nav": {
+      "status": "PASS",
+      "details": "4 groups visible (Üzvlük, Layihə & Satış, Klassifikasiya, Sistem). All 8 sampled tabs found via data-testid: tab-packages, tab-warning-days, tab-projects, tab-sectors, tab-custom-fields, tab-roles, tab-users, tab-branding. Active tab shows lime accent."
+    },
+    "notification_config_tab": {
+      "status": "PASS",
+      "details": "All 6 config inputs found (notify-cfg-membership_warning_days, contract_expiry_days, birthday_advance_days, debt_overdue_high_days, meeting_reminder_high_days, meeting_reminder_medium_days). Save button found. PUT /api/settings/notification-config returned 200 after editing birthday_advance_days=2."
+    },
+    "companies_excel_picker": {
+      "status": "PASS",
+      "details": "Picker dialog found (data-testid=excel-picker-dialog). Hamısı/Default/Sıfırla buttons all present. Confirm triggered download sirketler_2026-05-01.xlsx."
+    },
+    "members_excel_picker": {
+      "status": "PASS",
+      "details": "Members route is /sales/members. Same ExcelColumnPicker dialog found. 20 columns confirmed with data-testid=export-col-{key} (e.g., export-col-no, export-col-display_id, export-col-company_name, export-col-sector). Toggle works (True->False). Download marsol_uzvler_2026-05-01.xlsx triggered."
+    },
+    "hr_excel_picker": {
+      "status": "PASS",
+      "details": "Same dialog, 15 columns confirmed. Download marsol_emekdaslar_2026-05-01.xlsx triggered."
+    },
+    "hr_sənədlər_tab": {
+      "status": "PASS",
+      "details": "Add-employee modal Sənədlər tab shows Məhkumluq skanı + Sağlamlıq arayışı skanı in 2-col grid (no overlap), Sertifikatlar amber section with 'Sertifikat əlavə et' button visible, Digər sənədlər section with 'Sənəd əlavə et' button visible. No pageerror or console errors. No DocumentUploadCard ReferenceError."
+    }
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ExcelColumnPicker.jsx is clean, single-responsibility, reusable. Good use of localStorage for persisting user selection via storageKey prop.",
+    "Members page route is /sales/members (not /members) - review request path was slightly inaccurate but implementation is correct under sales section nav."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (per request)", "frontend": "100%"},
+  "test_credentials": "settings@marsol.az / marsol123",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 6 features in this batch work. Members is routed at /sales/members. Universal ExcelColumnPicker used consistently across Companies, Members, HR. Notification config save persists via PUT /api/settings/notification-config (200). HR Sənədlər tab layout fixed and console-clean."
+}
