@@ -3935,8 +3935,11 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
             return None
         when = "Bu gün" if md == today_md else "Sabah"
         sev = "high" if md == today_md else "medium"
+        # Year is part of the id so the same person triggers a fresh
+        # notification each year (idempotent only within the current year).
+        anchor_year = now.year if md == today_md else (now + timedelta(days=1)).year
         return {
-            "id": f"bday-{source_type}-{source_id}-{md}",
+            "id": f"bday-{anchor_year}-{source_type}-{source_id}-{md}",
             "type": "birthday",
             "severity": sev,
             "title": f"🎂 {when} ad günü: {person_name}",

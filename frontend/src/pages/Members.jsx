@@ -597,6 +597,7 @@ export default function Members() {
                   }`} data-testid={`member-row-${member.id}`}>
                     <td className="px-4 py-3">
                       <div>
+                        {member.display_id && <p className="text-[10px] font-mono text-slate-400 mb-0.5">{member.display_id}</p>}
                         <p className="font-semibold text-[#3D4F6F] text-sm">{member.company_name}</p>
                         <Badge className={`mt-1 text-xs ${getSizeBadgeColor(member.business_size)}`}>
                           {member.business_size}
