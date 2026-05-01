@@ -698,6 +698,19 @@ async def import_companies_excel(
         if bn:
             existing[bn] = doc["id"]
 
+    # Pre-load package -> price so imported contract & total_amount reflect the
+    # agreed price automatically (same fallback defaults the API returns when
+    # no packages are configured in db).
+    pkg_docs = await db.packages.find({}, {"_id": 0, "name": 1, "price": 1}).to_list(100)
+    if not pkg_docs:
+        pkg_docs = [
+            {"name": "Premium", "price": 5000},
+            {"name": "Business", "price": 3000},
+            {"name": "Business Plus", "price": 4000},
+            {"name": "Sponsor", "price": 8000},
+        ]
+    pkg_price = {(p.get("name") or "").strip().lower(): float(p.get("price") or 0) for p in pkg_docs}
+
     for line, row in enumerate(rows[1:], start=2):
         if not row or row[name_idx] is None:
             continue
@@ -707,24 +720,32 @@ async def import_companies_excel(
             continue
         try:
             key = brand_name.lower()
+            price = pkg_price.get(package.lower(), 0)
             if key in existing:
-                # Update package on the matched company AND propagate to the
-                # first contract entry if one exists — so the edit modal's
-                # <Select> for package stays in sync with the imported value.
-                existing_doc = await db.companies.find_one({"id": existing[key]}, {"_id": 0, "contracts": 1})
+                # Update package + price on the matched company AND propagate
+                # to the first contract entry if one exists.
+                existing_doc = await db.companies.find_one({"id": existing[key]}, {"_id": 0, "contracts": 1, "paid_amount": 1})
                 existing_contracts = (existing_doc or {}).get("contracts") or []
+                paid = float((existing_doc or {}).get("paid_amount") or 0)
                 if existing_contracts:
-                    existing_contracts[0] = {**existing_contracts[0], "package": package}
+                    existing_contracts[0] = {
+                        **existing_contracts[0],
+                        "package": package,
+                        "total_amount": price,
+                        "debt_amount": max(0.0, price - (float(existing_contracts[0].get("paid_amount") or 0))),
+                    }
                 else:
                     existing_contracts = [{
                         "project": "Üzvlük", "package": package, "start_date": "", "end_date": "",
-                        "join_date": "", "total_amount": 0, "paid_amount": 0, "debt_amount": 0, "contract_file": "",
+                        "join_date": "", "total_amount": price, "paid_amount": 0, "debt_amount": price, "contract_file": "",
                     }]
                 await db.companies.update_one(
                     {"id": existing[key]},
                     {"$set": {
                         "package": package,
                         "contracts": existing_contracts,
+                        "total_amount": price,
+                        "debt_amount": max(0.0, price - paid),
                         "updated_at": now_iso,
                         "updated_by": actor,
                     }},
@@ -752,14 +773,14 @@ async def import_companies_excel(
                         "start_date": "",
                         "end_date": "",
                         "join_date": "",
-                        "total_amount": 0,
+                        "total_amount": price,
                         "paid_amount": 0,
-                        "debt_amount": 0,
+                        "debt_amount": price,
                         "contract_file": "",
                     }],
-                    "total_amount": 0,
+                    "total_amount": price,
                     "paid_amount": 0,
-                    "debt_amount": 0,
+                    "debt_amount": price,
                     "status": "Aktiv",
                     "created_at": now_iso,
                     "created_by": actor,
