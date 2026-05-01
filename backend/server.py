@@ -1560,6 +1560,8 @@ async def create_meeting(data: dict, current_user: dict = Depends(check_permissi
     }
     await db.meetings.insert_one(meeting_doc)
     meeting_doc.pop("_id", None)
+    # Auto-track service usage for this company's package
+    await _auto_track_meeting_service(meeting_doc)
     # Create notification for each reminder
     for rem in meeting_doc.get("reminders", []):
         notif_doc = {
@@ -3048,6 +3050,354 @@ async def seed_package_services(current_user: dict = Depends(check_permission("s
         summary.append({"package": pkg.get("name"), "service_count": len(services)})
 
     return {"seeded": summary, "catalog_size": len(catalog)}
+
+
+# ==================== SERVICE USAGE TRACKING ====================
+async def _resolve_company_package(company: dict):
+    """Return (package_doc, services) for the company's current package, or (None, [])."""
+    if not company:
+        return None, []
+    pkg_name = (company.get("package") or "").strip()
+    if not pkg_name:
+        return None, []
+    pkg = await db.packages.find_one({"name": pkg_name}, {"_id": 0})
+    if not pkg:
+        return None, []
+    return pkg, pkg.get("services") or []
+
+
+async def auto_track_service_usage(company_name: str, service_name_keywords, *, used_date: str = "", quantity: int = 1, notes: str = "", related_object_type: str = "", related_object_id: str = "", created_by: str = "system"):
+    """Create a service_usage record by matching a company by brand_name and a service
+    by checking if any of the given keywords are contained in the service name.
+
+    Idempotent: same (company_id, service_id, related_object_type, related_object_id)
+    triple is upserted instead of duplicated.
+    """
+    if not company_name:
+        return None
+    company = await db.companies.find_one({"brand_name": company_name}, {"_id": 0})
+    if not company:
+        return None
+    pkg, services = await _resolve_company_package(company)
+    if not services:
+        return None
+    keywords = [k.lower() for k in (service_name_keywords if isinstance(service_name_keywords, (list, tuple)) else [service_name_keywords])]
+    matched = next(
+        (s for s in services if s.get("included") and any(kw in (s.get("name") or "").lower() for kw in keywords)),
+        None,
+    )
+    if not matched:
+        return None
+    # Idempotency: skip if a record already links to the same source object
+    if related_object_type and related_object_id:
+        dup = await db.service_usage.find_one({
+            "company_id": company["id"],
+            "service_id": matched["id"],
+            "related_object_type": related_object_type,
+            "related_object_id": related_object_id,
+        }, {"_id": 0, "id": 1})
+        if dup:
+            return dup
+    doc = {
+        "id": str(uuid.uuid4()),
+        "company_id": company["id"],
+        "package_id": pkg.get("id") if pkg else None,
+        "package_name": pkg.get("name") if pkg else (company.get("package") or ""),
+        "service_id": matched["id"],
+        "service_name": matched["name"],
+        "quantity": max(int(quantity or 1), 1),
+        "used_date": (used_date or datetime.now(timezone.utc).strftime("%Y-%m-%d"))[:10],
+        "notes": notes,
+        "related_object_type": related_object_type,
+        "related_object_id": related_object_id,
+        "auto": True,
+        "created_by": created_by,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.service_usage.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+# Mapping of meeting_type → list of service-name keywords to match the package catalog.
+_MEETING_TYPE_TO_SERVICE_KEYWORDS = {
+    "B2B": ["b2b"],
+    "Səhər yeməyi": ["səhər yeməyi", "b2b"],
+    "İşgüzar səhər yeməyi": ["səhər yeməyi", "b2b"],
+    "Ofis ziyarət": ["ofis", "ziyarət"],
+    "Ofis ziyarəti": ["ofis", "ziyarət"],
+    "Şirkət ziyarəti": ["ofis", "ziyarət"],
+    "Axşam ziyafəti": ["b2b"],
+    "Region görüşü": ["region sahibkar", "region"],
+    "Onlayn görüş": ["region sahibkar"],
+    "Dövlət qurumu": ["dövlət"],
+    "Dövlət görüşü": ["dövlət"],
+    "Dövlət qurumu görüşü": ["dövlət"],
+    "Konfrans": ["rəsmi konfrans", "konfrans"],
+    "Rəsmi konfrans": ["rəsmi konfrans"],
+    "Marsol Academy": ["marsol academy"],
+    "Akademiya": ["marsol academy"],
+    "Sosial fəaliyyət": ["sosial fəaliyyət"],
+}
+
+
+async def _auto_track_meeting_service(meeting_doc: dict):
+    """Best-effort auto-tracking when a meeting is created/updated."""
+    try:
+        company_name = meeting_doc.get("company") or ""
+        if not company_name:
+            return
+        meeting_type = (meeting_doc.get("meeting_type") or "").strip()
+        keywords = _MEETING_TYPE_TO_SERVICE_KEYWORDS.get(meeting_type)
+        if not keywords:
+            # Try fuzzy match on lowercased meeting_type
+            for k, v in _MEETING_TYPE_TO_SERVICE_KEYWORDS.items():
+                if meeting_type and k.lower() in meeting_type.lower():
+                    keywords = v
+                    break
+        if not keywords:
+            return
+        await auto_track_service_usage(
+            company_name=company_name,
+            service_name_keywords=keywords,
+            used_date=meeting_doc.get("date", ""),
+            notes=f"Avto: {meeting_type} — {meeting_doc.get('contact_person') or meeting_doc.get('employee') or ''}".strip(" -"),
+            related_object_type="meeting",
+            related_object_id=meeting_doc.get("id", ""),
+            created_by=meeting_doc.get("created_by") or "auto",
+        )
+    except Exception as exc:
+        logger.warning(f"auto_track_meeting_service failed: {exc}")
+
+
+def _parse_quota(value: str):
+    """Extract first numeric value from `value` (e.g. '15', '5 dəfə', '2 dəfə'). None if none."""
+    if not value:
+        return None
+    val = str(value).strip().lower()
+    if val in ("limitsiz", "limitsiz."):
+        return None  # treated as unlimited; surfaced in `unlimited` flag
+    digits = ""
+    for ch in val:
+        if ch.isdigit():
+            digits += ch
+        elif digits:
+            break
+    return int(digits) if digits else None
+
+
+@api_router.get("/companies/{company_id}/service-usage")
+async def list_service_usage(company_id: str, service_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0, "id": 1})
+    if not company:
+        raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
+    query = {"company_id": company_id}
+    if service_id:
+        query["service_id"] = service_id
+    rows = await db.service_usage.find(query, {"_id": 0}).sort("used_date", -1).to_list(2000)
+    return rows
+
+
+@api_router.post("/companies/{company_id}/service-usage")
+async def create_service_usage(company_id: str, data: dict, current_user: dict = Depends(check_permission("members", "write"))):
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
+    pkg, services = await _resolve_company_package(company)
+    service_id = data.get("service_id")
+    service_name = (data.get("service_name") or "").strip()
+    matched = next((s for s in services if s.get("id") == service_id or s.get("name") == service_name), None)
+    if matched:
+        service_id = matched["id"]
+        service_name = matched["name"]
+    elif not service_name:
+        raise HTTPException(status_code=400, detail="Xidmət adı və ya ID lazımdır")
+
+    try:
+        quantity = int(data.get("quantity") or 1)
+    except (ValueError, TypeError):
+        quantity = 1
+    if quantity <= 0:
+        quantity = 1
+
+    doc = {
+        "id": str(uuid.uuid4()),
+        "company_id": company_id,
+        "package_id": pkg.get("id") if pkg else None,
+        "package_name": pkg.get("name") if pkg else (company.get("package") or ""),
+        "service_id": service_id,
+        "service_name": service_name,
+        "quantity": quantity,
+        "used_date": (data.get("used_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d"))[:10],
+        "notes": (data.get("notes") or "").strip(),
+        "related_object_type": data.get("related_object_type") or "",
+        "related_object_id": data.get("related_object_id") or "",
+        "auto": bool(data.get("auto", False)),
+        "created_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.service_usage.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/service-usage/{usage_id}")
+async def update_service_usage(usage_id: str, data: dict, current_user: dict = Depends(check_permission("members", "write"))):
+    existing = await db.service_usage.find_one({"id": usage_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Qeyd tapılmadı")
+    update = {}
+    for k in ("service_name", "service_id", "notes", "used_date"):
+        if k in data and data[k] is not None:
+            update[k] = str(data[k]).strip() if k != "service_id" else data[k]
+    if "quantity" in data and data["quantity"] is not None:
+        try:
+            q = int(data["quantity"])
+            update["quantity"] = q if q > 0 else 1
+        except (ValueError, TypeError):
+            pass
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.service_usage.update_one({"id": usage_id}, {"$set": update})
+    doc = await db.service_usage.find_one({"id": usage_id}, {"_id": 0})
+    return doc
+
+
+@api_router.delete("/service-usage/{usage_id}")
+async def delete_service_usage(usage_id: str, current_user: dict = Depends(check_permission("members", "write"))):
+    existing = await db.service_usage.find_one({"id": usage_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Qeyd tapılmadı")
+    await db.service_usage.delete_one({"id": usage_id})
+    return {"message": "Qeyd silindi"}
+
+
+@api_router.get("/companies/{company_id}/service-stats")
+async def company_service_stats(company_id: str, current_user: dict = Depends(get_current_user)):
+    """Return per-service usage stats for a company.
+
+    Each row: {service_id, name, value, included, quota, used, remaining, unlimited, last_used, history_count}.
+    """
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
+    pkg, services = await _resolve_company_package(company)
+    usage_rows = await db.service_usage.find({"company_id": company_id}, {"_id": 0}).to_list(5000)
+
+    # Group usage by service_id (or by name when id missing)
+    grouped = {}
+    for u in usage_rows:
+        key = u.get("service_id") or u.get("service_name")
+        bucket = grouped.setdefault(key, {"used": 0, "last_used": "", "history": []})
+        bucket["used"] += int(u.get("quantity") or 1)
+        if (u.get("used_date") or "") > (bucket["last_used"] or ""):
+            bucket["last_used"] = u.get("used_date") or ""
+        bucket["history"].append(u)
+
+    rows = []
+    seen_ids = set()
+    for s in services:
+        sid = s.get("id")
+        seen_ids.add(sid)
+        bucket = grouped.get(sid) or grouped.get(s.get("name")) or {"used": 0, "last_used": "", "history": []}
+        quota_raw = (s.get("value") or "").strip().lower()
+        unlimited = quota_raw == "limitsiz"
+        quota = _parse_quota(s.get("value")) if not unlimited else None
+        if quota is None and not unlimited and s.get("included"):
+            # boolean-style service (just "yes/no")
+            pass
+        used = int(bucket["used"])
+        remaining = None
+        if quota is not None:
+            remaining = max(quota - used, 0)
+        rows.append({
+            "service_id": sid,
+            "name": s.get("name"),
+            "description": s.get("description", ""),
+            "value": s.get("value", ""),
+            "included": s.get("included", False),
+            "quota": quota,
+            "unlimited": unlimited,
+            "used": used,
+            "remaining": remaining,
+            "last_used": bucket["last_used"],
+            "history_count": len(bucket["history"]),
+            "sort_order": s.get("sort_order", 0),
+        })
+
+    # Append any usage records that don't match a current service (e.g. legacy / package change)
+    for key, bucket in grouped.items():
+        if key in seen_ids:
+            continue
+        # Find a name from one of the entries
+        name = next((h.get("service_name") for h in bucket["history"] if h.get("service_name")), str(key))
+        rows.append({
+            "service_id": key,
+            "name": name,
+            "description": "",
+            "value": "",
+            "included": False,
+            "quota": None,
+            "unlimited": False,
+            "used": bucket["used"],
+            "remaining": None,
+            "last_used": bucket["last_used"],
+            "history_count": len(bucket["history"]),
+            "sort_order": 9999,
+            "legacy": True,
+        })
+
+    rows.sort(key=lambda r: (r.get("sort_order") or 0, r.get("name") or ""))
+    return {
+        "package_name": pkg.get("name") if pkg else (company.get("package") or ""),
+        "package_id": pkg.get("id") if pkg else None,
+        "services": rows,
+    }
+
+
+@api_router.get("/dashboard/service-usage-stats")
+async def dashboard_service_usage_stats(month: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """Top services used this month + total usage counts.
+
+    Optional `month` param in YYYY-MM format; defaults to current month.
+    """
+    if month:
+        try:
+            datetime.strptime(month + "-01", "%Y-%m-%d")
+            target = month
+        except (ValueError, TypeError):
+            target = datetime.now(timezone.utc).strftime("%Y-%m")
+    else:
+        target = datetime.now(timezone.utc).strftime("%Y-%m")
+    start = f"{target}-01"
+    # Last day of target month
+    yyyy, mm = target.split("-")
+    next_month = (datetime.strptime(start, "%Y-%m-%d") + timedelta(days=32)).replace(day=1).strftime("%Y-%m-%d")
+    rows = await db.service_usage.find(
+        {"used_date": {"$gte": start, "$lt": next_month}},
+        {"_id": 0, "service_id": 1, "service_name": 1, "quantity": 1, "company_id": 1, "package_name": 1},
+    ).to_list(10000)
+    bucket = {}
+    for r in rows:
+        key = r.get("service_id") or r.get("service_name") or "unknown"
+        b = bucket.setdefault(key, {
+            "service_id": r.get("service_id"),
+            "service_name": r.get("service_name") or "",
+            "total_quantity": 0,
+            "company_count": set(),
+        })
+        b["total_quantity"] += int(r.get("quantity") or 1)
+        if r.get("company_id"):
+            b["company_count"].add(r["company_id"])
+    summary = []
+    for v in bucket.values():
+        summary.append({
+            "service_id": v["service_id"],
+            "service_name": v["service_name"],
+            "total_quantity": v["total_quantity"],
+            "company_count": len(v["company_count"]),
+        })
+    summary.sort(key=lambda x: x["total_quantity"], reverse=True)
+    return {"month": target, "top_services": summary[:10], "total_records": len(rows)}
 
 # ==================== PROJECTS MANAGEMENT ====================
 

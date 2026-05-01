@@ -25,6 +25,7 @@ import {
   ResponsiveContainer,
   Legend
 } from 'recharts';
+import ServiceUsageWidget from '../components/ServiceUsageWidget';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -266,6 +267,9 @@ export default function Dashboard() {
 
       {/* Charts Row 2 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* Service Usage Widget */}
+        <ServiceUsageWidget />
+
         {/* Events Stats */}
         <ChartCard title="Fəaliyyət statistikası">
           <div className="space-y-3">

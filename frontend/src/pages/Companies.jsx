@@ -16,6 +16,7 @@ import { ScrollArea } from '../components/ui/scroll-area';
 import PhoneInput from '../components/PhoneInput';
 import CustomFieldsView from '../components/CustomFieldsView';
 import PackageServicesView from '../components/PackageServicesView';
+import ServiceUsageTab from '../components/ServiceUsageTab';
 import { COUNTRIES } from '../lib/countries';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -435,6 +436,7 @@ export default function Companies() {
               <TabsTrigger value="contact" className="text-xs">Əlaqədar şəxs</TabsTrigger>
               <TabsTrigger value="contract" className="text-xs">Müqavilə</TabsTrigger>
               <TabsTrigger value="payment" className="text-xs">Ödəniş</TabsTrigger>
+              <TabsTrigger value="services" className="text-xs" data-testid="tab-services">Xidmət istifadəsi</TabsTrigger>
             </TabsList>
             <TabsContent value="company" className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
               <div><p className="text-slate-500 text-xs">Brend adı</p><p className="font-medium">{v.brand_name}</p></div>
@@ -491,6 +493,9 @@ export default function Companies() {
                 <div><p className="text-slate-500 text-xs">Borc</p><p className="font-bold text-red-600">{(v.debt_amount || 0).toLocaleString()} AZN</p></div>
               </div>
               <PackageServicesView packageName={v.package} title="Paket xidmətləri" />
+            </TabsContent>
+            <TabsContent value="services">
+              <ServiceUsageTab companyId={v.id} companyName={v.brand_name} />
             </TabsContent>
           </Tabs>
         </div>

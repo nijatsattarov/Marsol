@@ -1,0 +1,34 @@
+{
+  "summary": "Service Usage tracking backend suite: 16/16 PASS. Verified GET /service-stats (quotas: Premium B2B=15, limitsiz→unlimited=true+quota=null), CRUD on POST /companies/{id}/service-usage, PUT/DELETE /service-usage/{id}, filter by service_id, stats aggregation (used/remaining/history_count), dashboard widget with month filter + invalid-month fallback, auto-track from POST /meetings (B2B → auto record with related_object_type='meeting', related_object_id=<meeting_id>, auto=true, service matched via keyword), idempotency key (company_id+service_id+related_object_type+related_object_id), and 401/403 on anonymous requests.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/companies/{id}/service-usage", "issue": "When service_name does not exactly match a catalog entry (e.g. 'B2B görüş' vs catalog 'B2B görüşlərə dəvət'), the record is stored with service_id=None and the free-text name. Stats then bucket it as a separate 'legacy' row instead of consuming from the package quota. Consider fuzzy/keyword match (icontains) similar to auto_track_service_usage, or reject with 400 when no match."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration40_service_usage.py",
+    "/app/test_reports/pytest/iteration_40_results.xml"
+  ],
+  "action_items": [
+    "Optional: fuzzy/keyword match for manual POST /service-usage when service_name is provided (currently requires exact equality to the package catalog name)."
+  ],
+  "critical_code_review_comments": [
+    "auto_track_service_usage idempotency is keyed on (company_id, service_id, related_object_type, related_object_id). Since each meeting has a unique id, two separate meetings correctly produce two usage rows — idempotency only protects against duplicate hooks on the same meeting (e.g. on update). Matches spec.",
+    "_parse_quota treats 'limitsiz' (case-insensitive, exact) as unlimited; any value containing digits returns the first digit run. Values like 'Limitsiz.' (with trailing punctuation) would only match because of the explicit ('limitsiz', 'limitsiz.') tuple — brittle, consider startswith('limitsiz').",
+    "create_service_usage accepts raw user-provided service_name without matching; stats later groups as 'legacy' row (sort_order=9999). This can silently hide quota consumption — UI should force selection from the catalog dropdown (frontend concern, flagging).",
+    "server.py is 5471 lines — well over the 700-line guideline. Split into routers (companies, meetings, packages, service_usage, dashboard).",
+    "dashboard_service_usage_stats computes next_month via timedelta(days=32) then replace(day=1) — correct but unusual; datetime-based (relativedelta) would be clearer."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration40_service_usage.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "n/a (skipped per request)"},
+  "test_credentials": "settings@marsol.az / marsol123 (admin)",
+  "seed_data_creation": "Creates a disposable TEST_ServiceUsage_<uuid> company on Premium package at session start; seeds 19 services via /api/settings/packages/services/seed. Cleans up usage rows, meetings (by company name), and the company itself at session teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pytest suite at /app/backend/tests/test_iteration40_service_usage.py fully covers /api/companies/{id}/service-stats, /service-usage CRUD, /dashboard/service-usage-stats, and the meeting auto-track hook. Uses a session-scoped fixture that fetches the exact B2B catalog name ('B2B görüşlərə dəvət') via /service-stats — if package services get renamed, the suite auto-adapts. All records use TEST_ prefixed brand_name and are cleaned up automatically.",
+  "rca of the issue": "During initial run 2 tests failed because they hardcoded service_name='B2B görüş' while the actual catalog entry is 'B2B görüşlərə dəvət'. The create endpoint requires an exact match (id OR name equality) and falls back to free-text when neither matches, producing service_id=None and a legacy stats bucket. Fixed by adding a b2b_service fixture that reads the actual service name from /service-stats and using it for exact-match creates. No backend code change needed."
+}
