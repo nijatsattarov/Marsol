@@ -43,6 +43,7 @@ import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import { ScrollArea } from '../components/ui/scroll-area';
 import ExcelColumnPicker from '../components/ExcelColumnPicker';
+import PackageServicesView from '../components/PackageServicesView';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -746,6 +747,11 @@ export default function Members() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {formData.package && (
+                      <div className="mt-2">
+                        <PackageServicesView packageName={formData.package} title="Bu paketə daxil olan xidmətlər" compact />
+                      </div>
+                    )}
                   </div>
                   <div>
                     <Label className="text-xs sm:text-sm">Ölçü *</Label>

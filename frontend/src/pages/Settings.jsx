@@ -4,7 +4,7 @@ import {
   Settings as SettingsIcon, Package, FolderKanban, Users, Columns3,
   Plus, Pencil, Trash2, Loader2, Shield, Eye, UserCog, User,
   ChevronDown, Search, X, Building2, Layers, Briefcase, Activity, Building,
-  Calendar, Target, TrendingUp, Image as ImageIcon, Upload
+  Calendar, Target, TrendingUp, Image as ImageIcon, Upload, ListChecks
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -14,6 +14,7 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Toaster, toast } from 'sonner';
+import PackageServicesManager from '../components/PackageServicesManager';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -134,6 +135,7 @@ export default function Settings() {
   // Modal states
   const [showFieldModal, setShowFieldModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [servicesPackage, setServicesPackage] = useState(null);
 
   // Filter
   const [fieldModuleFilter, setFieldModuleFilter] = useState('all');
@@ -587,9 +589,19 @@ export default function Settings() {
                     <p className="font-semibold text-sm text-[#3D4F6F]">{pkg.name}</p>
                     {pkg.description && <p className="text-xs text-slate-500 mt-0.5">{pkg.description}</p>}
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <Badge className="bg-[#3D4F6F] text-white text-xs">{pkg.price?.toLocaleString()} AZN</Badge>
                     {pkg.invitation_count > 0 && <Badge className="bg-[#9ACD32] text-[#3D4F6F] text-xs">{pkg.invitation_count} dəvət</Badge>}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs border-[#3D4F6F]/30 text-[#3D4F6F] hover:bg-[#3D4F6F] hover:text-white"
+                      onClick={() => setServicesPackage(pkg)}
+                      data-testid={`package-services-${pkg.id}`}
+                    >
+                      <ListChecks className="w-3.5 h-3.5 sm:mr-1" />
+                      <span className="hidden sm:inline">Xidmətlər</span>
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => { setEditingPackage(pkg); setPackageForm({ name: pkg.name, description: pkg.description || '', price: pkg.price || 0, invitation_count: pkg.invitation_count || 0 }); }} data-testid={`package-edit-${pkg.id}`}>
                       <Pencil className="w-4 h-4 text-slate-500" />
                     </Button>
@@ -1462,6 +1474,15 @@ export default function Settings() {
         </TabsContent>
         </div>
       </Tabs>
+
+      {/* Package Services Manager */}
+      {servicesPackage && (
+        <PackageServicesManager
+          packageId={servicesPackage.id}
+          packageName={servicesPackage.name}
+          onClose={() => { setServicesPackage(null); fetchData(); }}
+        />
+      )}
 
       {/* Custom Field Modal */}
       <Dialog open={showFieldModal} onOpenChange={setShowFieldModal}>

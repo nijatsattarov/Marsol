@@ -2907,6 +2907,148 @@ async def delete_package(package_id: str, current_user: dict = Depends(get_curre
         raise HTTPException(status_code=404, detail="Paket tapılmadı")
     return {"message": "Paket silindi"}
 
+
+# ==================== PACKAGE SERVICES (XİDMƏTLƏR) ====================
+@api_router.get("/settings/packages/{package_id}/services")
+async def list_package_services(package_id: str, current_user: dict = Depends(get_current_user)):
+    pkg = await db.packages.find_one({"id": package_id}, {"_id": 0, "services": 1})
+    if not pkg:
+        raise HTTPException(status_code=404, detail="Paket tapılmadı")
+    services = pkg.get("services") or []
+    services.sort(key=lambda s: (s.get("sort_order") or 0, s.get("name") or ""))
+    return services
+
+
+@api_router.post("/settings/packages/{package_id}/services")
+async def add_package_service(package_id: str, data: dict, current_user: dict = Depends(check_permission("settings", "write"))):
+    pkg = await db.packages.find_one({"id": package_id}, {"_id": 0})
+    if not pkg:
+        raise HTTPException(status_code=404, detail="Paket tapılmadı")
+    services = pkg.get("services") or []
+    new_svc = {
+        "id": str(uuid.uuid4()),
+        "name": (data.get("name") or "").strip(),
+        "description": (data.get("description") or "").strip(),
+        "value": (data.get("value") or "").strip(),
+        "included": bool(data.get("included", True)),
+        "sort_order": int(data.get("sort_order") if data.get("sort_order") is not None else len(services)),
+    }
+    if not new_svc["name"]:
+        raise HTTPException(status_code=400, detail="Xidmət adı boş ola bilməz")
+    services.append(new_svc)
+    await db.packages.update_one({"id": package_id}, {"$set": {"services": services}})
+    return new_svc
+
+
+@api_router.put("/settings/packages/{package_id}/services/{service_id}")
+async def update_package_service(package_id: str, service_id: str, data: dict, current_user: dict = Depends(check_permission("settings", "write"))):
+    pkg = await db.packages.find_one({"id": package_id}, {"_id": 0})
+    if not pkg:
+        raise HTTPException(status_code=404, detail="Paket tapılmadı")
+    services = pkg.get("services") or []
+    found = False
+    for s in services:
+        if s.get("id") == service_id:
+            for k in ("name", "description", "value"):
+                if k in data and data[k] is not None:
+                    s[k] = str(data[k]).strip()
+            if "included" in data:
+                s["included"] = bool(data["included"])
+            if "sort_order" in data and data["sort_order"] is not None:
+                try:
+                    s["sort_order"] = int(data["sort_order"])
+                except (ValueError, TypeError):
+                    pass
+            found = True
+            break
+    if not found:
+        raise HTTPException(status_code=404, detail="Xidmət tapılmadı")
+    await db.packages.update_one({"id": package_id}, {"$set": {"services": services}})
+    return next(s for s in services if s.get("id") == service_id)
+
+
+@api_router.delete("/settings/packages/{package_id}/services/{service_id}")
+async def delete_package_service(package_id: str, service_id: str, current_user: dict = Depends(check_permission("settings", "write"))):
+    pkg = await db.packages.find_one({"id": package_id}, {"_id": 0})
+    if not pkg:
+        raise HTTPException(status_code=404, detail="Paket tapılmadı")
+    services = [s for s in (pkg.get("services") or []) if s.get("id") != service_id]
+    await db.packages.update_one({"id": package_id}, {"$set": {"services": services}})
+    return {"message": "Xidmət silindi"}
+
+
+@api_router.post("/settings/packages/services/seed")
+async def seed_package_services(current_user: dict = Depends(check_permission("settings", "write"))):
+    """Seed the 2026 partnership package service catalog from the official brochure."""
+    # Service catalog: each row gives the service definition + per-package value/inclusion.
+    # Values: bool=True means a plain check, bool=False means X (not included),
+    # string means a custom value (e.g. "15", "1 dəfə", "limitsiz", or descriptive text).
+    catalog = [
+        {"name": "Marsol Plus - Mobil Tətbiqi", "description": "Şirkət məlumatı, şəxsi profil, satınalma, kampaniya, elanlar və s.", "premium": True, "business": True, "business_plus": True},
+        {"name": "B2B görüşlərə dəvət", "description": "İşgüzar səhər yeməyi, ofis-istehsalat ziyarəti, axşam ziyafəti və s.", "premium": "15", "business": "20", "business_plus": "30"},
+        {"name": "Şirkətin ofis və istehsalatına ziyarət", "description": "", "premium": True, "business": True, "business_plus": True},
+        {"name": "Video Müsahibə", "description": "Müsahibə Facebook, Instagram, YouTube və Marsol.az-da yayımlanır", "premium": False, "business": "1 dəfə", "business_plus": "2 dəfə"},
+        {"name": "İşgüzar səhər yeməyində ətraflı təqdimat", "description": "Video təqdimat + 5 dəq. çıxış imkanı", "premium": False, "business": False, "business_plus": "1 dəfə"},
+        {"name": "Region sahibkarları ilə onlayn görüşlər", "description": "", "premium": True, "business": True, "business_plus": True},
+        {"name": "Region konfrans və tədbirlərə dəvət", "description": "", "premium": False, "business": True, "business_plus": True},
+        {"name": "Rəsmi konfrans çıxış imkanı", "description": "", "premium": True, "business": True, "business_plus": True},
+        {"name": "Partnyorlarla əlaqəyə dəstək", "description": "", "premium": True, "business": True, "business_plus": True},
+        {"name": "Kampaniya və endirimlər", "description": "Partnyorların kampaniya və endirimlərdən yararlanma imkanı", "premium": True, "business": True, "business_plus": True},
+        {"name": "E-mail göndərilməsi", "description": "Kampaniya, xidmət və məlumat xarakterli məktubların e-mail üzərindən partnyorlara göndərilməsi", "premium": True, "business": True, "business_plus": True},
+        {"name": "Marsol.az partnyor səhifəsi", "description": "Partnyorlarımız bölümündə şirkətiniz haqqında məlumatın yerləşdirilməsi", "premium": True, "business": True, "business_plus": "Xüsusi paylaşım, ətraflı məlumat"},
+        {"name": "Instagram paylaşımı", "description": "Marsol Group ilə əməkdaşlıq posterinin həftəyə bölməsində paylaşımı", "premium": "5 dəfə", "business": "7 dəfə", "business_plus": "limitsiz"},
+        {"name": "Facebook paylaşımı", "description": "MARSOL Group ilə əməkdaşlıq posterinin paylaşımı", "premium": False, "business": False, "business_plus": True},
+        {"name": "Partnyorların məkan açılışlarının təşkili", "description": "2 həftə öncədən məlumat verilməlidir", "premium": True, "business": True, "business_plus": True},
+        {"name": "Dövlət qurumlarıyla görüşlər", "description": "Müəyyən mövzularda təşkil olunan müzakirə görüşlərində iştirak", "premium": True, "business": True, "business_plus": True},
+        {"name": "Sosial fəaliyyətlərə dəvət *", "description": "İdman oyunları, intellektual yarışlar, ölkədaxili və ölkəxarici turlar və s. (ulduz - əlavə ödəniş)", "premium": True, "business": True, "business_plus": True},
+        {"name": "Marsol Academy *", "description": "Müxtəlif mövzularda təşkil olunan təlimlərdə iştirak imkanı (ulduz - əlavə ödəniş)", "premium": True, "business": True, "business_plus": True},
+        {"name": "İş Adamları Cəmiyyətinin Milli Assosiasiyası (İCMA) üzvlüyünə qəbul", "description": "İCMA üzvlüyünün xidmətləri ilə yaxından tanış olmaq üçün QR kodu oxudun.", "premium": True, "business": True, "business_plus": True},
+    ]
+
+    # Map package name (case-insensitive) to slot key in catalog
+    name_map = {
+        "premium": "premium",
+        "business": "business",
+        "business plus": "business_plus",
+        "business+": "business_plus",
+        "businessplus": "business_plus",
+    }
+
+    packages = await db.packages.find({}, {"_id": 0}).to_list(100)
+    if not packages:
+        # Create the 4 default packages so seed has something to attach to
+        defaults = [
+            {"id": str(uuid.uuid4()), "name": "Premium", "description": "Premium üzvlük paketi", "price": 2000, "invitation_count": 12, "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Business", "description": "Business üzvlük paketi", "price": 2800, "invitation_count": 15, "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Business Plus", "description": "Business+ üzvlük paketi", "price": 4500, "invitation_count": 25, "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "Sponsor", "description": "Sponsor paketi", "price": 8000, "invitation_count": 40, "created_at": datetime.now(timezone.utc).isoformat()},
+        ]
+        await db.packages.insert_many([{**p} for p in defaults])
+        packages = await db.packages.find({}, {"_id": 0}).to_list(100)
+
+    summary = []
+    for pkg in packages:
+        slot = name_map.get((pkg.get("name") or "").strip().lower())
+        if not slot:
+            continue  # Skip non-standard packages like Sponsor
+        services = []
+        for idx, row in enumerate(catalog):
+            raw = row[slot]
+            included = bool(raw)
+            value = raw if isinstance(raw, str) else ""
+            services.append({
+                "id": str(uuid.uuid4()),
+                "name": row["name"],
+                "description": row["description"],
+                "value": value,
+                "included": included,
+                "sort_order": idx,
+            })
+        await db.packages.update_one({"id": pkg["id"]}, {"$set": {"services": services}})
+        summary.append({"package": pkg.get("name"), "service_count": len(services)})
+
+    return {"seeded": summary, "catalog_size": len(catalog)}
+
 # ==================== PROJECTS MANAGEMENT ====================
 
 @api_router.get("/settings/projects")

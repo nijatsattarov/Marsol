@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { ScrollArea } from '../components/ui/scroll-area';
 import PhoneInput from '../components/PhoneInput';
 import CustomFieldsView from '../components/CustomFieldsView';
+import PackageServicesView from '../components/PackageServicesView';
 import { COUNTRIES } from '../lib/countries';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -483,10 +484,13 @@ export default function Companies() {
                 </div>
               ))}
             </TabsContent>
-            <TabsContent value="payment" className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-              <div><p className="text-slate-500 text-xs">Ümumi</p><p className="font-medium">{(v.total_amount || 0).toLocaleString()} AZN</p></div>
-              <div><p className="text-slate-500 text-xs">Ödənilib</p><p className="font-medium text-green-600">{(v.paid_amount || 0).toLocaleString()} AZN</p></div>
-              <div><p className="text-slate-500 text-xs">Borc</p><p className="font-bold text-red-600">{(v.debt_amount || 0).toLocaleString()} AZN</p></div>
+            <TabsContent value="payment" className="space-y-4 text-sm">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div><p className="text-slate-500 text-xs">Ümumi</p><p className="font-medium">{(v.total_amount || 0).toLocaleString()} AZN</p></div>
+                <div><p className="text-slate-500 text-xs">Ödənilib</p><p className="font-medium text-green-600">{(v.paid_amount || 0).toLocaleString()} AZN</p></div>
+                <div><p className="text-slate-500 text-xs">Borc</p><p className="font-bold text-red-600">{(v.debt_amount || 0).toLocaleString()} AZN</p></div>
+              </div>
+              <PackageServicesView packageName={v.package} title="Paket xidmətləri" />
             </TabsContent>
           </Tabs>
         </div>
