@@ -1,49 +1,108 @@
-<analysis>**original_problem_statement**: The user wants a comprehensive ERP/Networking Management System for Marsol Group (MMS). Marsol Group is a B2B networking company with 500+ members. The system needs to manage Companies, HR, Sales, Marketing, Projects, Organization, Finance, Reports, Meetings, Assembly, Tasks, Messages, Files, and Notes. PRODUCT REQUIREMENTS: Role-Based Access Control (RBAC), multi-module integrations, public membership forms, attendance, barter operations, AI Data Analysis, and external vendor management.
+<analysis>**original_problem_statement**: The user wants a comprehensive ERP/Networking Management System for Marsol Group (MMS). Marsol Group is a B2B networking company with 500+ members. The system needs to manage Companies, HR, Sales, Marketing, Projects, Organization, Finance, Reports, Meetings, Assembly, Tasks, Messages, Files, and Notes. PRODUCT REQUIREMENTS: Role-Based Access Control (RBAC), multi-module integrations, public membership forms, attendance, barter operations, AI Data Analysis, external vendor management, and file storage.
 
 **User's preferred language**: Azerbaijani (You MUST automatically detect the user's primary language from their messages inside the <trajectory> tag and INSTRUCT next agent to respond in **Azerbaijani** only)
 
-**what currently exists?**: A highly functional full-stack ERP (React + FastAPI + MongoDB). Recently, the application received massive updates: Role-based data visibility scopes (Özünə aid vs Tam), dynamic Sales Leads mapped to specific Project Types (Sərgi, Tur, Təlim) with auto-calculated fields, a new Project Details view, Membership Lifecycle management (Year filtering & Renewals), an Admin Approval flow for Public Forms, Payment Method tracking in Finance, and Resend email integration for system notifications.
+**what currently exists?**: A highly functional full-stack ERP (React + FastAPI + MongoDB). Recently, the application received massive updates: Resend email integration, Davamiyyət & Barter modules restructured, System Sessions tracking (login/logout/active time), Calendar view for Meetings, Cloudinary file uploads integration, Excel import for Companies (with auto package pricing & debt calculations), Unique auto-increment IDs (C0001) for Companies, and the AI Data Analyst feature was refactored to use the direct OpenAI SDK to fix Render deployment issues. 
 
 **Last working item**:
-    - Last item agent was working: Implementing  email integration for system notifications. The agent successfully installed the  package, created , hooked email sending into  (for form submissions, closed sales, and new meetings), and created an endpoint  that is polled by the frontend  to dispatch daily summary emails (contract expiries, low quotas). 
-    - Status: IN PROGRESS (Implementation is done and tested via bash/curl, but lacks final e2e/testing agent verification).
-    - Agent Testing Done: Y (via curl and bash logs)
-    - Which testing method agent to use? testing agent v3 fork (to ensure no regressions were introduced by the email hooks in backend routes).
+    - Last item agent was working: Addressing a 6-item batch request from the user. The agent was specifically working on Item #1: Cleaning up the design of the Sənədlər (Documents) tab in the HR module (fixing overlapping upload inputs).
+    - Status: IN PROGRESS
+    - Agent Testing Done: N (Context window filled right after the  edit on ).
+    - Which testing method agent to use? screenshot tool (for UI fixes), testing agent v3 fork (for backend/export changes).
     - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  Issue 1: Verify and finalize Resend Email Integration (P0)
-     - Attempted fixes: Code is implemented. Agent fixed a missing newline in  and adjusted the logger. The bash tests show the dispatch endpoint works and skips when keys/emails are missing appropriately.
-     - Next debug checklist: 
-       1. Run  to ensure the newly added  hooks in  endpoints (, , ) do not cause 500 errors or regressions.
-       2. Ensure the frontend  is correctly pinging  without causing performance issues.
-     - Why fix this issue and what will be achieved with the fix? Completes the user's request to route system notifications via email to admins and relevant curators.
-     - Status: TESTING PENDING
+  Issue 1: HR module Sənədlər (Documents) tab design layout fix (P0)
+     - Attempted fixes: Agent just performed a  in  to fix overlapping text/inputs.
+     - Next debug checklist: Take a screenshot to verify the UI in the HR employee creation modal's Sənədlər tab.
+     - Why fix this issue and what will be achieved with the fix? Completes user's request for better UX.
+     - Status: IN PROGRESS
      - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? Both
+     - Should Test frontend/backend/both after fix? Frontend (Screenshot)
      - Blocked on other issue: None
 
-**In progress Task List**:
-  None
+  Issue 2: Clean up Excel export in Üzvlər (Members) module (P1)
+     - Next debug checklist: Review  export logic and make it look clean and structured.
+     - Status: NOT STARTED
 
-**Upcoming and Future Tasks**
+  Issue 3: Add company name to Birthday Notifications (P1)
+     - Next debug checklist: Modify the  or the birthday generation block in  to include  in the notification payload/text.
+     - Status: NOT STARTED
+
+  Issue 4: Global Notification Days Settings (P1)
+     - Next debug checklist: Add a UI in  (Xəbərdarlıq/Notifications tab) to input custom day counts for all reminders (e.g., finance dues, birthdays, etc., instead of just membership). Update the backend logic in  to fetch and use these settings.
+     - Status: NOT STARTED
+
+  Issue 5: Universal column selector for ALL Excel exports (P1)
+     - Next debug checklist: The agent previously added a column picker for . Extract this into a reusable component and apply it to all modules that have an export function. Ensure future columns are easily included.
+     - Status: NOT STARTED
+
+  Issue 6: Clean up Settings menu design (P1)
+     - Next debug checklist: Review  UI and improve the aesthetic/layout of the menu tabs.
+     - Status: NOT STARTED
+
+**In progress Task List**:
+  None (All are tracked as issues above).
+
+**Upcoming and Future Tasks**:
     Upcoming Tasks:
     - Task 1 (P1): Marketing (Marketinq) module implementation.
     
     Future Tasks:
-    - Task 2 (P2): PDF Reports generation / Export enhancements.
-    - Task 3 (P2): Fully build out remaining placeholder modules (Fayllar, Qeydlər).
+    - Task 2 (P2): Excel import feature for Members, Sales Leads, and HR (Agent proposed this, user might want it later).
+    - Task 3 (P2): PDF Reports generation / Export enhancements.
 
 **Completed work in this session**
-- Settings -> Projects mapping (Project Name to Project Type mapping) (DONE)
-- Role-based View Scopes: Added Tam (All) and Özünə aid (Own) scopes for roles across Members, Tasks, Meetings, etc. (DONE)
-- Dynamic Sales Lead fields: Sərgi (requires kv/m, stand num), Tur, Təlim integrations from Sales to Projects (DONE)
-- Extracted Project details from Modal into a new  page with Sales tables (DONE)
-- Added Layihələr tab to Finance module with dynamic payment capabilities (DONE)
-- Obligation History Excel Export (DONE)
-- Membership Lifecycle: Added Year filtering to Members/Obligations and a Renew (Yenilə) workflow for expired contracts (DONE)
-- Public Form Admin Approval workflow: Added pending form badges and approve/reject flow to Company Database (DONE)
-- Added  (Köçürmə, Nəğd, Posterminal, CTC) to Finance tables and Modals (DONE)
+- Resend email integration finalized & verified (DONE)
+- Sidebar Restructure: HR -> Davamiyyət, Maliyyə -> Barter (DONE)
+- System Sessions tracking (login/logout/active time) inside Davamiyyət (DONE)
+- Marsol_company choice field added to Finance & Settings (DONE)
+- Calendar view for Meetings (DONE)
+- AI Data Analyst refactored to use direct usage: openai [-h] [-v] [-b API_BASE] [-k API_KEY] [-p PROXY [PROXY ...]]
+              [-o ORGANIZATION] [-t {openai,azure}]
+              [--api-version API_VERSION] [--azure-endpoint AZURE_ENDPOINT]
+              [--azure-ad-token AZURE_AD_TOKEN] [-V]
+              {api,tools,migrate,grit} ...
+
+positional arguments:
+  {api,tools,migrate,grit}
+    api                 Direct API calls
+    tools               Client side tools for convenience
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Set verbosity.
+  -b API_BASE, --api-base API_BASE
+                        What API base url to use.
+  -k API_KEY, --api-key API_KEY
+                        What API key to use.
+  -p PROXY [PROXY ...], --proxy PROXY [PROXY ...]
+                        What proxy to use.
+  -o ORGANIZATION, --organization ORGANIZATION
+                        Which organization to run as (will use your default
+                        organization if not specified)
+  -t {openai,azure}, --api-type {openai,azure}
+                        The backend API to call, must be `openai` or `azure`
+  --api-version API_VERSION
+                        The Azure API version, e.g.
+                        'https://learn.microsoft.com/en-us/azure/ai-
+                        services/openai/reference#rest-api-versioning'
+  --azure-endpoint AZURE_ENDPOINT
+                        The Azure endpoint, e.g.
+                        'https://endpoint.openai.azure.com'
+  --azure-ad-token AZURE_AD_TOKEN
+                        A token from Azure Active Directory,
+                        https://www.microsoft.com/en-
+                        us/security/business/identity-access/microsoft-entra-
+                        id
+  -V, --version         show program's version number and exit SDK, removing  to fix Render deployment build failure (DONE)
+- Assembly Modal Cursor Loss Bug Fixed (moved inner components to module scope) (DONE)
+- Cloudinary file/image upload integration () (DONE)
+- Excel Import for Companies (auto-maps packages, calculates debts) (DONE)
+- Dashboard finance charts removed (DONE)
+- Unique IDs (C0001) added for all Companies + automated backfill (DONE)
+- Custom Fields read-only View added to detail modals (Companies, HR) (DONE)
+- Phone inputs with Country prefixes (DONE)
 
 **Earlier issues found/mentioned but not fixed**
 None.
@@ -57,73 +116,157 @@ None.
 
 
 **Key Technical Concepts**
-- Frontend: React 18, Tailwind CSS, Shadcn UI, XLSX (for exports).
+- Frontend: React 18, Tailwind CSS, Shadcn UI, XLSX.
 - Backend: FastAPI, PyMongo (Motor), JWT Auth.
-- Communications:  Python SDK for email routing.
+- External Integrations: Cloudinary (File storage), Resend (Emails), OpenAI SDK (AI Analysis).
 
 **key DB schema**
-  - : Added  array to track renewals. Added  for Public Form approval queue.
-  - : Added , , ,  for specific project-based sales.
-  -  & : Added .
+  - : Added  (e.g. C0001), , , , .
+  - : Tracks login/logout times and durations.
+  - : Tracks sent emails to prevent spam.
 
 **changes in tech stack**
-  - Added  python package for email integrations.
+  - Added  SDK for file uploads.
+  - Removed  and  from  to solve Render deployment issues. Switched AI Data Analyst to use the standard usage: openai [-h] [-v] [-b API_BASE] [-k API_KEY] [-p PROXY [PROXY ...]]
+              [-o ORGANIZATION] [-t {openai,azure}]
+              [--api-version API_VERSION] [--azure-endpoint AZURE_ENDPOINT]
+              [--azure-ad-token AZURE_AD_TOKEN] [-V]
+              {api,tools,migrate,grit} ...
+
+positional arguments:
+  {api,tools,migrate,grit}
+    api                 Direct API calls
+    tools               Client side tools for convenience
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Set verbosity.
+  -b API_BASE, --api-base API_BASE
+                        What API base url to use.
+  -k API_KEY, --api-key API_KEY
+                        What API key to use.
+  -p PROXY [PROXY ...], --proxy PROXY [PROXY ...]
+                        What proxy to use.
+  -o ORGANIZATION, --organization ORGANIZATION
+                        Which organization to run as (will use your default
+                        organization if not specified)
+  -t {openai,azure}, --api-type {openai,azure}
+                        The backend API to call, must be `openai` or `azure`
+  --api-version API_VERSION
+                        The Azure API version, e.g.
+                        'https://learn.microsoft.com/en-us/azure/ai-
+                        services/openai/reference#rest-api-versioning'
+  --azure-endpoint AZURE_ENDPOINT
+                        The Azure endpoint, e.g.
+                        'https://endpoint.openai.azure.com'
+  --azure-ad-token AZURE_AD_TOKEN
+                        A token from Azure Active Directory,
+                        https://www.microsoft.com/en-
+                        us/security/business/identity-access/microsoft-entra-
+                        id
+  -V, --version         show program's version number and exit SDK directly.
 
 **All files of reference** 
--  (Created to handle Resend API logic)
--  (Updated extensively with new endpoints and hooks)
--  (Updated to poll email dispatch)
--  (Created for detailed project view)
+- 
+-  
+- 
+- 
+- 
+- 
 
 **Areas that need refactoring**:
--  is over 4,200 lines long. It urgently needs to be split into discrete API routers (, , , ).
+-  is over 4,800 lines long. It urgently needs to be split into discrete API routers (, , etc.). Use extreme caution when using  here to avoid breaking offsets.
 
 **key api endpoints**
--  (POST)
--  (POST)
--  (GET updated with  filter)
+- 
+-  (Redirects to Cloudinary)
+- 
+- 
+- 
 
 **Critical Info for New Agent**
 - **Language**: You MUST communicate entirely in **Azerbaijani**.
-- **Refactoring Warning**:  is becoming difficult to manage. Be very careful with  here.
-- **Emails**: The  is already present in . Emails are dispatched to  and respective curator emails. 
+- **AI Data Analyst**: The backend now uses the direct usage: openai [-h] [-v] [-b API_BASE] [-k API_KEY] [-p PROXY [PROXY ...]]
+              [-o ORGANIZATION] [-t {openai,azure}]
+              [--api-version API_VERSION] [--azure-endpoint AZURE_ENDPOINT]
+              [--azure-ad-token AZURE_AD_TOKEN] [-V]
+              {api,tools,migrate,grit} ...
+
+positional arguments:
+  {api,tools,migrate,grit}
+    api                 Direct API calls
+    tools               Client side tools for convenience
+
+options:
+  -h, --help            show this help message and exit
+  -v, --verbose         Set verbosity.
+  -b API_BASE, --api-base API_BASE
+                        What API base url to use.
+  -k API_KEY, --api-key API_KEY
+                        What API key to use.
+  -p PROXY [PROXY ...], --proxy PROXY [PROXY ...]
+                        What proxy to use.
+  -o ORGANIZATION, --organization ORGANIZATION
+                        Which organization to run as (will use your default
+                        organization if not specified)
+  -t {openai,azure}, --api-type {openai,azure}
+                        The backend API to call, must be `openai` or `azure`
+  --api-version API_VERSION
+                        The Azure API version, e.g.
+                        'https://learn.microsoft.com/en-us/azure/ai-
+                        services/openai/reference#rest-api-versioning'
+  --azure-endpoint AZURE_ENDPOINT
+                        The Azure endpoint, e.g.
+                        'https://endpoint.openai.azure.com'
+  --azure-ad-token AZURE_AD_TOKEN
+                        A token from Azure Active Directory,
+                        https://www.microsoft.com/en-
+                        us/security/business/identity-access/microsoft-entra-
+                        id
+  -V, --version         show program's version number and exit SDK with a user-provided OpenAI API key (). DO NOT attempt to reinstall  as it breaks the user's Render deployment. 
+- **Context Continuation**: The agent was in the middle of executing a 6-item list provided by the user in the final message. Do not ask the user for what to do next until you finish the items listed under **All Pending/In progress Issue list**.
 
 **documents and test reports created in this job**
   -  (Updated)
-  -  to  (Record of rigorous Testing Agent passes for new modules, achieving 100% backend/frontend success rates).
+  -  to  
 
 **Last 10 User Messages and any pending HUMAN messages** 
- - *Message 531 (Completed)*: User provided Resend API keys, confirmed domains, and specified that admins and specific users should get emails.
- - *Message 526 (Completed)*: User requested integration with resend.com for system notifications.
- - *Message 382 (Completed)*: User asked to add Payment Method (Köçürmə, Nəğd, Posterminal, CTC) to Finance and add an Admin Approval flow for the Public Form submissions.
- - *Message 284 (Completed)*: User requested Year filtering for Members/Obligations and a workflow to Renew (Yenilə) expired memberships without losing historical data.
- - *Message 271 (Completed)*: User requested Excel export for Obligation History.
- - *Message 214 (Completed)*: User requested: Projects to open in a new page (not modal), Sərgi sales to auto-calculate total based on sq/m price, and Finance module to display project tables similarly to Incomes.
- - *Message 130 (Completed)*: User provided detailed logic for Sales -> Projects routing. Stand sales go to Sərgi, Tour to Turlara, etc. Requires new fields in Sales modal based on type.
- - *Message 42 (Completed)*: User reported RBAC logic failures: Managers couldn't see their own tasks/members properly. Agent implemented  functionality.
+ - *Message 844 (PENDING)*: User provided a 6-item batch request: 1. Clean HR document layout, 2. Clean Members Excel export, 3. Add company to bday notification, 4. Global reminder days config in Settings, 5. Universal Excel column picker, 6. Clean up Settings menu design.
+ - *Message 634 (Completed)*: User provided a 10-item batch request including Country prefixes, birthday reminders, custom fields in detail views, removing finance charts, auto-generating C0001 IDs, etc.
+ - *Message 623 (Completed)*: User asked to add Paid Amount column logic to Excel import.
+ - *Message 608 (Completed)*: User reported imported companies don't show package pricing automatically. 
+ - *Message 529 (Completed)*: User reported package not mapping to contract array, and missing company names in Members table.
+ - *Message 455 (Completed)*: User requested Excel import function for companies.
+ - *Message 370 (Completed)*: User provided Cloudinary credentials and requested integration for file/image storage.
+ - *Message 335 (Completed)*: User reported a bug: text inputs losing focus (cursor jumping) in the Assembly modal.
+ - *Message 333 (Completed)*: User got a 429 quota error from OpenAI. (Agent explained how to add balance).
 
 **Project Health Check:**
-- Broken: None.
+- Broken: None known.
 - Mocked: None.
 
 **3rd Party Integrations** 
-- Emergent LLM Key — Uses Claude Sonnet 4.5 via  (AI Data Analyst).
-- Resend — Requires User API Key (Key is present in ).
+- OpenAI () — Requires User API Key (Replaced Emergent Key for Render compatibility).
+- Resend (Emails) — Requires User API Key.
+- Cloudinary (File storage) — Requires User API Key.
 
 **Testing status**
-  - Testing agent used after significant changes: YES (Iterations 25 through 30 were extensively tested. Iter 30 achieved 14/14 Pytest passes).
+  - Testing agent used after significant changes: YES (Heavily used, passing up to Iteration 36).
   - Troubleshoot agent used after agent stuck in loop: NO
   - Test files created: 
-  - Known regressions: None currently known, but email implementation needs final testing agent run.
+  - Known regressions: None.
 
 **Credentials to test flow:**
 Check . (admin@marsol.az or settings@marsol.az / marsol123, satis@marsol.az / marsol123).
 
 **What agent forgot to execute**
-The agent successfully wrote and bash-tested the  email integration but did not run  or finish the task before the context window filled up.
+The agent just completed the code edit for item #1 of the user's latest 6-item list (HR Sənədlər layout fix) but context ran out before verifying it via screenshot and moving to items #2 through #6.
 
 **Debugging checklist for current issue**
-    Issue: Finalize Resend Email Integration Testing
-    Frontend files to check: None needed directly, though verify  interval doesn't spam the server.
-    Backend files to check: , 
-    Action: Run  to ensure the newly added email hooks in the backend routes (, , ) do not break existing functionality. Once clear, run the  tool.</analysis>
+    Issue: Complete the user's 6-item batch request.
+    Frontend files to check: , , .
+    Backend files to check:  (Notification endpoints).
+    Action: 
+    1. Take a screenshot of the Sənədlər tab in the HR employee creation modal to verify the layout fix the previous agent just attempted.
+    2. Address the remaining 5 items sequentially.
+    3. Run  after completing the batch.</analysis>

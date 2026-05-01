@@ -18,6 +18,7 @@ import CustomFieldsView from '../components/CustomFieldsView';
 import { COUNTRIES } from '../lib/countries';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import ExcelColumnPicker from '../components/ExcelColumnPicker';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -328,26 +329,7 @@ export default function Companies() {
     { key: 'finance_note', label: 'Maliyyə qeydi', width: 25 },
   ];
   const DEFAULT_EXPORT_KEYS = ['no', 'display_id', 'brand_name', 'sector', 'package', 'owner_name', 'owner_phone', 'marsol_representative', 'debt_amount', 'status'];
-  const [exportColumns, setExportColumns] = useState(DEFAULT_EXPORT_KEYS);
   const [showExportModal, setShowExportModal] = useState(false);
-
-  const performExport = () => {
-    const cols = ALL_EXPORT_COLUMNS.filter(c => exportColumns.includes(c.key));
-    const data = filteredCompanies.map((c, i) => {
-      const row = {};
-      cols.forEach(col => {
-        row[col.label] = col.get ? col.get(c, i) : (c[col.key] ?? '');
-      });
-      return row;
-    });
-    const ws = XLSX.utils.json_to_sheet(data);
-    ws['!cols'] = cols.map(c => ({ wch: c.width }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Şirkətlər');
-    XLSX.writeFile(wb, `sirketler_${new Date().toISOString().split('T')[0]}.xlsx`);
-    toast.success(`${data.length} şirkət ixrac edildi (${cols.length} sütun)`);
-    setShowExportModal(false);
-  };
 
   const exportToExcel = () => setShowExportModal(true);
 
@@ -907,47 +889,17 @@ export default function Companies() {
       </DialogContent></Dialog>
 
       {/* Export column picker */}
-      <Dialog open={showExportModal} onOpenChange={(o) => !o && setShowExportModal(false)}>
-        <DialogContent className="max-w-xl" data-testid="export-picker-dialog">
-          <DialogHeader>
-            <DialogTitle style={{ color: '#3D4F6F' }}>Excel ixrac — sütunları seçin</DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center justify-between text-xs mb-2">
-            <span className="text-slate-500">{exportColumns.length} sütun seçilib · {filteredCompanies.length} şirkət</span>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setExportColumns(ALL_EXPORT_COLUMNS.map(c => c.key))} className="text-[#9ACD32] hover:underline">Hamısı</button>
-              <span className="text-slate-300">·</span>
-              <button type="button" onClick={() => setExportColumns(DEFAULT_EXPORT_KEYS)} className="text-[#3D4F6F] hover:underline">Default</button>
-              <span className="text-slate-300">·</span>
-              <button type="button" onClick={() => setExportColumns([])} className="text-red-500 hover:underline">Sıfırla</button>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-1.5 max-h-[50vh] overflow-y-auto border rounded-md p-3 bg-slate-50">
-            {ALL_EXPORT_COLUMNS.map(col => {
-              const checked = exportColumns.includes(col.key);
-              return (
-                <label key={col.key} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${checked ? 'bg-white border border-[#9ACD32]/30' : 'hover:bg-white'}`} data-testid={`export-col-${col.key}`}>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(e) => {
-                      setExportColumns(prev => e.target.checked ? [...prev, col.key] : prev.filter(k => k !== col.key));
-                    }}
-                    className="accent-[#9ACD32] w-3.5 h-3.5"
-                  />
-                  <span className="text-xs text-[#3D4F6F]">{col.label}</span>
-                </label>
-              );
-            })}
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setShowExportModal(false)}>Ləğv et</Button>
-            <Button onClick={performExport} disabled={exportColumns.length === 0} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="export-confirm-btn">
-              <Download className="w-4 h-4 mr-1" />İxrac et
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ExcelColumnPicker
+        open={showExportModal}
+        onOpenChange={setShowExportModal}
+        columns={ALL_EXPORT_COLUMNS}
+        defaultKeys={DEFAULT_EXPORT_KEYS}
+        rows={filteredCompanies}
+        sheetName="Şirkətlər"
+        fileName="sirketler"
+        storageKey="export_cols_companies"
+        onSuccess={({ rows, cols }) => toast.success(`${rows} şirkət ixrac edildi (${cols} sütun)`)}
+      />
     </div>
   );
 }

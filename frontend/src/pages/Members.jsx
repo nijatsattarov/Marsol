@@ -42,6 +42,7 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import { ScrollArea } from '../components/ui/scroll-area';
+import ExcelColumnPicker from '../components/ExcelColumnPicker';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -293,32 +294,31 @@ export default function Members() {
     });
   };
 
-  const exportToExcel = () => {
-    const csvContent = [
-      ['Şirkət adı', 'Sektor', 'Paket', 'Kurator', 'Ölçü', 'Rəhbər', 'Rəhbər Tel.', 'Əlaqədar', 'Əlaqədar Tel.', 'Email', 'Layihələr'].join(','),
-      ...filteredMembers.map(m => [
-        `"${m.company_name}"`,
-        `"${m.sector}"`,
-        `"${m.package}"`,
-        `"${m.curator}"`,
-        `"${m.business_size}"`,
-        `"${m.director_name}"`,
-        `"${m.director_phone}"`,
-        `"${m.contact_person}"`,
-        `"${m.contact_phone}"`,
-        `"${m.company_email}"`,
-        `"${(m.projects || []).join('; ')}"`
-      ].join(','))
-    ].join('\n');
-
-    const BOM = '\uFEFF';
-    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `marsol_uzvler_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    toast.success('Excel faylı yükləndi');
-  };
+  const MEMBER_EXPORT_COLUMNS = [
+    { key: 'no', label: '№', width: 5, get: (_, i) => i + 1 },
+    { key: 'display_id', label: 'ID', width: 10 },
+    { key: 'company_name', label: 'Şirkət adı', width: 25 },
+    { key: 'sector', label: 'Sektor', width: 15 },
+    { key: 'sub_sector', label: 'Alt sektor', width: 15 },
+    { key: 'package', label: 'Paket', width: 12 },
+    { key: 'curator', label: 'Kurator', width: 18 },
+    { key: 'business_size', label: 'Şirkət ölçüsü', width: 12 },
+    { key: 'director_name', label: 'Rəhbər', width: 22 },
+    { key: 'director_phone', label: 'Rəhbər telefon', width: 18 },
+    { key: 'contact_person', label: 'Əlaqədar şəxs', width: 22 },
+    { key: 'contact_phone', label: 'Əlaqədar telefon', width: 18 },
+    { key: 'company_email', label: 'E-poçt', width: 25 },
+    { key: 'membership_year', label: 'Üzvlük ili', width: 10 },
+    { key: 'contract_start_date', label: 'Müqavilə başlama', width: 14 },
+    { key: 'contract_end_date', label: 'Müqavilə bitmə', width: 14 },
+    { key: 'contract_status', label: 'Müqavilə statusu', width: 14 },
+    { key: 'invitations_used', label: 'İstifadə olunan dəvət', width: 15, get: (m) => Number(m.invitations_used || 0) },
+    { key: 'invitations_quota', label: 'Ümumi dəvət kvotası', width: 16, get: (m) => Number(m.invitations_quota || 0) },
+    { key: 'projects', label: 'Layihələr', width: 30, get: (m) => (m.projects || []).join('; ') },
+  ];
+  const MEMBER_DEFAULT_KEYS = ['no', 'display_id', 'company_name', 'sector', 'package', 'curator', 'director_name', 'contact_person', 'contact_phone', 'contract_status'];
+  const [showExportModal, setShowExportModal] = useState(false);
+  const exportToExcel = () => setShowExportModal(true);
 
   const clearFilters = () => {
     setFilters({
@@ -923,6 +923,18 @@ export default function Members() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ExcelColumnPicker
+        open={showExportModal}
+        onOpenChange={setShowExportModal}
+        columns={MEMBER_EXPORT_COLUMNS}
+        defaultKeys={MEMBER_DEFAULT_KEYS}
+        rows={filteredMembers}
+        sheetName="Üzvlər"
+        fileName="marsol_uzvler"
+        storageKey="export_cols_members"
+        onSuccess={({ rows, cols }) => toast.success(`${rows} üzv ixrac edildi (${cols} sütun)`)}
+      />
     </div>
   );
 }

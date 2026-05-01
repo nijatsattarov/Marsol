@@ -2725,6 +2725,61 @@ async def update_setting_list(key: str, data: dict, current_user: dict = Depends
     await db.setting_lists.update_one({"key": key}, {"$set": {"key": key, "values": values, "updated_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
     return {"key": key, "values": values}
 
+# ==== Global Notification Days Settings ====
+NOTIFICATION_DEFAULTS = {
+    "membership_warning_days": 10,   # üzvlük bitməsinə neçə gün qalmış xəbərdarlıq
+    "contract_expiry_days": 30,      # müqavilə bitməsi xəbərdarlığı
+    "birthday_advance_days": 1,      # ad günündən əvvəl xəbərdarlıq (gün)
+    "debt_overdue_high_days": 30,    # neçə gündən sonra borc HIGH severity olur
+    "meeting_reminder_high_days": 1, # görüş xatırlatması — neçə gün qalmış HIGH
+    "meeting_reminder_medium_days": 3,
+}
+
+async def get_notification_settings():
+    doc = await db.app_config.find_one({"key": "notification_settings"}, {"_id": 0})
+    cfg = dict(NOTIFICATION_DEFAULTS)
+    if doc and isinstance(doc.get("values"), dict):
+        for k, v in doc["values"].items():
+            try:
+                cfg[k] = int(v)
+            except (ValueError, TypeError):
+                pass
+    # Backward-compat: legacy `setting_lists.membership_warning_days`
+    legacy = await db.setting_lists.find_one({"key": "membership_warning_days"}, {"_id": 0})
+    if legacy and legacy.get("values"):
+        try:
+            cfg["membership_warning_days"] = int(legacy["values"][0])
+        except (ValueError, IndexError, TypeError):
+            pass
+    return cfg
+
+@api_router.get("/settings/notification-config")
+async def get_notification_config(current_user: dict = Depends(get_current_user)):
+    return await get_notification_settings()
+
+@api_router.put("/settings/notification-config")
+async def update_notification_config(data: dict, current_user: dict = Depends(check_permission("settings", "write"))):
+    clean = {}
+    for k in NOTIFICATION_DEFAULTS:
+        if k in data:
+            try:
+                clean[k] = int(data[k])
+            except (ValueError, TypeError):
+                clean[k] = NOTIFICATION_DEFAULTS[k]
+    await db.app_config.update_one(
+        {"key": "notification_settings"},
+        {"$set": {"key": "notification_settings", "values": clean, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    # Mirror membership_warning_days into legacy setting_lists for backward compat
+    if "membership_warning_days" in clean:
+        await db.setting_lists.update_one(
+            {"key": "membership_warning_days"},
+            {"$set": {"key": "membership_warning_days", "values": [clean["membership_warning_days"]]}},
+            upsert=True,
+        )
+    return await get_notification_settings()
+
 @api_router.get("/options/all")
 async def get_all_options(current_user: dict = Depends(get_current_user)):
     # Get dynamic data from database
@@ -3761,6 +3816,7 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
     notifications = []
     now = datetime.now(timezone.utc)
     today = now.strftime("%Y-%m-%d")
+    cfg = await get_notification_settings()
     
     # 1. Overdue debts (borclu şirkətlər)
     debtors = await db.companies.find({"debt_amount": {"$gt": 0}}, {"_id": 0}).to_list(500)
@@ -3778,7 +3834,7 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
             notifications.append({
                 "id": f"debt-{c['id']}",
                 "type": "debt_overdue",
-                "severity": "high" if days_overdue > 30 else "medium",
+                "severity": "high" if days_overdue > cfg["debt_overdue_high_days"] else "medium",
                 "title": f"Gecikmiş ödəniş: {c['brand_name']}",
                 "message": f"{c['debt_amount']:,.0f} AZN borc — {days_overdue} gün gecikib",
                 "company_id": c["id"],
@@ -3814,7 +3870,7 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
                     "company_id": c["id"],
                     "date": today
                 })
-            elif diff <= 30:
+            elif diff <= cfg["contract_expiry_days"]:
                 notifications.append({
                     "id": f"contract-expiring-{c['id']}",
                     "type": "contract_expiring",
@@ -3856,9 +3912,9 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
                 diff = (rd - now.replace(tzinfo=None)).days
                 if diff < 0:
                     severity = "high"
-                elif diff <= 1:
+                elif diff <= cfg["meeting_reminder_high_days"]:
                     severity = "high"
-                elif diff <= 3:
+                elif diff <= cfg["meeting_reminder_medium_days"]:
                     severity = "medium"
             except (ValueError, TypeError):
                 pass
@@ -3876,13 +3932,7 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
         })
 
     # 4. Membership expiry warnings (üzvlük bitmə xəbərdarlığı)
-    warning_days_doc = await db.setting_lists.find_one({"key": "membership_warning_days"}, {"_id": 0})
-    warning_days = 10
-    if warning_days_doc and warning_days_doc.get("values"):
-        try:
-            warning_days = int(warning_days_doc["values"][0])
-        except (ValueError, IndexError):
-            pass
+    warning_days = cfg["membership_warning_days"]
     expiring = await db.companies.find({"contract_end_date": {"$ne": ""}}, {"_id": 0, "id": 1, "brand_name": 1, "contract_end_date": 1, "curator": 1}).to_list(500)
     for c in expiring:
         end_str = c.get("contract_end_date")
@@ -3914,12 +3964,15 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
         except (ValueError, TypeError):
             pass
 
-    # 5. Birthday reminders (1 day before + on the day) — for ALL contacts:
+    # 5. Birthday reminders (configured advance days + on the day) — for ALL contacts:
     # company owners, representatives, contact_persons, employees, and
     # contact_lists entries. We compare month+day so the reminder fires every
     # year regardless of birth year.
     today_md = now.strftime("%m-%d")
-    tomorrow_md = (now + timedelta(days=1)).strftime("%m-%d")
+    advance_days = max(int(cfg.get("birthday_advance_days") or 0), 0)
+    advance_md_set = set()
+    for d in range(1, advance_days + 1):
+        advance_md_set.add((now + timedelta(days=d)).strftime("%m-%d"))
 
     def _md(date_str):
         if not date_str:
@@ -3929,22 +3982,36 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
         except (ValueError, TypeError):
             return None
 
-    def _bday_notif(person_name, role, source_type, source_id, bday_str, comp_id=None):
+    def _bday_notif(person_name, role, source_type, source_id, bday_str, comp_id=None, company_name=None):
         md = _md(bday_str)
-        if md not in (today_md, tomorrow_md):
+        if md is None:
             return None
-        when = "Bu gün" if md == today_md else "Sabah"
-        sev = "high" if md == today_md else "medium"
-        # Year is part of the id so the same person triggers a fresh
-        # notification each year (idempotent only within the current year).
-        anchor_year = now.year if md == today_md else (now + timedelta(days=1)).year
+        if md == today_md:
+            when = "Bu gün"
+            sev = "high"
+            anchor_year = now.year
+        elif md in advance_md_set:
+            # Calculate which day-ahead this is
+            try:
+                days_ahead = next((d for d in range(1, advance_days + 1) if (now + timedelta(days=d)).strftime("%m-%d") == md), 1)
+            except (ValueError, TypeError):
+                days_ahead = 1
+            when = "Sabah" if days_ahead == 1 else f"{days_ahead} gün sonra"
+            sev = "medium"
+            anchor_year = (now + timedelta(days=days_ahead)).year
+        else:
+            return None
+        msg = f"{role} — {bday_str}"
+        if company_name:
+            msg = f"{role} ({company_name}) — {bday_str}"
         return {
             "id": f"bday-{anchor_year}-{source_type}-{source_id}-{md}",
             "type": "birthday",
             "severity": sev,
             "title": f"🎂 {when} ad günü: {person_name}",
-            "message": f"{role} — {bday_str}",
+            "message": msg,
             "company_id": comp_id,
+            "company_name": company_name,
             "date": today,
         }
 
@@ -3961,22 +4028,23 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
     ).to_list(2000)
     for c in bday_companies:
         cid = c["id"]
+        cname = c.get("brand_name") or ""
         # Single-owner shortcut
         if c.get("owner_birth_date"):
-            n = _bday_notif(c.get("owner_name", ""), "Sahibkar", "owner", cid, c["owner_birth_date"], cid)
+            n = _bday_notif(c.get("owner_name", ""), "Sahibkar", "owner", cid, c["owner_birth_date"], cid, cname)
             if n: notifications.append(n)
         # Multiple-owners array
         for idx, o in enumerate(c.get("owners") or []):
             if o.get("birth_date"):
                 pname = f"{o.get('first_name','')} {o.get('last_name','')}".strip() or o.get('name','')
-                n = _bday_notif(pname, "Sahibkar", f"owner-{cid}", str(idx), o["birth_date"], cid)
+                n = _bday_notif(pname, "Sahibkar", f"owner-{cid}", str(idx), o["birth_date"], cid, cname)
                 if n: notifications.append(n)
         if c.get("representative_birth_date"):
-            n = _bday_notif(c.get("representative_name", ""), "Nümayəndə", "rep", cid, c["representative_birth_date"], cid)
+            n = _bday_notif(c.get("representative_name", ""), "Nümayəndə", "rep", cid, c["representative_birth_date"], cid, cname)
             if n: notifications.append(n)
         if c.get("contact_birth_date"):
             full = f"{c.get('contact_first_name','')} {c.get('contact_last_name','')}".strip()
-            n = _bday_notif(full, "Əlaqəli şəxs", "contact", cid, c["contact_birth_date"], cid)
+            n = _bday_notif(full, "Əlaqəli şəxs", "contact", cid, c["contact_birth_date"], cid, cname)
             if n: notifications.append(n)
 
     # 5b. Employees
@@ -3986,7 +4054,7 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
     ).to_list(1000)
     for e in employees:
         full = f"{e.get('first_name','')} {e.get('last_name','')}".strip()
-        n = _bday_notif(full, "Əməkdaş", "emp", e["id"], e["birth_date"])
+        n = _bday_notif(full, "Əməkdaş", "emp", e["id"], e["birth_date"], None, "Marsol Group")
         if n: notifications.append(n)
 
     # 5c. Contact list entries
@@ -3996,7 +4064,8 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
     ).to_list(2000)
     for ct in contacts:
         full = f"{ct.get('name','')} {ct.get('surname','')}".strip()
-        n = _bday_notif(full, ct.get("company") or "Kontakt", "ctc", ct["id"], ct["birthday"])
+        comp_label = ct.get("company") or ""
+        n = _bday_notif(full, "Kontakt", "ctc", ct["id"], ct["birthday"], None, comp_label)
         if n: notifications.append(n)
 
     # Sort by severity

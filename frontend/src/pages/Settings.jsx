@@ -91,6 +91,14 @@ export default function Settings() {
   const [saleTypes, setSaleTypes] = useState([]);
   const [newSaleType, setNewSaleType] = useState('');
   const [warningDays, setWarningDays] = useState('10');
+  const [notifyConfig, setNotifyConfig] = useState({
+    membership_warning_days: 10,
+    contract_expiry_days: 30,
+    birthday_advance_days: 1,
+    debt_overdue_high_days: 30,
+    meeting_reminder_high_days: 1,
+    meeting_reminder_medium_days: 3,
+  });
   const [roles, setRoles] = useState([]);
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
@@ -167,6 +175,10 @@ export default function Settings() {
       setLeadSources(lsRes.data || []);
       setSaleTypes(stRes.data || []);
       setWarningDays((wdRes.data && wdRes.data[0]) || '10');
+      try {
+        const ncRes = await axios.get(`${API}/settings/notification-config`, { headers });
+        setNotifyConfig(prev => ({ ...prev, ...(ncRes.data || {}) }));
+      } catch { /* defaults */ }
       setRoles(rolesRes.data || []);
       setForumFields(ffRes.data.fields || []);
       setForumEnabled(ffRes.data.enabled || []);
@@ -482,26 +494,59 @@ export default function Settings() {
         <p className="text-slate-500 text-sm mt-1">Sistem parametrləri və konfiqurasiya</p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-6 flex flex-wrap gap-1">
-          <TabsTrigger value="packages" className="text-xs sm:text-sm" data-testid="tab-packages"><Package className="w-4 h-4 mr-1 hidden sm:inline" />Paketlər</TabsTrigger>
-          <TabsTrigger value="projects" className="text-xs sm:text-sm" data-testid="tab-projects"><FolderKanban className="w-4 h-4 mr-1 hidden sm:inline" />Layihələr</TabsTrigger>
-          <TabsTrigger value="sectors" className="text-xs sm:text-sm" data-testid="tab-sectors"><Building2 className="w-4 h-4 mr-1 hidden sm:inline" />Sektorlar</TabsTrigger>
-          <TabsTrigger value="sub-sectors" className="text-xs sm:text-sm" data-testid="tab-sub-sectors"><Layers className="w-4 h-4 mr-1 hidden sm:inline" />Alt Sektorlar</TabsTrigger>
-          <TabsTrigger value="positions" className="text-xs sm:text-sm" data-testid="tab-positions"><Briefcase className="w-4 h-4 mr-1 hidden sm:inline" />Vəzifələr</TabsTrigger>
-          <TabsTrigger value="activities" className="text-xs sm:text-sm" data-testid="tab-activities"><Activity className="w-4 h-4 mr-1 hidden sm:inline" />Fəaliyyətlər</TabsTrigger>
-          <TabsTrigger value="regions" className="text-xs sm:text-sm" data-testid="tab-regions"><Building2 className="w-4 h-4 mr-1 hidden sm:inline" />Regionlar</TabsTrigger>
-          <TabsTrigger value="marsol-companies" className="text-xs sm:text-sm" data-testid="tab-marsol-companies"><Building className="w-4 h-4 mr-1 hidden sm:inline" />Müəssisələr</TabsTrigger>
-          <TabsTrigger value="meeting-types" className="text-xs sm:text-sm" data-testid="tab-meeting-types"><Calendar className="w-4 h-4 mr-1 hidden sm:inline" />Görüş növləri</TabsTrigger>
-          <TabsTrigger value="lead-sources" className="text-xs sm:text-sm" data-testid="tab-lead-sources"><Target className="w-4 h-4 mr-1 hidden sm:inline" />Lead mənbələri</TabsTrigger>
-          <TabsTrigger value="sale-types" className="text-xs sm:text-sm" data-testid="tab-sale-types"><TrendingUp className="w-4 h-4 mr-1 hidden sm:inline" />Satış növləri</TabsTrigger>
-          <TabsTrigger value="warning-days" className="text-xs sm:text-sm" data-testid="tab-warning-days"><Calendar className="w-4 h-4 mr-1 hidden sm:inline" />Xəbərdarlıq</TabsTrigger>
-          <TabsTrigger value="forum-fields" className="text-xs sm:text-sm" data-testid="tab-forum-fields"><Eye className="w-4 h-4 mr-1 hidden sm:inline" />Forum sahələri</TabsTrigger>
-          <TabsTrigger value="custom-fields" className="text-xs sm:text-sm" data-testid="tab-custom-fields"><Columns3 className="w-4 h-4 mr-1 hidden sm:inline" />Xüsusi sahələr</TabsTrigger>
-          <TabsTrigger value="roles" className="text-xs sm:text-sm" data-testid="tab-roles"><Shield className="w-4 h-4 mr-1 hidden sm:inline" />Rollar</TabsTrigger>
-          <TabsTrigger value="users" className="text-xs sm:text-sm" data-testid="tab-users"><Users className="w-4 h-4 mr-1 hidden sm:inline" />İstifadəçilər</TabsTrigger>
-          <TabsTrigger value="branding" className="text-xs sm:text-sm" data-testid="tab-branding"><ImageIcon className="w-4 h-4 mr-1 hidden sm:inline" />Brendinq</TabsTrigger>
-        </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="lg:flex lg:gap-6">
+        {/* === SIDEBAR-STYLE TAB NAV (lg+) / Horizontal scroll (mobile) === */}
+        <div className="lg:w-64 lg:shrink-0 mb-4 lg:mb-0">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            {[
+              { label: 'Üzvlük', items: [
+                { value: 'packages', icon: Package, label: 'Paketlər' },
+                { value: 'forum-fields', icon: Eye, label: 'Forum sahələri' },
+                { value: 'warning-days', icon: Calendar, label: 'Bildirişlər' },
+              ]},
+              { label: 'Layihə & Satış', items: [
+                { value: 'projects', icon: FolderKanban, label: 'Layihələr' },
+                { value: 'sale-types', icon: TrendingUp, label: 'Satış növləri' },
+                { value: 'lead-sources', icon: Target, label: 'Lead mənbələri' },
+                { value: 'meeting-types', icon: Calendar, label: 'Görüş növləri' },
+              ]},
+              { label: 'Klassifikasiya', items: [
+                { value: 'sectors', icon: Building2, label: 'Sektorlar' },
+                { value: 'sub-sectors', icon: Layers, label: 'Alt sektorlar' },
+                { value: 'positions', icon: Briefcase, label: 'Vəzifələr' },
+                { value: 'activities', icon: Activity, label: 'Fəaliyyətlər' },
+                { value: 'regions', icon: Building2, label: 'Regionlar' },
+                { value: 'marsol-companies', icon: Building, label: 'Müəssisələr' },
+              ]},
+              { label: 'Sistem', items: [
+                { value: 'custom-fields', icon: Columns3, label: 'Xüsusi sahələr' },
+                { value: 'roles', icon: Shield, label: 'Rollar' },
+                { value: 'users', icon: Users, label: 'İstifadəçilər' },
+                { value: 'branding', icon: ImageIcon, label: 'Brendinq' },
+              ]},
+            ].map((group, gi) => (
+              <div key={gi} className={gi > 0 ? 'border-t border-slate-100' : ''}>
+                <p className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">{group.label}</p>
+                <TabsList className="flex flex-col h-auto bg-transparent p-0 gap-0">
+                  {group.items.map(({ value, icon: Icon, label }) => (
+                    <TabsTrigger
+                      key={value}
+                      value={value}
+                      className="w-full justify-start gap-2 px-4 py-2 text-sm rounded-none data-[state=active]:bg-[#9ACD32]/10 data-[state=active]:text-[#3D4F6F] data-[state=active]:shadow-none data-[state=active]:font-semibold border-l-2 border-transparent data-[state=active]:border-l-[#9ACD32] hover:bg-slate-50"
+                      data-testid={`tab-${value}`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{label}</span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* === TAB CONTENT === */}
+        <div className="flex-1 min-w-0">
 
         {/* ========= PACKAGES TAB ========= */}
         <TabsContent value="packages">
@@ -936,21 +981,48 @@ export default function Settings() {
         {/* ========= WARNING DAYS TAB ========= */}
         <TabsContent value="warning-days">
           <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
-            <h2 className="text-lg font-semibold mb-4" style={{ color: '#3D4F6F' }}>Üzvlük Bitmə Xəbərdarlığı</h2>
-            <p className="text-sm text-slate-500 mb-4">Üzvlüyün bitməsinə neçə gün qalmış bildiriş göndərilsin?</p>
-            <div className="flex gap-2 items-end">
-              <div>
-                <Label className="text-xs">Gün sayı</Label>
-                <Input type="number" value={warningDays} onChange={(e) => setWarningDays(e.target.value)} className="text-sm w-32" min="1" max="90" data-testid="warning-days-input" />
-              </div>
-              <Button size="sm" onClick={async () => {
-                try {
-                  await axios.put(`${API}/settings/lists/membership_warning_days`, { values: [warningDays] }, { headers });
-                  toast.success(`Xəbərdarlıq ${warningDays} gün olaraq təyin edildi`);
-                } catch { toast.error('Xəta baş verdi'); }
-              }} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125]" data-testid="save-warning-days-btn">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-lg font-semibold" style={{ color: '#3D4F6F' }}>Bildiriş Tənzimləmələri</h2>
+              <Button
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await axios.put(`${API}/settings/notification-config`, notifyConfig, { headers });
+                    setWarningDays(String(notifyConfig.membership_warning_days));
+                    toast.success('Bildiriş tənzimləmələri yadda saxlandı');
+                  } catch { toast.error('Xəta baş verdi'); }
+                }}
+                className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold"
+                data-testid="save-notify-config-btn"
+              >
                 Yadda saxla
               </Button>
+            </div>
+            <p className="text-sm text-slate-500 mb-4">Bütün xatırlatmalar üçün gün sayını burada təyin edin. Dəyişikliklər dərhal bildirişlərə tətbiq olunur.</p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {[
+                { key: 'membership_warning_days', label: 'Üzvlük bitməsinə neçə gün qalmış xəbərdarlıq', help: 'Müqavilə bitmə tarixinə qədər neçə gün qalmış bildiriş yaradılsın.' },
+                { key: 'contract_expiry_days', label: 'Müqavilə bitir (öncədən xəbərdarlıq)', help: '"Müqavilə bitir" bildirişi neçə gün əvvəldən başlasın.' },
+                { key: 'birthday_advance_days', label: 'Ad gününə qədər xəbərdarlıq (gün)', help: '0 = yalnız bu gün; 1 = sabah; 7 = bir həftə öncə və s.' },
+                { key: 'debt_overdue_high_days', label: 'Borc HIGH severity həddi (gün)', help: 'Bu sayı keçən gecikmiş borclar yüksək prioritet olaraq görünür.' },
+                { key: 'meeting_reminder_high_days', label: 'Görüş xatırlatması — HIGH (gün)', help: 'Görüş tarixinə bu sayda gün qalmış HIGH severity.' },
+                { key: 'meeting_reminder_medium_days', label: 'Görüş xatırlatması — MEDIUM (gün)', help: 'Görüş tarixinə bu sayda gün qalmış MEDIUM severity.' },
+              ].map(({ key, label, help }) => (
+                <div key={key} className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                  <Label className="text-xs font-semibold text-[#3D4F6F]">{label}</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="365"
+                    value={notifyConfig[key] ?? 0}
+                    onChange={(e) => setNotifyConfig(prev => ({ ...prev, [key]: parseInt(e.target.value || '0', 10) }))}
+                    className="text-sm w-32 mt-1"
+                    data-testid={`notify-cfg-${key}`}
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">{help}</p>
+                </div>
+              ))}
             </div>
           </div>
         </TabsContent>
@@ -1388,6 +1460,7 @@ export default function Settings() {
             </p>
           </div>
         </TabsContent>
+        </div>
       </Tabs>
 
       {/* Custom Field Modal */}

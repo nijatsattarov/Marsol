@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 37 backend testing — Global Notification Days Settings. All 12 tests passed (100%). Verified GET/PUT /api/settings/notification-config (shape, persistence, auth, coercion), legacy mirror into /api/settings/lists/membership_warning_days, legacy backward-compat (GET/PUT + propagation into notification-config GET), and /api/notifications cfg-based behavior including birthday_advance_days window and new company_name field + 'Role (Company) — date' message format on birthday entries.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration37_notification_config.py",
+    "/app/test_reports/pytest/iteration_37_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is large (~4968 lines). Consider splitting notification config + notifications endpoint into a dedicated router module for maintainability.",
+    "PUT /api/settings/notification-config silently drops unknown keys and coerces invalid ints to defaults without signaling the caller. Fine for now, but a Pydantic model with explicit 422 responses would make the contract clearer.",
+    "Employees block uses hard-coded 'Marsol Group' as company_name in birthday notifications — consider sourcing from a settings key or marsol_companies so it stays consistent if branding changes."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration37_notification_config.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "not tested (skipped per request)"
+  },
+  "test_credentials": "settings@marsol.az / marsol123 (admin) — verified working",
+  "seed_data_creation": "Tests create and then delete 2 TEST_ prefixed companies for birthday notification assertions (TEST_BDAY_COMPANY_IT37, TEST_BDAY_WINDOW_IT37). Original notification-config is snapshotted and restored after the test module.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 37 is fully green on backend. New config endpoints live at /api/settings/notification-config with 6 keys. Legacy /api/settings/lists/membership_warning_days still works and both directions stay in sync (PUT to config mirrors into legacy; legacy PUT is read by config GET). Birthday notifications now carry company_name field + 'Role (Company) — date' message. Frontend (HR sənədlər tab, Üzvlər Excel cleanup, universal Excel column picker, Settings menu design cleanup) was NOT tested per explicit user instruction.",
+  "rca of the issue": "N/A — no issues found."
+}

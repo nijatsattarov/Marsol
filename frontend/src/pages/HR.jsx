@@ -17,6 +17,7 @@ import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { ScrollArea } from '../components/ui/scroll-area';
 import CustomFieldsView from '../components/CustomFieldsView';
+import ExcelColumnPicker from '../components/ExcelColumnPicker';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -56,6 +57,31 @@ const ProfileAvatar = ({ employee, size = 'md' }) => {
 };
 
 const getDisplayName = (emp) => emp.first_name && emp.last_name ? `${emp.first_name} ${emp.last_name}` : emp.full_name || '';
+
+// Reusable single-document upload card with consistent UI
+const DocumentUploadCard = ({ label, value, onUpload, onClear, testId, accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx' }) => {
+  const fileName = value ? (typeof value === 'object' ? value.name : decodeURIComponent(value.split('/').pop()?.split('?')[0] || 'Sənəd')) : '';
+  const fileUrl = typeof value === 'object' ? value?.url : value;
+  return (
+    <div className="border border-slate-200 rounded-xl p-3 bg-white hover:bg-slate-50 transition-colors">
+      <Label className="text-xs font-semibold text-slate-700 block mb-2">{label}</Label>
+      {value ? (
+        <div className="flex items-center gap-2 bg-slate-100 rounded-lg px-2.5 py-1.5">
+          <FileText className="w-4 h-4 text-slate-500 shrink-0" />
+          <a href={fileUrl?.startsWith?.('http') ? fileUrl : `${process.env.REACT_APP_BACKEND_URL}${fileUrl}`} target="_blank" rel="noopener noreferrer" className="text-xs text-slate-700 hover:underline truncate flex-1" title={fileName}>{fileName}</a>
+          <Button type="button" variant="ghost" size="sm" onClick={onClear} className="h-6 w-6 p-0"><X className="w-3.5 h-3.5 text-red-500" /></Button>
+        </div>
+      ) : (
+        <label className="cursor-pointer block">
+          <input type="file" accept={accept} onChange={onUpload} className="hidden" data-testid={`${testId}-upload`} />
+          <span className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-dashed border-slate-300 transition-colors">
+            <Upload className="w-3.5 h-3.5" /> Fayl seç
+          </span>
+        </label>
+      )}
+    </div>
+  );
+};
 
 // Employee Detail View
 const EmployeeDetail = ({ employee, onBack, onEdit, customFields = [] }) => {
@@ -557,35 +583,26 @@ export default function HR() {
     setShowModal(true);
   };
 
-  const exportToExcel = () => {
-    const rows = filteredEmployees.map((e, i) => ({
-      '№': i + 1,
-      'ID': e.employee_code || '',
-      'Ad': e.first_name || '',
-      'Soyad': e.last_name || '',
-      'Şöbə': e.department || '',
-      'Vəzifə': e.position || '',
-      'Telefon': e.personal_phone || '',
-      'Email': e.personal_email || e.email || '',
-      'Doğum tarixi': e.birth_date || '',
-      'İşə başlama': e.hire_date || '',
-      'Vətəndaşlıq': e.citizenship || '',
-      'Təhsil': e.education || '',
-      'Gross maaş': Number(e.gross_salary || 0),
-      'Net maaş': Number(e.net_salary || 0),
-      'Status': e.status || '',
-    }));
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [
-      { wch: 4 }, { wch: 8 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 22 },
-      { wch: 18 }, { wch: 26 }, { wch: 13 }, { wch: 13 }, { wch: 14 }, { wch: 18 },
-      { wch: 12 }, { wch: 12 }, { wch: 12 },
-    ];
-    XLSX.utils.book_append_sheet(wb, ws, 'Əməkdaşlar');
-    XLSX.writeFile(wb, `marsol_emekdaslar_${new Date().toISOString().split('T')[0]}.xlsx`);
-    toast.success(`${rows.length} əməkdaş ixrac edildi`);
-  };
+  const HR_EXPORT_COLUMNS = [
+    { key: 'no', label: '№', width: 4, get: (_, i) => i + 1 },
+    { key: 'employee_code', label: 'ID', width: 8 },
+    { key: 'first_name', label: 'Ad', width: 16 },
+    { key: 'last_name', label: 'Soyad', width: 16 },
+    { key: 'department', label: 'Şöbə', width: 18 },
+    { key: 'position', label: 'Vəzifə', width: 22 },
+    { key: 'personal_phone', label: 'Telefon', width: 18 },
+    { key: 'personal_email', label: 'Email', width: 26, get: (e) => e.personal_email || e.email || '' },
+    { key: 'birth_date', label: 'Doğum tarixi', width: 13 },
+    { key: 'hire_date', label: 'İşə başlama', width: 13 },
+    { key: 'citizenship', label: 'Vətəndaşlıq', width: 14 },
+    { key: 'education', label: 'Təhsil', width: 18 },
+    { key: 'gross_salary', label: 'Gross maaş', width: 12, get: (e) => Number(e.gross_salary || 0) },
+    { key: 'net_salary', label: 'Net maaş', width: 12, get: (e) => Number(e.net_salary || 0) },
+    { key: 'status', label: 'Status', width: 12 },
+  ];
+  const HR_DEFAULT_KEYS = HR_EXPORT_COLUMNS.map(c => c.key);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const exportToExcel = () => setShowExportModal(true);
 
   const filteredEmployees = employees.filter(e => {
     const name = getDisplayName(e).toLowerCase();
@@ -1022,22 +1039,20 @@ export default function HR() {
                 {/* SƏNƏDLƏR TAB */}
                 <TabsContent value="documents" className="space-y-4" data-testid="documents-tab">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="p-4 bg-slate-50 rounded-lg space-y-2">
-                      <Label className="text-xs font-semibold">Məhkumluq skanı</Label>
-                      {formData.criminal_record_scan ? (
-                        <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-green-500" /><span className="text-xs text-green-600 truncate flex-1">Yüklənib</span><Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, criminal_record_scan: ''})}><X className="w-3.5 h-3.5 text-red-500" /></Button></div>
-                      ) : (
-                        <label className="cursor-pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, 'criminal_record_scan')} className="hidden" data-testid="criminal-record-upload" /><span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-100 rounded-lg border border-slate-200"><Upload className="w-3.5 h-3.5" /> Fayl seç</span></label>
-                      )}
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg space-y-2">
-                      <Label className="text-xs font-semibold">Sağlamlıq arayışı skanı</Label>
-                      {formData.health_certificate_scan ? (
-                        <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-green-500" /><span className="text-xs text-green-600 truncate flex-1">Yüklənib</span><Button type="button" variant="ghost" size="sm" onClick={() => setFormData({...formData, health_certificate_scan: ''})}><X className="w-3.5 h-3.5 text-red-500" /></Button></div>
-                      ) : (
-                        <label className="cursor-pointer"><input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, 'health_certificate_scan')} className="hidden" data-testid="health-cert-upload" /><span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-100 rounded-lg border border-slate-200"><Upload className="w-3.5 h-3.5" /> Fayl seç</span></label>
-                      )}
-                    </div>
+                    <DocumentUploadCard
+                      label="Məhkumluq skanı"
+                      value={formData.criminal_record_scan}
+                      onUpload={(e) => handleFileUpload(e, 'criminal_record_scan')}
+                      onClear={() => setFormData({ ...formData, criminal_record_scan: '' })}
+                      testId="criminal-record"
+                    />
+                    <DocumentUploadCard
+                      label="Sağlamlıq arayışı skanı"
+                      value={formData.health_certificate_scan}
+                      onUpload={(e) => handleFileUpload(e, 'health_certificate_scan')}
+                      onClear={() => setFormData({ ...formData, health_certificate_scan: '' })}
+                      testId="health-cert"
+                    />
                   </div>
                   {/* Sertifikat skanları */}
                   <div className="p-4 bg-amber-50 rounded-lg space-y-3">
@@ -1104,6 +1119,18 @@ export default function HR() {
           </ScrollArea>
         </DialogContent>
       </Dialog>
+
+      <ExcelColumnPicker
+        open={showExportModal}
+        onOpenChange={setShowExportModal}
+        columns={HR_EXPORT_COLUMNS}
+        defaultKeys={HR_DEFAULT_KEYS}
+        rows={filteredEmployees}
+        sheetName="Əməkdaşlar"
+        fileName="marsol_emekdaslar"
+        storageKey="export_cols_hr"
+        onSuccess={({ rows, cols }) => toast.success(`${rows} əməkdaş ixrac edildi (${cols} sütun)`)}
+      />
     </div>
   );
 }
