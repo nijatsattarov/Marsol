@@ -364,7 +364,7 @@ const EmployeeCard = ({ employee, onView, onEdit, onDelete }) => {
         <div className="flex items-center gap-2 text-slate-600"><Phone className="w-3.5 h-3.5" /><span>{employee.personal_phone}</span></div>
         <div className="flex items-center justify-between mt-2">
           <Badge className={`text-xs ${getStatusColor(employee.status)}`}>{employee.status}</Badge>
-          <span className="text-xs text-slate-500">{(employee.net_salary || 0).toLocaleString()} AZN</span>
+          <span className="text-xs text-slate-500 truncate max-w-[60%]" title={employee.marsol_company}>{employee.marsol_company || '-'}</span>
         </div>
       </div>
     </div>
@@ -689,7 +689,7 @@ export default function HR() {
         <table className="w-full">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100">
-              {['ID', 'Əməkdaş', 'Şöbə', 'Vəzifə', 'Telefon', 'Email', 'Əmək haqqı', 'Status', ''].map(h => (
+              {['ID', 'Əməkdaş', 'Şöbə', 'Vəzifə', 'Telefon', 'Email', 'Müəssisə', 'Status', ''].map(h => (
                 <th key={h} className={`text-left font-semibold text-[#3D4F6F] px-4 py-3 text-sm ${!h ? 'text-right' : ''}`}>{h}</th>
               ))}
             </tr>
@@ -710,7 +710,7 @@ export default function HR() {
                 <td className="px-4 py-3 text-sm text-slate-600">{emp.position}</td>
                 <td className="px-4 py-3 text-sm text-slate-600">{emp.personal_phone}</td>
                 <td className="px-4 py-3 text-sm text-slate-600">{emp.personal_email || emp.corporate_email || emp.email}</td>
-                <td className="px-4 py-3 text-sm font-medium">{(emp.net_salary || 0).toLocaleString()} AZN</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{emp.marsol_company || '-'}</td>
                 <td className="px-4 py-3"><Badge className={`text-xs ${getStatusColor(emp.status)}`}>{emp.status}</Badge></td>
                 <td className="px-4 py-3 text-right">
                   <DropdownMenu>

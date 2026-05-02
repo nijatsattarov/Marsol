@@ -2738,6 +2738,41 @@ async def update_setting_list(key: str, data: dict, current_user: dict = Depends
     await db.setting_lists.update_one({"key": key}, {"$set": {"key": key, "values": values, "updated_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
     return {"key": key, "values": values}
 
+# ==== Manageable Lists Registry ====
+MANAGEABLE_LISTS = [
+    {"key": "company_sizes", "label": "Şirkət ölçüləri", "defaults": ["Böyük", "Orta", "Kiçik", "Mikro"], "group": "Şirkət"},
+    {"key": "company_statuses", "label": "Şirkət statusları", "defaults": ["Aktiv", "Qeyri-aktiv", "Gözləmədə"], "group": "Şirkət"},
+    {"key": "contract_statuses", "label": "Müqavilə statusları", "defaults": ["Aktiv", "Yeni", "Yeniləmə gözlənir", "Bitdi", "Ləğv edilib"], "group": "Şirkət"},
+    {"key": "departments", "label": "Şöbələr", "defaults": ["Satış", "Marketing", "HR", "Maliyyə", "Layihə", "İT", "İdarəetmə"], "group": "HR"},
+    {"key": "education_levels", "label": "Təhsil səviyyələri", "defaults": ["Orta təhsil", "Sub bakalavr", "Bakalavr", "Magistratura", "Doktorantura"], "group": "HR"},
+    {"key": "citizenships", "label": "Vətəndaşlıqlar", "defaults": ["Azərbaycan", "Türkiyə", "Rusiya", "Gürcüstan", "Ukrayna", "Digər"], "group": "HR"},
+    {"key": "employee_statuses", "label": "Əməkdaş statusları", "defaults": ["Aktiv", "Məzuniyyətdə", "Xəstələnib", "İşdən çıxıb"], "group": "HR"},
+    {"key": "marital_statuses", "label": "Ailə vəziyyəti", "defaults": ["Subay", "Evli", "Boşanmış", "Dul"], "group": "HR"},
+    {"key": "task_statuses", "label": "Tapşırıq statusları", "defaults": ["Gözləyir", "İcrada", "Tamamlandı", "Ləğv edildi"], "group": "Tapşırıqlar"},
+    {"key": "priorities", "label": "Prioritetlər", "defaults": ["Yüksək", "Orta", "Aşağı"], "group": "Tapşırıqlar"},
+    {"key": "lead_statuses", "label": "Lead statusları", "defaults": ["Yeni", "Əlaqə quruldu", "Görüş təyin edildi", "Təklif göndərildi", "Danışıqda", "Üzv oldu", "Satıldı", "İmtina"], "group": "Satış"},
+    {"key": "reference_sources", "label": "Referans mənbələri", "defaults": ["Şirkət", "Şəxs", "Media", "Digər"], "group": "Satış"},
+    {"key": "payment_methods", "label": "Ödəniş üsulları", "defaults": ["Nağd", "Köçürmə", "Kart", "Hissə-hissə"], "group": "Maliyyə"},
+    {"key": "expense_types", "label": "Xərc növləri (ümumi)", "defaults": ["Əməliyyat", "Marketinq", "Layihə", "Texniki", "Satış", "Digər"], "group": "Maliyyə"},
+    {"key": "event_types", "label": "Tədbir növləri", "defaults": ["Konfrans", "Seminar", "Təlim", "Sərgi", "Networking", "İclas"], "group": "Tədbirlər"},
+    {"key": "invitation_response_statuses", "label": "Dəvət cavabları", "defaults": ["Gözləmədə", "Qatıldı", "Rədd etdi", "Cavab vermədi"], "group": "Tədbirlər"},
+]
+MANAGEABLE_LIST_KEYS = [item["key"] for item in MANAGEABLE_LISTS]
+
+
+@api_router.get("/settings/manageable-lists")
+async def get_manageable_lists(current_user: dict = Depends(get_current_user)):
+    """Return registry + current values for every managed dropdown list."""
+    docs = await db.setting_lists.find({"key": {"$in": MANAGEABLE_LIST_KEYS}}, {"_id": 0}).to_list(500)
+    by_key = {d["key"]: d.get("values") or [] for d in docs}
+    out = []
+    for item in MANAGEABLE_LISTS:
+        values = by_key.get(item["key"])
+        if not values:
+            values = list(item["defaults"])
+        out.append({**item, "values": values})
+    return out
+
 # ==== Global Notification Days Settings ====
 NOTIFICATION_DEFAULTS = {
     "membership_warning_days": 10,   # üzvlük bitməsinə neçə gün qalmış xəbərdarlıq
@@ -2826,14 +2861,13 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
         "sectors": sectors,
         "packages": [p["name"] for p in packages],
         "packages_with_prices": packages,
-        "company_sizes": ["Böyük", "Orta", "Kiçik", "Mikro"],
+        "company_sizes": await _get_setting_list("company_sizes", ["Böyük", "Orta", "Kiçik", "Mikro"]),
         "marsol_representatives": marsol_representatives,
         "projects": projects,
-        "departments": ["Satış", "Marketing", "HR", "Maliyyə", "Layihə", "İT", "İdarəetmə"],
+        "departments": await _get_setting_list("departments", ["Satış", "Marketing", "HR", "Maliyyə", "Layihə", "İT", "İdarəetmə"]),
         "meeting_types": await _get_setting_list("meeting_types", ["Satış görüşü", "Daxili iclas", "Müştəri görüşü", "Partnyor görüşü", "Təqdimat"]),
-        "task_statuses": ["Gözləyir", "İcrada", "Tamamlandı", "Ləğv edildi"],
-        "priorities": ["Yüksək", "Orta", "Aşağı"],
-        "meeting_types": ["Satış görüşü", "Daxili iclas", "Müştəri görüşü", "Partnyor görüşü", "Təqdimat"],
+        "task_statuses": await _get_setting_list("task_statuses", ["Gözləyir", "İcrada", "Tamamlandı", "Ləğv edildi"]),
+        "priorities": await _get_setting_list("priorities", ["Yüksək", "Orta", "Aşağı"]),
         "expense_categories": [
             {"name": "Əməliyyat xərcləri", "subcategories": ["Əmək haqqı", "Bonus", "Ofis icarəsi", "Kommunal", "Ofis xərcləri"]},
             {"name": "Marketinq xərcləri", "subcategories": ["Sosial Media reklamı", "Outdoor reklam", "Promo materiallar"]},
@@ -2842,18 +2876,26 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
             {"name": "Satış xərcləri", "subcategories": ["Müştəri görüş xərcləri", "Hədiyyə"]},
             {"name": "Digər xərclər", "subcategories": ["Cərimələr", "Hüquqi xidmətlər"]}
         ],
-        "reference_sources": ["Şirkət", "Şəxs", "Media", "Digər"],
-        "statuses": ["Aktiv", "Qeyri-aktiv", "Gözləmədə"],
+        "expense_types": await _get_setting_list("expense_types", ["Əməliyyat", "Marketinq", "Layihə", "Texniki", "Satış", "Digər"]),
+        "reference_sources": await _get_setting_list("reference_sources", ["Şirkət", "Şəxs", "Media", "Digər"]),
+        "statuses": await _get_setting_list("company_statuses", ["Aktiv", "Qeyri-aktiv", "Gözləmədə"]),
+        "company_statuses": await _get_setting_list("company_statuses", ["Aktiv", "Qeyri-aktiv", "Gözləmədə"]),
+        "contract_statuses": await _get_setting_list("contract_statuses", ["Aktiv", "Yeni", "Yeniləmə gözlənir", "Bitdi", "Ləğv edilib"]),
+        "citizenships": await _get_setting_list("citizenships", ["Azərbaycan", "Türkiyə", "Rusiya", "Gürcüstan", "Ukrayna", "Digər"]),
+        "employee_statuses": await _get_setting_list("employee_statuses", ["Aktiv", "Məzuniyyətdə", "Xəstələnib", "İşdən çıxıb"]),
+        "marital_statuses": await _get_setting_list("marital_statuses", ["Subay", "Evli", "Boşanmış", "Dul"]),
+        "payment_methods": await _get_setting_list("payment_methods", ["Nağd", "Köçürmə", "Kart", "Hissə-hissə"]),
+        "invitation_response_statuses": await _get_setting_list("invitation_response_statuses", ["Gözləmədə", "Qatıldı", "Rədd etdi", "Cavab vermədi"]),
         "sub_sectors": sub_sectors,
         "positions": positions,
         "activities": activities,
         "regions": regions,
         "marsol_companies": marsol_companies,
-        "education_levels": ["Orta təhsil", "Sub bakalavr", "Bakalavr", "Magistratura", "Doktorantura"],
-        "event_types": EVENT_TYPES,
+        "education_levels": await _get_setting_list("education_levels", ["Orta təhsil", "Sub bakalavr", "Bakalavr", "Magistratura", "Doktorantura"]),
+        "event_types": await _get_setting_list("event_types", EVENT_TYPES),
         "package_quotas": await get_package_quotas(),
         "lead_sources": await _get_setting_list("lead_sources", ["Marketing", "Referans", "Sosial media", "Veb sayt", "Sərgi", "Soyuq zəng", "Digər"]),
-        "lead_statuses": ["Yeni", "Əlaqə quruldu", "Görüş təyin edildi", "Təklif göndərildi", "Danışıqda", "Üzv oldu", "Satıldı", "İmtina"],
+        "lead_statuses": await _get_setting_list("lead_statuses", ["Yeni", "Əlaqə quruldu", "Görüş təyin edildi", "Təklif göndərildi", "Danışıqda", "Üzv oldu", "Satıldı", "İmtina"]),
         "sale_types": await _get_setting_list("sale_types", ["Üzvlük", "Sərgi stendi", "Tur (Daxili)", "Tur (Xarici)", "Təlim", "Digər"]),
     }
 

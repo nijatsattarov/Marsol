@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import {
   Settings as SettingsIcon, Package, FolderKanban, Users, Columns3,
-  Plus, Pencil, Trash2, Loader2, Shield, Eye, UserCog, User,
+  Plus, Pencil, Trash2, Loader2, Shield, Eye, EyeOff, UserCog, User,
   ChevronDown, Search, X, Building2, Layers, Briefcase, Activity, Building,
-  Calendar, Target, TrendingUp, Image as ImageIcon, Upload, ListChecks
+  Calendar, Target, TrendingUp, Image as ImageIcon, Upload, ListChecks, List
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -15,6 +15,7 @@ import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Toaster, toast } from 'sonner';
 import PackageServicesManager from '../components/PackageServicesManager';
+import ManageableListsPanel from '../components/ManageableListsPanel';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -136,6 +137,7 @@ export default function Settings() {
   const [showFieldModal, setShowFieldModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
   const [servicesPackage, setServicesPackage] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Filter
   const [fieldModuleFilter, setFieldModuleFilter] = useState('all');
@@ -513,6 +515,7 @@ export default function Settings() {
                 { value: 'meeting-types', icon: Calendar, label: 'Görüş növləri' },
               ]},
               { label: 'Klassifikasiya', items: [
+                { value: 'lists', icon: List, label: 'Siyahılar' },
                 { value: 'sectors', icon: Building2, label: 'Sektorlar' },
                 { value: 'sub-sectors', icon: Layers, label: 'Alt sektorlar' },
                 { value: 'positions', icon: Briefcase, label: 'Vəzifələr' },
@@ -655,6 +658,11 @@ export default function Settings() {
               {projects.length === 0 && <p className="text-center text-slate-400 py-8 text-sm">Layihə yoxdur</p>}
             </div>
           </div>
+        </TabsContent>
+
+        {/* ========= UNIVERSAL LISTS TAB ========= */}
+        <TabsContent value="lists">
+          <ManageableListsPanel />
         </TabsContent>
 
         {/* ========= SECTORS TAB ========= */}
@@ -1553,7 +1561,7 @@ export default function Settings() {
       </Dialog>
 
       {/* User Modal */}
-      <Dialog open={showUserModal} onOpenChange={setShowUserModal}>
+      <Dialog open={showUserModal} onOpenChange={(o) => { setShowUserModal(o); if (!o) setShowPassword(false); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle style={{ color: '#3D4F6F' }}>{editingUser ? 'İstifadəçini redaktə et' : 'Yeni istifadəçi yarat'}</DialogTitle>
@@ -1569,7 +1577,26 @@ export default function Settings() {
             </div>
             <div>
               <Label className="text-xs">{editingUser ? 'Yeni şifrə (boş saxlasanız dəyişməyəcək)' : 'Şifrə *'}</Label>
-              <Input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} placeholder="******" className="text-sm" required={!editingUser} data-testid="user-password-input" />
+              <div className="relative">
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  value={userForm.password}
+                  onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                  placeholder="******"
+                  className="text-sm pr-10"
+                  required={!editingUser}
+                  data-testid="user-password-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#3D4F6F] p-1"
+                  aria-label={showPassword ? 'Şifrəni gizlət' : 'Şifrəni göstər'}
+                  data-testid="user-password-toggle"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
