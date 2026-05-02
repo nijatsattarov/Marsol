@@ -1,5 +1,6 @@
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import axios from "axios";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
@@ -35,6 +36,33 @@ import Proposals from "./pages/Proposals";
 import Invitations from "./pages/Invitations";
 import ContactLists from "./pages/ContactLists";
 import PublicForm from "./pages/PublicForm";
+
+// Global axios interceptor: expired/invalid token → auto logout + redirect to login.
+// Fixes the "only logout-login works" bug on every module.
+let _redirecting = false;
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const url = error?.config?.url || "";
+    // Skip the login endpoint itself (that 401 is a real "wrong password" case)
+    const isAuthAttempt = url.includes("/auth/login") || url.includes("/form/");
+    if (!isAuthAttempt && (status === 401 || status === 403)) {
+      if (!_redirecting) {
+        _redirecting = true;
+        try { localStorage.removeItem("token"); } catch { /* ignore */ }
+        // Give current state a tick to settle, then hard redirect
+        setTimeout(() => {
+          _redirecting = false;
+          if (window.location.pathname !== "/login") {
+            window.location.replace("/login");
+          }
+        }, 50);
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 function App() {
   return (

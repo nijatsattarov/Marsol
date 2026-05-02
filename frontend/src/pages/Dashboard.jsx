@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import { 
   Calendar, 
   Users, 
@@ -9,9 +10,7 @@ import {
   TrendingDown,
   Loader2,
   ClipboardList,
-  Briefcase,
-  RefreshCw,
-  AlertCircle
+  Briefcase
 } from 'lucide-react';
 import { 
   PieChart, 
@@ -84,38 +83,35 @@ const CustomTooltip = ({ active, payload }) => {
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [attempt, setAttempt] = useState(0);
-  const [error, setError] = useState(false);
+  const navigate = useNavigate();
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
-    setError(false);
     const token = localStorage.getItem('token');
-    const delays = [0, 3000, 8000, 15000, 20000];  // up to ~46s total for Render cold start
-    let lastErr;
-    for (let i = 0; i < delays.length; i++) {
-      if (delays[i] > 0) {
-        setAttempt(i + 1);
-        await new Promise(r => setTimeout(r, delays[i]));
-      }
-      try {
-        const response = await axios.get(`${API}/dashboard/stats`, {
-          headers: { Authorization: `Bearer ${token}` },
-          timeout: 30000,
-        });
-        setStats(response.data);
-        setLoading(false);
-        setAttempt(0);
-        return;
-      } catch (e) {
-        lastErr = e;
-        if (e.response?.status === 401 || e.response?.status === 403) break;
-      }
+    if (!token) {
+      navigate('/login', { replace: true });
+      return;
     }
-    console.error('Error fetching stats:', lastErr);
-    setError(true);
-    setLoading(false);
-  }, []);
+    try {
+      const response = await axios.get(`${API}/dashboard/stats`, {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 30000,
+      });
+      setStats(response.data);
+    } catch (e) {
+      // Expired/invalid token → force re-login silently
+      if (e.response?.status === 401 || e.response?.status === 403) {
+        localStorage.removeItem('token');
+        navigate('/login', { replace: true });
+        return;
+      }
+      // Other failures → fall back to empty stats so UI still renders
+      console.error('Error fetching dashboard stats:', e);
+      setStats({});
+    } finally {
+      setLoading(false);
+    }
+  }, [navigate]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
@@ -124,30 +120,6 @@ export default function Dashboard() {
       <div className="flex flex-col items-center justify-center h-screen gap-3" data-testid="loading-spinner">
         <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#3D4F6F' }} />
         <p className="text-sm text-slate-500">Məlumat yüklənir...</p>
-        {attempt > 1 && (
-          <p className="text-xs text-slate-400">Server oyadılır, bir anda hazır olacaq ({attempt}/4)</p>
-        )}
-      </div>
-    );
-  }
-
-  if (!stats || error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen gap-4 p-4">
-        <div className="w-14 h-14 rounded-full bg-amber-50 flex items-center justify-center">
-          <AlertCircle className="w-7 h-7 text-amber-500" />
-        </div>
-        <div className="text-center max-w-md">
-          <p className="text-slate-700 font-medium">Məlumat yüklənə bilmədi</p>
-          <p className="text-xs text-slate-500 mt-1">Server yuxuda ola bilər. Zəhmət olmasa bir anlıq gözləyin və yenidən cəhd edin.</p>
-        </div>
-        <button
-          onClick={fetchStats}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#3D4F6F] text-white text-sm rounded-lg hover:bg-[#2A364C] transition"
-          data-testid="retry-dashboard-btn"
-        >
-          <RefreshCw className="w-4 h-4" />Yenidən cəhd et
-        </button>
       </div>
     );
   }
