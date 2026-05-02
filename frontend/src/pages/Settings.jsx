@@ -93,6 +93,7 @@ export default function Settings() {
   const [saleTypes, setSaleTypes] = useState([]);
   const [newSaleType, setNewSaleType] = useState('');
   const [warningDays, setWarningDays] = useState('10');
+  const [departments, setDepartments] = useState([]);
   const [notifyConfig, setNotifyConfig] = useState({
     membership_warning_days: 10,
     contract_expiry_days: 30,
@@ -179,6 +180,12 @@ export default function Settings() {
       setLeadSources(lsRes.data || []);
       setSaleTypes(stRes.data || []);
       setWarningDays((wdRes.data && wdRes.data[0]) || '10');
+      try {
+        const dRes = await axios.get(`${API}/settings/lists/departments`, { headers });
+        setDepartments(Array.isArray(dRes.data) && dRes.data.length ? dRes.data : ['Satış', 'Marketing', 'HR', 'Maliyyə', 'Layihə', 'İT', 'İdarəetmə']);
+      } catch {
+        setDepartments(['Satış', 'Marketing', 'HR', 'Maliyyə', 'Layihə', 'İT', 'İdarəetmə']);
+      }
       try {
         const ncRes = await axios.get(`${API}/settings/notification-config`, { headers });
         setNotifyConfig(prev => ({ ...prev, ...(ncRes.data || {}) }));
@@ -431,7 +438,15 @@ export default function Settings() {
   };
 
   // ========= USER CRUD =========
+  const refreshDepartments = async () => {
+    try {
+      const res = await axios.get(`${API}/settings/lists/departments`, { headers });
+      if (Array.isArray(res.data) && res.data.length) setDepartments(res.data);
+    } catch { /* keep cached */ }
+  };
+
   const openUserModal = (user = null) => {
+    refreshDepartments();
     if (user) {
       setEditingUser(user);
       setUserForm({ name: user.name, email: user.email, password: '', role: user.role, department: user.department || '', phone: user.phone || '', status: user.status || 'Aktiv' });
@@ -1623,7 +1638,17 @@ export default function Settings() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Şöbə</Label>
-                <Input value={userForm.department} onChange={(e) => setUserForm({ ...userForm, department: e.target.value })} placeholder="Şöbə" className="text-sm" data-testid="user-department-input" />
+                <Select value={userForm.department || '__none__'} onValueChange={(v) => setUserForm({ ...userForm, department: v === '__none__' ? '' : v })}>
+                  <SelectTrigger className="text-sm" data-testid="user-department-select">
+                    <SelectValue placeholder="Şöbə seçin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Seçilməyib —</SelectItem>
+                    {departments.map((d) => (
+                      <SelectItem key={d} value={d}>{d}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label className="text-xs">Telefon</Label>
