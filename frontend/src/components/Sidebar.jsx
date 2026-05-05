@@ -2,6 +2,7 @@ import { useState, useEffect, createContext, useContext } from 'react';
 import axios from 'axios';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { usePermissions, canView } from '../context/PermissionContext';
+import NotificationBell from './NotificationBell';
 import { 
   LayoutDashboard, 
   Building2, 
@@ -436,6 +437,7 @@ export const MobileHeader = () => {
           className="h-7 ml-3"
         />
       </div>
+      <NotificationBell />
     </div>
   );
 };

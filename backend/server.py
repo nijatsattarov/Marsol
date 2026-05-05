@@ -4671,8 +4671,63 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
     # Sort by severity
     severity_order = {"high": 0, "medium": 1, "low": 2}
     notifications.sort(key=lambda x: severity_order.get(x["severity"], 3))
-    
-    return {"notifications": notifications, "count": len(notifications), "high_count": sum(1 for n in notifications if n["severity"] == "high")}
+
+    # Mark notifications that the user already dismissed/read.
+    user_id = current_user.get("id") or current_user.get("email", "")
+    read_ids = set()
+    try:
+        rows = await db.notification_reads.find({"user_id": user_id}, {"_id": 0, "notification_id": 1}).to_list(5000)
+        read_ids = {r["notification_id"] for r in rows if r.get("notification_id")}
+    except Exception:
+        pass
+    for n in notifications:
+        n["read"] = n["id"] in read_ids
+    unread_count = sum(1 for n in notifications if not n["read"])
+    high_unread = sum(1 for n in notifications if not n["read"] and n["severity"] == "high")
+
+    return {
+        "notifications": notifications,
+        "count": unread_count,
+        "total_count": len(notifications),
+        "high_count": high_unread,
+    }
+
+
+@api_router.post("/notifications/mark-read")
+async def mark_notifications_read(payload: dict, current_user: dict = Depends(get_current_user)):
+    """Mark one (id) or several (ids) computed notifications as read for the current user.
+    The notifications themselves are computed on the fly, so we persist only the
+    read receipts in `notification_reads`."""
+    ids = payload.get("ids")
+    if not ids and payload.get("id"):
+        ids = [payload["id"]]
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(status_code=400, detail="id və ya ids tələb olunur")
+    user_id = current_user.get("id") or current_user.get("email", "")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    ops = [
+        {"user_id": user_id, "notification_id": nid, "read_at": now_iso}
+        for nid in ids
+    ]
+    for op in ops:
+        await db.notification_reads.update_one(
+            {"user_id": op["user_id"], "notification_id": op["notification_id"]},
+            {"$set": op},
+            upsert=True,
+        )
+    return {"marked": len(ops)}
+
+
+@api_router.post("/notifications/mark-all-read")
+async def mark_all_notifications_read(current_user: dict = Depends(get_current_user)):
+    """Mark all currently visible notifications as read."""
+    # Re-compute notification ids; cheaper than caching since /notifications is fast.
+    fake_payload = await get_notifications(current_user=current_user)
+    ids = [n["id"] for n in fake_payload.get("notifications", [])]
+    if not ids:
+        return {"marked": 0}
+    return await mark_notifications_read({"ids": ids}, current_user=current_user)
+
 
 
 @api_router.post("/notifications/dispatch-emails")

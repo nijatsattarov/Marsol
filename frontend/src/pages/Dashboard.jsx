@@ -129,8 +129,32 @@ export default function Dashboard() {
     : 0;
 
   // Prepare chart data
-  const companiesBreakdown = stats.companies?.breakdown || [];
+  // Strip trailing " paket" from package legend names so they don't repeat the word
+  const companiesBreakdown = (stats.companies?.breakdown || []).map(b => ({
+    ...b,
+    name: (b.name || '').replace(/\s+paket$/i, '').trim() || b.name,
+  }));
   const sectorsBreakdown = stats.sectors?.breakdown || [];
+
+  // Recharts label renderer: shows count next to each slice via leader line
+  const renderPieLabel = ({ cx, cy, midAngle, outerRadius, count, fill }) => {
+    if (!count) return null;
+    const RAD = Math.PI / 180;
+    const r1 = outerRadius + 8;
+    const r2 = outerRadius + 22;
+    const x1 = cx + r1 * Math.cos(-midAngle * RAD);
+    const y1 = cy + r1 * Math.sin(-midAngle * RAD);
+    const x2 = cx + r2 * Math.cos(-midAngle * RAD);
+    const y2 = cy + r2 * Math.sin(-midAngle * RAD);
+    const xT = x2 + (x2 > cx ? 4 : -4);
+    return (
+      <g>
+        <path d={`M${x1},${y1}L${x2},${y2}`} stroke={fill} strokeWidth={1} fill="none" />
+        <circle cx={x2} cy={y2} r={2} fill={fill} />
+        <text x={xT} y={y2} dy={3} fontSize="11" fontWeight="600" fill="#3D4F6F" textAnchor={x2 > cx ? 'start' : 'end'}>{count}</text>
+      </g>
+    );
+  };
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 lg:space-y-8 overflow-x-hidden" data-testid="dashboard-container">
@@ -143,7 +167,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
         <StatCard
           title="Şirkətlər"
           value={stats.companies?.total || 0}
@@ -175,11 +199,11 @@ export default function Dashboard() {
       </div>
 
       {/* Charts Row 1 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
         {/* Companies by Package - Pie Chart */}
         <ChartCard title="Şirkətlər üzrə paketlər">
           {companiesBreakdown.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={260}>
               <PieChart>
                 <Pie
                   data={companiesBreakdown}
@@ -190,6 +214,9 @@ export default function Dashboard() {
                   paddingAngle={4}
                   dataKey="count"
                   nameKey="name"
+                  label={renderPieLabel}
+                  labelLine={false}
+                  isAnimationActive={false}
                 >
                   {companiesBreakdown.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -221,7 +248,7 @@ export default function Dashboard() {
                     tickLine={false}
                   />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="count" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 11, fontWeight: 600, fill: '#3D4F6F' }}>
                     {sectorsBreakdown.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
@@ -238,7 +265,7 @@ export default function Dashboard() {
       </div>
 
       {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
         {/* Service Usage Widget */}
         <ServiceUsageWidget />
 

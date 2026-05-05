@@ -36,14 +36,15 @@ const DashboardContent = () => {
     <div className="min-h-screen bg-[#F8FAFC]">
       <Sidebar />
       <MobileHeader />
-      {/* Top Notification Bar */}
-      <div className={`fixed top-0 right-0 z-30 hidden lg:flex items-center justify-end h-14 px-6 transition-all duration-300 ${collapsed ? 'left-20' : 'left-[280px]'}`}>
+      {/* Top Notification Bar (desktop) - sticky regardless of scroll */}
+      <div className={`fixed top-0 right-0 z-30 hidden lg:flex items-center justify-end h-14 px-6 bg-white/85 backdrop-blur-sm border-b border-slate-100 transition-all duration-300 ${collapsed ? 'left-20' : 'left-[280px]'}`}>
         <NotificationBell />
       </div>
       <main 
         className={`
           transition-all duration-300
           pt-14 lg:pt-14
+          min-w-0 overflow-x-hidden
           ${collapsed ? 'lg:ml-20' : 'lg:ml-[280px]'}
         `}
         data-testid="main-content"
