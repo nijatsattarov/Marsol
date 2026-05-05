@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
   Plus, Search, Loader2, Pencil, Trash2, X, Download, Phone, Mail,
@@ -59,6 +60,7 @@ export default function CompanyDatabase() {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState('table');
 
+  const navigate = useNavigate();
   const token = localStorage.getItem('token');
   const { permissions } = usePermissions();
   const _canEdit = canEdit(permissions, 'sales');
@@ -309,12 +311,18 @@ export default function CompanyDatabase() {
                       {l.email && <p className="text-[10px] text-slate-400 flex items-center gap-1"><Mail className="w-2.5 h-2.5" />{l.email}</p>}
                     </td>
                     <td className="px-3 py-2.5">
-                      {l.source && <Badge className="bg-slate-100 text-slate-600 text-[10px]">{l.source}</Badge>}
-                      {l.source_contact_list_name && (
-                        <p className="text-[10px] text-amber-700 mt-0.5 flex items-center gap-0.5" title="Hansı siyahıdan gəlib">
-                          <span className="w-1 h-1 rounded-full bg-amber-500" />
-                          {l.source_contact_list_name}
-                        </p>
+                      {l.source_contact_list_id ? (
+                        <a
+                          href={`/sales/contact-lists?list=${l.source_contact_list_id}`}
+                          onClick={(e) => { e.preventDefault(); navigate(`/sales/contact-lists?list=${l.source_contact_list_id}`); }}
+                          className="inline-flex items-center text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 hover:underline rounded px-1.5 py-0.5"
+                          title="Bu siyahıya keç"
+                          data-testid={`source-list-link-${l.id}`}
+                        >
+                          {l.source_contact_list_name ? `Siyahı: ${l.source_contact_list_name}` : (l.source || 'Siyahı')}
+                        </a>
+                      ) : (
+                        l.source && <Badge className="bg-slate-100 text-slate-600 text-[10px]">{l.source}</Badge>
                       )}
                     </td>
                     <td className="px-3 py-2.5">

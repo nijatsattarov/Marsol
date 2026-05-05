@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { Plus, Loader2, Search, Trash2, Download, Upload, ArrowRight, ArrowLeft, Users, FileSpreadsheet } from 'lucide-react';
 import { Button } from '../components/ui/button';
@@ -27,6 +28,7 @@ export default function ContactLists() {
   const _canEdit = canEdit(permissions, 'sales');
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const fetchLists = useCallback(async () => {
     try { const res = await axios.get(`${API}/contact-lists`, { headers }); setLists(res.data); }
@@ -34,13 +36,25 @@ export default function ContactLists() {
   }, []);
   useEffect(() => { fetchLists(); }, [fetchLists]);
 
+  // Auto-open list from ?list=<id> query param (deep link from Sales Leads)
+  useEffect(() => {
+    const wantedId = searchParams.get('list');
+    if (!wantedId || lists.length === 0) return;
+    if (selectedList && selectedList.id === wantedId) return;
+    const target = lists.find(l => l.id === wantedId);
+    if (target) {
+      setSelectedList(target);
+      fetchContacts(target.id);
+    }
+  }, [searchParams, lists]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const fetchContacts = async (listId) => {
     try { const res = await axios.get(`${API}/contact-lists/${listId}/contacts`, { headers }); setContacts(res.data); }
     catch { setContacts([]); }
   };
 
   const openList = (list) => { setSelectedList(list); fetchContacts(list.id); };
-  const goBack = () => { setSelectedList(null); setContacts([]); setSearchTerm(''); };
+  const goBack = () => { setSelectedList(null); setContacts([]); setSearchTerm(''); if (searchParams.get('list')) setSearchParams({}); };
 
   const handleListSubmit = async (e) => {
     e.preventDefault();
