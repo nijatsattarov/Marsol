@@ -135,26 +135,7 @@ export default function Dashboard() {
     name: (b.name || '').replace(/\s+paket$/i, '').trim() || b.name,
   }));
   const sectorsBreakdown = stats.sectors?.breakdown || [];
-
-  // Recharts label renderer: shows count next to each slice via leader line
-  const renderPieLabel = ({ cx, cy, midAngle, outerRadius, count, fill }) => {
-    if (!count) return null;
-    const RAD = Math.PI / 180;
-    const r1 = outerRadius + 8;
-    const r2 = outerRadius + 22;
-    const x1 = cx + r1 * Math.cos(-midAngle * RAD);
-    const y1 = cy + r1 * Math.sin(-midAngle * RAD);
-    const x2 = cx + r2 * Math.cos(-midAngle * RAD);
-    const y2 = cy + r2 * Math.sin(-midAngle * RAD);
-    const xT = x2 + (x2 > cx ? 4 : -4);
-    return (
-      <g>
-        <path d={`M${x1},${y1}L${x2},${y2}`} stroke={fill} strokeWidth={1} fill="none" />
-        <circle cx={x2} cy={y2} r={2} fill={fill} />
-        <text x={xT} y={y2} dy={3} fontSize="11" fontWeight="600" fill="#3D4F6F" textAnchor={x2 > cx ? 'start' : 'end'}>{count}</text>
-      </g>
-    );
-  };
+  const totalPackageCount = companiesBreakdown.reduce((s, x) => s + (x.count || 0), 0);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 lg:space-y-8 overflow-x-hidden" data-testid="dashboard-container">
@@ -200,32 +181,50 @@ export default function Dashboard() {
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
-        {/* Companies by Package - Pie Chart */}
+        {/* Companies by Package - List + Pie */}
         <ChartCard title="Şirkətlər üzrə paketlər">
           {companiesBreakdown.length > 0 ? (
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie
-                  data={companiesBreakdown}
-                  cx="50%"
-                  cy="45%"
-                  innerRadius={40}
-                  outerRadius={70}
-                  paddingAngle={4}
-                  dataKey="count"
-                  nameKey="name"
-                  label={renderPieLabel}
-                  labelLine={false}
-                  isAnimationActive={false}
-                >
-                  {companiesBreakdown.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{ fontSize: '12px' }} iconSize={10} />
-              </PieChart>
-            </ResponsiveContainer>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 items-center">
+              {/* Left list */}
+              <ul className="space-y-2 order-2 sm:order-1" data-testid="package-list">
+                {companiesBreakdown.map((p, i) => {
+                  const pct = totalPackageCount > 0 ? Math.round((p.count / totalPackageCount) * 100) : 0;
+                  return (
+                    <li key={i} className="flex items-center gap-2 text-sm">
+                      <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                      <span className="flex-1 truncate text-slate-600">{p.name}</span>
+                      <span className="font-bold text-[#3D4F6F] tabular-nums">{p.count}</span>
+                      <span className="text-[10px] text-slate-400 w-9 text-right tabular-nums">{pct}%</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              {/* Right donut */}
+              <div className="order-1 sm:order-2 h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={companiesBreakdown}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={42}
+                      outerRadius={75}
+                      paddingAngle={3}
+                      dataKey="count"
+                      nameKey="name"
+                      stroke="#fff"
+                      strokeWidth={2}
+                      isAnimationActive={false}
+                    >
+                      {companiesBreakdown.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           ) : (
             <div className="h-[240px] flex items-center justify-center text-slate-400">
               Məlumat yoxdur

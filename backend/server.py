@@ -504,7 +504,7 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     inv_by_type = await db.invitations.aggregate(inv_type_pipeline).to_list(20)
     
     # Get companies by package — dynamically based on configured packages
-    pkg_palette = ["#3D4F6F", "#9ACD32", "#64748B", "#475569", "#1E293B", "#94A3B8", "#CBD5E1", "#0EA5E9", "#F59E0B"]
+    pkg_palette = ["#3D4F6F", "#9ACD32", "#F59E0B", "#8B5CF6", "#EF4444", "#06B6D4", "#EC4899", "#10B981", "#F97316"]
     package_docs = await db.packages.find({}, {"_id": 0, "name": 1}).to_list(100)
     package_names = [p["name"] for p in package_docs if p.get("name")]
     if not package_names:
@@ -544,8 +544,8 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     total_debt = company_finance[0]["debt"] if company_finance else 0
     total_expenses = expense_data[0]["total"] if expense_data else 0
     
-    # Build sector breakdown with colors
-    colors = ["#3D4F6F", "#9ACD32", "#64748B", "#94A3B8", "#CBD5E1", "#2A364C", "#475569", "#334155"]
+    # Build sector breakdown with distinct colors (high-contrast palette)
+    colors = ["#3D4F6F", "#9ACD32", "#F59E0B", "#8B5CF6", "#EF4444", "#06B6D4", "#EC4899", "#10B981", "#F97316", "#6366F1", "#14B8A6", "#84CC16"]
     sector_breakdown = [
         {"name": s["_id"] or "Digər", "count": s["count"], "color": colors[i % len(colors)]}
         for i, s in enumerate(sectors_data)

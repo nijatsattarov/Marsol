@@ -603,8 +603,8 @@ export default function Companies() {
           <Button onClick={() => { setEditingCompany(null); setFormData(initialFormData); setActiveTab('basic'); setShowAddModal(true); }} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" size="sm" data-testid="add-company-btn"><Plus className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Yeni Şirkət</span></Button>
         </div>
       </div>
-      {/* Search & Filter */}
-      <div className="bg-white rounded-xl shadow-sm border p-3 mb-4">
+      {/* Search & Filter — sticky beneath top notification bar */}
+      <div className="bg-white rounded-xl shadow-sm border p-3 mb-4 sticky top-14 z-20" data-testid="companies-filter-bar">
         <div className="flex gap-2 flex-wrap">
           <div className="relative flex-1 min-w-[180px]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><Input placeholder="Axtar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 text-sm" /></div>
           <Select value={sortBy} onValueChange={setSortBy}>
