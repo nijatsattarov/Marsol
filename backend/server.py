@@ -682,6 +682,42 @@ async def backfill_ids(current_user: dict = Depends(check_permission("companies"
     return {"assigned": after - before, "total": after}
 
 
+@api_router.post("/companies/renumber-ids")
+async def renumber_company_ids(payload: dict = None, current_user: dict = Depends(check_permission("companies", "write"))):
+    """Renumber ALL companies' display_id sequentially starting at C0001.
+
+    Order is controlled via `payload.order_by`:
+      - "created_at" (default, ascending): preserves the registration timeline
+      - "brand_name": A-Z by name
+      - "current_id": keeps the current relative order of display_id (and assigns
+        sequential ones to those without one)
+    """
+    payload = payload or {}
+    order_by = payload.get("order_by", "created_at")
+    if order_by not in ("created_at", "brand_name", "current_id"):
+        order_by = "created_at"
+
+    docs = await db.companies.find({}, {"_id": 0, "id": 1, "brand_name": 1, "created_at": 1, "display_id": 1}).to_list(10000)
+    if order_by == "brand_name":
+        docs.sort(key=lambda d: (d.get("brand_name") or "").lower())
+    elif order_by == "current_id":
+        def _id_sort_key(d):
+            did = d.get("display_id") or ""
+            try:
+                return (0, int(did.lstrip("C")))
+            except ValueError:
+                return (1, 9999999)
+        docs.sort(key=_id_sort_key)
+    else:  # created_at
+        docs.sort(key=lambda d: d.get("created_at") or "")
+
+    for idx, d in enumerate(docs, start=1):
+        new_id = f"C{idx:04d}"
+        if d.get("display_id") != new_id:
+            await db.companies.update_one({"id": d["id"]}, {"$set": {"display_id": new_id}})
+    return {"renumbered": len(docs), "order_by": order_by, "first": "C0001", "last": f"C{len(docs):04d}"}
+
+
 @api_router.post("/companies")
 async def create_company(company_data: dict, current_user: dict = Depends(check_permission("companies", "write"))):
     company_id = str(uuid.uuid4())

@@ -3,8 +3,9 @@ import axios from 'axios';
 import {
   Plus, Search, Download, Loader2, Building2, User, Phone, Mail,
   Eye, Pencil, Trash2, ArrowLeft, Filter, X, CreditCard, Upload, Link, PlusCircle, MinusCircle,
-  CheckCircle2, XCircle
+  CheckCircle2, XCircle, Hash
 } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -90,6 +91,7 @@ export default function Companies() {
   const [activeTab, setActiveTab] = useState('basic');
   const [customFields, setCustomFields] = useState([]);
   const [filters, setFilters] = useState({ sector: '', package: '', company_size: '', marsol_representative: '', status: '' });
+  const [sortBy, setSortBy] = useState('id_asc'); // id_asc | id_desc | name_asc | name_desc | newest | oldest
 
   const emptyOwner = { first_name: '', last_name: '', father_name: '', position: '', phone: '', email: '', birth_date: '', citizenship: '', education: '', specialty: '', university: '', social_links: [], children: [], desired_activities: [] };
   const emptyContract = { project: '', package: '', start_date: '', end_date: '', join_date: '', total_amount: 0, paid_amount: 0, debt_amount: 0, contract_file: '' };
@@ -302,6 +304,18 @@ export default function Companies() {
     }
   };
 
+  const handleRenumber = async (orderBy) => {
+    const labels = { created_at: 'Yaradılma tarixi', brand_name: 'Şirkət adı (A→Z)', current_id: 'Cari ID sırası' };
+    if (!window.confirm(`Bütün şirkətlərin ID-ləri "${labels[orderBy] || orderBy}" üzrə yenidən C0001-dən başlayaraq nömrələnəcək. Davam edək?`)) return;
+    try {
+      const res = await axios.post(`${API}/companies/renumber-ids`, { order_by: orderBy }, { headers });
+      toast.success(`${res.data.renumbered} şirkət yenidən nömrələndi (${res.data.first} → ${res.data.last})`);
+      fetchCompanies();
+    } catch (err) {
+      toast.error(`Xəta: ${err?.response?.data?.detail || err.message}`);
+    }
+  };
+
   // ==== Excel export with column picker ====
   const ALL_EXPORT_COLUMNS = [
     { key: 'no', label: '№', width: 5, get: (_, i) => i + 1 },
@@ -335,7 +349,25 @@ export default function Companies() {
 
   const exportToExcel = () => setShowExportModal(true);
 
-  const filteredCompanies = companies.filter(c => c.brand_name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.owner_name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.sector?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredCompanies = (() => {
+    const list = companies.filter(c => c.brand_name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.owner_name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.sector?.toLowerCase().includes(searchTerm.toLowerCase()));
+    const arr = [...list];
+    const idNum = (c) => {
+      const m = (c.display_id || '').match(/^C(\d+)$/);
+      return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+    };
+    const dateVal = (c) => c.created_at || c.registration_date || '';
+    switch (sortBy) {
+      case 'id_desc': arr.sort((a, b) => idNum(b) - idNum(a)); break;
+      case 'name_asc': arr.sort((a, b) => (a.brand_name || '').localeCompare(b.brand_name || '', 'az')); break;
+      case 'name_desc': arr.sort((a, b) => (b.brand_name || '').localeCompare(a.brand_name || '', 'az')); break;
+      case 'newest': arr.sort((a, b) => dateVal(b).localeCompare(dateVal(a))); break;
+      case 'oldest': arr.sort((a, b) => dateVal(a).localeCompare(dateVal(b))); break;
+      case 'id_asc':
+      default: arr.sort((a, b) => idNum(a) - idNum(b)); break;
+    }
+    return arr;
+  })();
   const activeFilterCount = Object.values(filters).filter(v => v && v !== 'all').length;
 
   if (loading) return <div className="flex items-center justify-center h-[60vh]"><Loader2 className="w-8 h-8 animate-spin" style={{ color: '#3D4F6F' }} /></div>;
@@ -509,20 +541,45 @@ export default function Companies() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div><h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Şirkət Məlumatları</h1><p className="text-slate-500 text-sm mt-1">Şirkətlərin idarə edilməsi</p></div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={exportToExcel}><Download className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Excel</span></Button>
           <Button variant="outline" size="sm" onClick={() => importInputRef.current?.click()} disabled={importing} data-testid="import-excel-btn">
             {importing ? <Loader2 className="w-4 h-4 sm:mr-1 animate-spin" /> : <Upload className="w-4 h-4 sm:mr-1" />}
             <span className="hidden sm:inline">{importing ? 'Yüklənir...' : 'Import'}</span>
           </Button>
           <input ref={importInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleExcelImport} data-testid="import-excel-input" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="renumber-trigger" title="ID-ləri yenidən nömrələ">
+                <Hash className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">ID nömrələ</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => handleRenumber('created_at')} data-testid="renumber-created">Yaradılma tarixinə görə</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleRenumber('brand_name')} data-testid="renumber-name">Şirkət adı (A → Z)</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleRenumber('current_id')} data-testid="renumber-current">Cari ID sırası ilə</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button onClick={() => { setEditingCompany(null); setFormData(initialFormData); setActiveTab('basic'); setShowAddModal(true); }} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" size="sm" data-testid="add-company-btn"><Plus className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Yeni Şirkət</span></Button>
         </div>
       </div>
       {/* Search & Filter */}
       <div className="bg-white rounded-xl shadow-sm border p-3 mb-4">
-        <div className="flex gap-3">
-          <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><Input placeholder="Axtar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 text-sm" /></div>
+        <div className="flex gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[180px]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><Input placeholder="Axtar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 text-sm" /></div>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="text-sm w-auto min-w-[160px]" data-testid="company-sort-select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="id_asc">ID: C0001 → C9999</SelectItem>
+              <SelectItem value="id_desc">ID: C9999 → C0001</SelectItem>
+              <SelectItem value="name_asc">Ad: A → Z</SelectItem>
+              <SelectItem value="name_desc">Ad: Z → A</SelectItem>
+              <SelectItem value="newest">Yenidən köhnəyə</SelectItem>
+              <SelectItem value="oldest">Köhnədən yeniyə</SelectItem>
+            </SelectContent>
+          </Select>
           <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className={activeFilterCount ? 'border-[#9ACD32]' : ''}><Filter className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Filtrlər</span>{activeFilterCount > 0 && <Badge className="ml-1 bg-[#9ACD32] text-[#3D4F6F] text-xs">{activeFilterCount}</Badge>}</Button>
         </div>
         {showFilters && options && (
