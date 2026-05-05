@@ -54,15 +54,25 @@ const CompanyCustomFieldsRenderer = ({ fields, tabName, formData, setFormData })
 };
 
 // Mobile card
-const CompanyCard = ({ company, index, onView, onEdit, onDelete }) => (
-  <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+const CompanyCard = ({ company, index, onView, onEdit, onDelete, selected, onToggleSelect }) => (
+  <div className={`bg-white rounded-xl p-4 shadow-sm border ${selected ? 'border-[#9ACD32] bg-[#9ACD32]/5' : 'border-slate-100'}`}>
     <div className="flex items-start justify-between mb-3">
-      <div className="flex-1 min-w-0">
+      <div className="flex items-start gap-2 flex-1 min-w-0">
+        {onToggleSelect && (
+          <input
+            type="checkbox"
+            className="w-4 h-4 mt-1 accent-[#9ACD32] cursor-pointer shrink-0"
+            checked={!!selected}
+            onChange={onToggleSelect}
+          />
+        )}
+        <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">#{index}</span>
+          <span className="text-xs font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{company.display_id || `#${index}`}</span>
           <h3 className="font-semibold text-[#3D4F6F] truncate">{company.brand_name}</h3>
         </div>
         <p className="text-sm text-slate-500 mt-1">{company.sector}</p>
+        </div>
       </div>
       <Badge className={company.status === 'Aktiv' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}>{company.status}</Badge>
     </div>
@@ -92,6 +102,7 @@ export default function Companies() {
   const [customFields, setCustomFields] = useState([]);
   const [filters, setFilters] = useState({ sector: '', package: '', company_size: '', marsol_representative: '', status: '' });
   const [sortBy, setSortBy] = useState('id_asc'); // id_asc | id_desc | name_asc | name_desc | newest | oldest
+  const [selectedIds, setSelectedIds] = useState(new Set());
 
   const emptyOwner = { first_name: '', last_name: '', father_name: '', position: '', phone: '', email: '', birth_date: '', citizenship: '', education: '', specialty: '', university: '', social_links: [], children: [], desired_activities: [] };
   const emptyContract = { project: '', package: '', start_date: '', end_date: '', join_date: '', total_amount: 0, paid_amount: 0, debt_amount: 0, contract_file: '' };
@@ -310,6 +321,35 @@ export default function Companies() {
     try {
       const res = await axios.post(`${API}/companies/renumber-ids`, { order_by: orderBy }, { headers });
       toast.success(`${res.data.renumbered} şirkət yenidən nömrələndi (${res.data.first} → ${res.data.last})`);
+      fetchCompanies();
+    } catch (err) {
+      toast.error(`Xəta: ${err?.response?.data?.detail || err.message}`);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredCompanies.length && filteredCompanies.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredCompanies.map(c => c.id)));
+    }
+  };
+
+  const toggleSelectOne = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`${selectedIds.size} şirkət silinəcək. Bu əməliyyat geri qaytarıla bilməz. Davam edək?`)) return;
+    try {
+      const res = await axios.post(`${API}/companies/bulk-delete`, { ids: Array.from(selectedIds) }, { headers });
+      toast.success(`${res.data.deleted} şirkət silindi`);
+      setSelectedIds(new Set());
       fetchCompanies();
     } catch (err) {
       toast.error(`Xəta: ${err?.response?.data?.detail || err.message}`);
@@ -592,18 +632,51 @@ export default function Companies() {
           </div>
         )}
       </div>
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="bg-[#3D4F6F] text-white rounded-xl shadow-md px-4 py-2.5 mb-3 flex items-center gap-3" data-testid="bulk-action-bar">
+          <span className="text-sm font-semibold">{selectedIds.size} şirkət seçildi</span>
+          <span className="text-xs text-white/70">/ {filteredCompanies.length}</span>
+          <div className="flex-1" />
+          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className="text-white hover:bg-white/10 text-xs" data-testid="bulk-clear-btn">
+            Seçimi təmizlə
+          </Button>
+          <Button size="sm" onClick={handleBulkDelete} className="bg-red-500 hover:bg-red-600 text-white text-xs" data-testid="bulk-delete-btn">
+            <Trash2 className="w-3.5 h-3.5 mr-1" />Seçilənləri sil
+          </Button>
+        </div>
+      )}
       {/* Mobile cards */}
-      <div className="sm:hidden grid grid-cols-1 gap-3 mb-4">{filteredCompanies.map((c, i) => <CompanyCard key={c.id} company={c} index={i+1} onView={v => setViewingCompany(v)} onEdit={handleEdit} onDelete={handleDelete} />)}</div>
+      <div className="sm:hidden grid grid-cols-1 gap-3 mb-4">{filteredCompanies.map((c, i) => <CompanyCard key={c.id} company={c} index={i+1} onView={v => setViewingCompany(v)} onEdit={handleEdit} onDelete={handleDelete} selected={selectedIds.has(c.id)} onToggleSelect={() => toggleSelectOne(c.id)} />)}</div>
       {/* Desktop table */}
       <div className="hidden sm:block bg-white rounded-xl shadow-sm border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full" data-testid="companies-table">
             <thead><tr className="bg-slate-50 border-b">
+              <th className="text-center px-3 py-3 text-xs font-semibold text-[#3D4F6F] w-10">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 accent-[#9ACD32] cursor-pointer"
+                  checked={filteredCompanies.length > 0 && selectedIds.size === filteredCompanies.length}
+                  ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < filteredCompanies.length; }}
+                  onChange={toggleSelectAll}
+                  data-testid="select-all-checkbox"
+                />
+              </th>
               {['ID','Şirkət','Sektor','Paket','Sahibkar','Telefon','Kurator','Borc','Status','Əməliyyat'].map(h => <th key={h} className={`text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F] ${h==='Əməliyyat'?'text-right':''} ${h==='ID'?'w-12':''}`}>{h}</th>)}
             </tr></thead>
-            <tbody>{filteredCompanies.length === 0 ? <tr><td colSpan={10} className="text-center py-12 text-slate-400">Şirkət tapılmadı</td></tr> :
+            <tbody>{filteredCompanies.length === 0 ? <tr><td colSpan={11} className="text-center py-12 text-slate-400">Şirkət tapılmadı</td></tr> :
               filteredCompanies.map((c, i) => (
-                <tr key={c.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                <tr key={c.id} className={`border-b border-slate-50 hover:bg-slate-50/50 ${selectedIds.has(c.id) ? 'bg-[#9ACD32]/5' : ''}`}>
+                  <td className="px-3 py-3 text-center">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 accent-[#9ACD32] cursor-pointer"
+                      checked={selectedIds.has(c.id)}
+                      onChange={() => toggleSelectOne(c.id)}
+                      data-testid={`select-row-${c.id}`}
+                    />
+                  </td>
                   <td className="px-3 py-3 text-sm font-mono text-slate-500">{c.display_id || ''}</td>
                   <td className="px-3 py-3"><p className="font-medium text-sm text-[#3D4F6F]">{c.brand_name}{c.pending_form_data && Object.keys(c.pending_form_data).length > 0 && <span className="ml-1.5 text-amber-600" title="Forum dəyişikliyi gözləyir">📩</span>}</p>{c.legal_name && <p className="text-xs text-slate-400">{c.legal_name}</p>}</td>
                   <td className="px-3 py-3 text-sm text-slate-600">{c.sector}</td>

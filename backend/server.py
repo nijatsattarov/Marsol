@@ -503,11 +503,24 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     ]
     inv_by_type = await db.invitations.aggregate(inv_type_pipeline).to_list(20)
     
-    # Get companies by package
-    premium_count = await db.companies.count_documents({"package": "Premium"})
-    business_count = await db.companies.count_documents({"package": "Business"})
-    business_plus_count = await db.companies.count_documents({"package": "Business Plus"})
-    
+    # Get companies by package — dynamically based on configured packages
+    pkg_palette = ["#3D4F6F", "#9ACD32", "#64748B", "#475569", "#1E293B", "#94A3B8", "#CBD5E1", "#0EA5E9", "#F59E0B"]
+    package_docs = await db.packages.find({}, {"_id": 0, "name": 1}).to_list(100)
+    package_names = [p["name"] for p in package_docs if p.get("name")]
+    if not package_names:
+        package_names = ["Premium", "Business", "Business Plus"]
+    package_breakdown = []
+    for idx, pname in enumerate(package_names):
+        cnt = await db.companies.count_documents({"package": pname})
+        package_breakdown.append({"name": f"{pname} paket", "count": cnt, "color": pkg_palette[idx % len(pkg_palette)]})
+    other_count = await db.companies.count_documents({"$or": [
+        {"package": {"$nin": package_names + [""]}},
+        {"package": {"$exists": False}},
+        {"package": ""},
+    ]})
+    if other_count > 0:
+        package_breakdown.append({"name": "Digər / paket yoxdur", "count": other_count, "color": "#CBD5E1"})
+
     # Get companies by sector
     sectors_pipeline = [
         {"$group": {"_id": "$sector", "count": {"$sum": 1}}},
@@ -541,11 +554,7 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     return {
         "companies": {
             "total": companies_count,
-            "breakdown": [
-                {"name": "Premium paket", "count": premium_count, "color": "#3D4F6F"},
-                {"name": "Business paket", "count": business_count, "color": "#9ACD32"},
-                {"name": "Business Plus paket", "count": business_plus_count, "color": "#64748B"}
-            ]
+            "breakdown": package_breakdown,
         },
         "employees": {
             "total": employees_count
@@ -998,6 +1007,16 @@ async def delete_company(company_id: str, current_user: dict = Depends(check_per
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
     return {"message": "Şirkət silindi"}
+
+
+@api_router.post("/companies/bulk-delete")
+async def bulk_delete_companies(payload: dict, current_user: dict = Depends(check_permission("companies", "write"))):
+    """Delete multiple companies at once. Body: {ids: [...]}."""
+    ids = payload.get("ids") or []
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(status_code=400, detail="ids siyahısı boş ola bilməz")
+    result = await db.companies.delete_many({"id": {"$in": ids}})
+    return {"deleted": result.deleted_count, "requested": len(ids)}
 
 # ==================== EMPLOYEES (İNSAN RESURSLARI) ====================
 
