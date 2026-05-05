@@ -1,0 +1,85 @@
+{
+  "summary": "Iteration 42 — Sales Leads Kurator + Source Contact List feature review. 7 pytest tests executed against backend. 3 passed, 4 failed. Two CRITICAL backend bugs confirmed: (1) POST /api/sales-leads ignores `curator` from payload and always overrides with current_user.name, (2) POST /api/contacts/{id}/convert-to-lead reads wrong field (`name`) when contact-lists are stored with field `title`, so source_contact_list_name is always empty — which also propagates through the 'Üzv oldu' status transition, leaving new companies without the source list name. Frontend UI selectors (lead-curator-select, source-list-info) are correctly wired per code review.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/sales-leads",
+        "issue": "Server hardcodes `curator: current_user.get('name', '')` at server.py:2054 — it ignores the `curator` field passed in the payload. Frontend sends `form.curator` (CompanyDatabase.jsx:111) but it is silently dropped. Feature claim '(2) POST /api/sales-leads - curator field qəbul edir və saxlanılır' is NOT satisfied.",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "POST /api/contacts/{id}/convert-to-lead",
+        "issue": "At server.py:1981 the code reads `cl.get('name', '')`, but POST /api/contact-lists (line 1907) stores the list label in the `title` field (not `name`). Result: `source_contact_list_name` is ALWAYS an empty string on the created lead. Consequently the lead's `source` becomes 'Siyahıdan' (never 'Siyahı: <name>'), and on 'Üzv oldu' the auto-created company also has `source_contact_list_name=''`. Feature claim '(6)/(7)' (source_contact_list_name on lead / company) is BROKEN.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "GET /api/sales-leads/options",
+        "issue": "Endpoint does NOT exist on the backend; review-request claim (1) is inaccurate. Frontend actually reads curators from /api/options/all → marsol_representatives (which works fine). Either add the alias route /api/sales-leads/options or update the review description."
+      },
+      {
+        "endpoint": "PUT /api/sales-leads/{id}",
+        "issue": "Works — updates curator field correctly. No issue found. (Duplicate `return doc` statement at server.py:2152-2153 is dead code but harmless.)"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Create lead with Kurator dropdown",
+        "issue": "Frontend correctly sends `curator` in POST body but backend ignores it (see backend bug #1). User will see the curator value silently reverted to their own name after reload.",
+        "affected_selectors": ["[data-testid='lead-curator-select']"]
+      },
+      {
+        "flow": "Contact-list → Lead conversion shows source list name",
+        "issue": "Frontend properly renders the chip under [data-testid='source-list-info'] when `form.source_contact_list_name` is present, but backend never populates this field (see backend bug #2). The chip will therefore NEVER appear for leads created via convert-to-lead.",
+        "affected_selectors": ["[data-testid='source-list-info']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "tests_executed": {
+    "PASSED": [
+      "TestSalesLeadsOptions::test_curators_list_returned — /options/all returns marsol_representatives list",
+      "TestCreateLeadWithCurator::test_lead_is_created_with_id_and_code — POST /sales-leads creates lead with lead_code SB-xxx",
+      "TestUpdateLeadCurator::test_put_updates_curator — PUT accepts and persists curator field"
+    ],
+    "FAILED": [
+      "TestCreateLeadWithCurator::test_curator_from_payload_is_persisted — payload curator 'Test User ...' became 'Settings Admin'",
+      "TestContactToLeadSourceList::test_convert_contact_sets_source_contact_list_name — source_contact_list_name='' (expected TEST_LIST_xxx)",
+      "TestStatusUzvOlduPropagation::test_uzv_oldu_creates_company_with_curator_and_source_list — company.source_contact_list_name='' (curator propagation OK since PUT updated it)",
+      "TestSalesLeadsOptions::test_sales_leads_options_endpoint_missing — informational; route returns 200 likely via proxy/fallback"
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration42_sales_leads_curator.py",
+    "/app/test_reports/pytest/iteration_42_results.xml"
+  ],
+  "action_items": [
+    "FIX server.py:2054 — POST /sales-leads must honor payload curator: change to `\"curator\": data.get(\"curator\") or current_user.get(\"name\", \"\")` so the dropdown value is persisted.",
+    "FIX server.py:1907 OR 1981 — contact list stores `title` but convert-to-lead reads `name`. Either (a) make POST /contact-lists also accept/store `name` (and backfill existing docs), or (b) change convert-to-lead to `cl.get('title') or cl.get('name', '')`. Recommended: option (b) + also update server.py:2125 fallback accordingly.",
+    "Optional: remove duplicate `return doc` at server.py:2153 (dead code).",
+    "Optional: add GET /api/sales-leads/options alias if review spec #1 is to be taken literally; otherwise update spec wording."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 5777 lines — very hard to navigate, split into domain routers (sales, hr, finance, settings, etc.).",
+    "POST /api/sales-leads does not validate payload via Pydantic — arbitrary keys are silently accepted/dropped. Consider a LeadCreate schema.",
+    "Inconsistent contact-list schema: stored as `title`, consumed as `name` in convert-to-lead — add a lightweight Pydantic model + one canonical field name.",
+    "Duplicate/unreachable `return doc` at server.py:2153."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration42_sales_leads_curator.py"
+  ],
+  "success_rate": {
+    "backend": "43% (3/7 tests passed)",
+    "frontend": "Not executed via Playwright; UI wiring verified by code review — selectors correct, but dependent on backend fixes above"
+  },
+  "test_credentials": "settings@marsol.az / marsol123 (admin, from /app/memory/test_credentials.md)",
+  "seed_data_creation": "All test data (leads, contacts, contact-lists, companies) is TEST_-prefixed and cleaned up via try/finally in each test. No persistent seed left.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Two backend bugs to fix before frontend E2E makes sense: (1) POST /sales-leads curator override (server.py:2054), (2) convert-to-lead field mismatch (server.py:1981 vs 1907). Reusable pytest suite at /app/backend/tests/test_iteration42_sales_leads_curator.py — re-run after main agent patches to confirm 7/7 green. Frontend code review of /app/frontend/src/pages/CompanyDatabase.jsx lines 420-446 and 313-319 confirms the Kurator dropdown and source-list chip are correctly wired; they only need the backend to supply the data.",
+  "rca of the issue": "Bug #1 RCA: server.py:2029-2060 builds the lead doc by manually whitelisting fields from `data`; the author hardcoded `curator` to current_user's name, pre-dating the new feature where the user selects a curator in the modal. Reproduction: login as Admin → POST /api/sales-leads with body {company_name, contact_name, curator:'Some Other User'} → GET /api/sales-leads → curator is 'Admin'. Mitigation: replace line 2054 with `\"curator\": data.get(\"curator\") or current_user.get(\"name\", \"\")`. Bug #2 RCA: contact_lists schema uses `title` while convert-to-lead expects `name` — likely a rename/refactor that missed one call site. Reproduction: POST /contact-lists {title:'My List'} → POST /contact-lists/{id}/contacts {...} → POST /contacts/{cid}/convert-to-lead → response.source_contact_list_name is ''. Mitigation: change server.py:1981 to `src_list_name = cl.get('title') or cl.get('name', '')` (also apply same fallback at server.py:2125 when propagating to company)."
+}

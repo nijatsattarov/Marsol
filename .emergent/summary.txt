@@ -2,113 +2,65 @@
 
 **User's preferred language**: Azerbaijani (You MUST automatically detect the user's primary language from their messages inside the <trajectory> tag and INSTRUCT next agent to respond in **Azerbaijani** only)
 
-**what currently exists?**: A highly functional full-stack ERP (React + FastAPI + MongoDB). Recently, the application received massive updates: Resend email integration, Davamiyyət & Barter modules restructured, System Sessions tracking (login/logout/active time), Calendar view for Meetings, Cloudinary file uploads integration, Excel import for Companies (with auto package pricing & debt calculations), Unique auto-increment IDs (C0001) for Companies, and the AI Data Analyst feature was refactored to use the direct OpenAI SDK to fix Render deployment issues. 
+**what currently exists?**: A highly functional full-stack ERP (React + FastAPI + MongoDB). The application has seen massive iterative updates. In the current state, it has full Package Services management, Service Usage tracking (auto-linked with meetings), dynamic manageable lists for all UI dropdowns, Notes module, bulk selection/deletion of companies, an advanced Dashboard with dynamic package pie-charts, and sticky/responsive UI components. A 401/403 infinite loading loop bug was fixed via global Axios interceptors. 
 
 **Last working item**:
-    - Last item agent was working: Addressing a 6-item batch request from the user. The agent was specifically working on Item #1: Cleaning up the design of the Sənədlər (Documents) tab in the HR module (fixing overlapping upload inputs).
+    - Last item agent was working: Modifying the Company Database (Sales Leads) module. The user clarified they wanted the Kurator (Curator) dropdown inside the Sales Lead edit modal (not just the main companies module) and wanted to see the source list (Siyahı) when a lead is created from a contact list.
     - Status: IN PROGRESS
-    - Agent Testing Done: N (Context window filled right after the  edit on ).
-    - Which testing method agent to use? screenshot tool (for UI fixes), testing agent v3 fork (for backend/export changes).
+    - Agent Testing Done: Y (Tested via curl and smoke screenshot).
+    - Which testing method agent to use? testing agent v3 fork
     - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  Issue 1: HR module Sənədlər (Documents) tab design layout fix (P0)
-     - Attempted fixes: Agent just performed a  in  to fix overlapping text/inputs.
-     - Next debug checklist: Take a screenshot to verify the UI in the HR employee creation modal's Sənədlər tab.
-     - Why fix this issue and what will be achieved with the fix? Completes user's request for better UX.
-     - Status: IN PROGRESS
+  Issue 1: Finalize Sales Leads Kurator and Mənbə updates (P0)
+     - Attempted fixes: The agent has already successfully modified  to show the curator dropdown and display the source list name, and updated  to handle the  field in .
+     - Next debug checklist: Review the last screenshot to ensure the lead edit modal looks correct. Run  for the frontend/backend changes on the Sales Leads module if needed, then call the  tool.
+     - Why fix this issue and what will be achieved with the fix? Fulfills the user's explicit request to assign curators directly to leads and see their source lists.
+     - Status: TESTING PENDING
      - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? Frontend (Screenshot)
+     - Should Test frontend/backend/both after fix? Both (Testing Agent)
      - Blocked on other issue: None
 
-  Issue 2: Clean up Excel export in Üzvlər (Members) module (P1)
-     - Next debug checklist: Review  export logic and make it look clean and structured.
-     - Status: NOT STARTED
-
-  Issue 3: Add company name to Birthday Notifications (P1)
-     - Next debug checklist: Modify the  or the birthday generation block in  to include  in the notification payload/text.
-     - Status: NOT STARTED
-
-  Issue 4: Global Notification Days Settings (P1)
-     - Next debug checklist: Add a UI in  (Xəbərdarlıq/Notifications tab) to input custom day counts for all reminders (e.g., finance dues, birthdays, etc., instead of just membership). Update the backend logic in  to fetch and use these settings.
-     - Status: NOT STARTED
-
-  Issue 5: Universal column selector for ALL Excel exports (P1)
-     - Next debug checklist: The agent previously added a column picker for . Extract this into a reusable component and apply it to all modules that have an export function. Ensure future columns are easily included.
-     - Status: NOT STARTED
-
-  Issue 6: Clean up Settings menu design (P1)
-     - Next debug checklist: Review  UI and improve the aesthetic/layout of the menu tabs.
-     - Status: NOT STARTED
-
 **In progress Task List**:
-  None (All are tracked as issues above).
+  Task 1: Finish Sales Lead updates
+     - Where to resume: The agent just verified the curator and source UI in . The next step is to wrap up the task (run the testing subagent if needed, update PRD, and call finish).
+     - What will be achieved with this? Closes the current user request loop.
+     - Status: TESTING PENDING
+     - Should Test frontend/backend/both after fix? Both
+     - Blocked on something: Nothing
 
-**Upcoming and Future Tasks**:
+**Upcoming and Future Tasks**
     Upcoming Tasks:
     - Task 1 (P1): Marketing (Marketinq) module implementation.
     
     Future Tasks:
-    - Task 2 (P2): Excel import feature for Members, Sales Leads, and HR (Agent proposed this, user might want it later).
+    - Task 2 (P2): Excel import feature for Members, Sales Leads, and HR.
     - Task 3 (P2): PDF Reports generation / Export enhancements.
+    - Task 4 (P2): Add a Bu şirkətə aid qeydlər (Notes) tab inside the Company Detail view to link the new Notes module to specific companies.
+    - Task 5 (P2): Bulk assign Curator feature for the Companies module.
 
 **Completed work in this session**
-- Resend email integration finalized & verified (DONE)
-- Sidebar Restructure: HR -> Davamiyyət, Maliyyə -> Barter (DONE)
-- System Sessions tracking (login/logout/active time) inside Davamiyyət (DONE)
-- Marsol_company choice field added to Finance & Settings (DONE)
-- Calendar view for Meetings (DONE)
-- AI Data Analyst refactored to use direct usage: openai [-h] [-v] [-b API_BASE] [-k API_KEY] [-p PROXY [PROXY ...]]
-              [-o ORGANIZATION] [-t {openai,azure}]
-              [--api-version API_VERSION] [--azure-endpoint AZURE_ENDPOINT]
-              [--azure-ad-token AZURE_AD_TOKEN] [-V]
-              {api,tools,migrate,grit} ...
-
-positional arguments:
-  {api,tools,migrate,grit}
-    api                 Direct API calls
-    tools               Client side tools for convenience
-
-options:
-  -h, --help            show this help message and exit
-  -v, --verbose         Set verbosity.
-  -b API_BASE, --api-base API_BASE
-                        What API base url to use.
-  -k API_KEY, --api-key API_KEY
-                        What API key to use.
-  -p PROXY [PROXY ...], --proxy PROXY [PROXY ...]
-                        What proxy to use.
-  -o ORGANIZATION, --organization ORGANIZATION
-                        Which organization to run as (will use your default
-                        organization if not specified)
-  -t {openai,azure}, --api-type {openai,azure}
-                        The backend API to call, must be `openai` or `azure`
-  --api-version API_VERSION
-                        The Azure API version, e.g.
-                        'https://learn.microsoft.com/en-us/azure/ai-
-                        services/openai/reference#rest-api-versioning'
-  --azure-endpoint AZURE_ENDPOINT
-                        The Azure endpoint, e.g.
-                        'https://endpoint.openai.azure.com'
-  --azure-ad-token AZURE_AD_TOKEN
-                        A token from Azure Active Directory,
-                        https://www.microsoft.com/en-
-                        us/security/business/identity-access/microsoft-entra-
-                        id
-  -V, --version         show program's version number and exit SDK, removing  to fix Render deployment build failure (DONE)
-- Assembly Modal Cursor Loss Bug Fixed (moved inner components to module scope) (DONE)
-- Cloudinary file/image upload integration () (DONE)
-- Excel Import for Companies (auto-maps packages, calculates debts) (DONE)
-- Dashboard finance charts removed (DONE)
-- Unique IDs (C0001) added for all Companies + automated backfill (DONE)
-- Custom Fields read-only View added to detail modals (Companies, HR) (DONE)
-- Phone inputs with Country prefixes (DONE)
+- Completed 6-item batch (HR Sənədlər layout, Excel export cleanup, Company name in birthday emails, Global Notification Settings, Excel Column Picker, Settings UI cleanup) (DONE)
+- Fixed  bug (falling back to row index) during Lead to Company conversion (DONE)
+- Built Package Services Manager in Settings and Company/Member detail views (DONE)
+- Built Service Usage Tracking (Stats, CRUD, Dashboard Widget, and auto-tracking from Meetings) (DONE)
+- Fixed 401/403 Infinite loop bug via Axios interceptor on Frontend (DONE)
+- User modal Password toggle (eye icon) and Dynamic Department Dropdown (DONE)
+- HR Table tweaks: Show Müəssisə instead of Salary (DONE)
+- Dynamic Manageable Lists (Siyahılar) panel in Settings for all app dropdowns (DONE)
+- Added  endpoint and UI sorting for Company  sequence fixes (DONE)
+- Bulk Selection and Bulk Delete operations in Companies Module (DONE)
+- Redesigned Dashboard Pie Charts (dynamic package colors, stacked legend) & Sector bar charts (DONE)
+- Notification system: Mark as read, sticky notification bell with unread counters (DONE)
+- Sticky search/filter bar in Companies Module (DONE)
+- Added Notes (Qeydlər) Module with pinning and tagging (DONE)
+- Added Kurator dropdown to basic Company edit tab (DONE)
 
 **Earlier issues found/mentioned but not fixed**
 None.
 
 **Known issue recurrence from previous fork**
-  - Issue recurrence in previous fork: N/A
+  - Issue recurrence in previous fork: None
   - Recurrence count: 0
   - Status: RESOLVED
 
@@ -116,77 +68,65 @@ None.
 
 
 **Key Technical Concepts**
-- Frontend: React 18, Tailwind CSS, Shadcn UI, XLSX.
+- Frontend: React 18, Tailwind CSS, Recharts, Shadcn UI, Axios.
 - Backend: FastAPI, PyMongo (Motor), JWT Auth.
 - External Integrations: Cloudinary (File storage), Resend (Emails), OpenAI SDK (AI Analysis).
 
 **key DB schema**
-  - : Added  (e.g. C0001), , , , .
-  - : Tracks login/logout times and durations.
-  - : Tracks sent emails to prevent spam.
+  - : 
+  - : Tracks usage of package features per company (auto-linked to meetings).
+  - : Dynamically manages dropdown options (Sectors, Departments, etc.).
+  - : Tracks which user read which notification.
+  - : 
 
 **changes in tech stack**
-  - Added  SDK for file uploads.
-  - Removed  and  from  to solve Render deployment issues. Switched AI Data Analyst to use the standard usage: openai [-h] [-v] [-b API_BASE] [-k API_KEY] [-p PROXY [PROXY ...]]
-              [-o ORGANIZATION] [-t {openai,azure}]
-              [--api-version API_VERSION] [--azure-endpoint AZURE_ENDPOINT]
-              [--azure-ad-token AZURE_AD_TOKEN] [-V]
-              {api,tools,migrate,grit} ...
-
-positional arguments:
-  {api,tools,migrate,grit}
-    api                 Direct API calls
-    tools               Client side tools for convenience
-
-options:
-  -h, --help            show this help message and exit
-  -v, --verbose         Set verbosity.
-  -b API_BASE, --api-base API_BASE
-                        What API base url to use.
-  -k API_KEY, --api-key API_KEY
-                        What API key to use.
-  -p PROXY [PROXY ...], --proxy PROXY [PROXY ...]
-                        What proxy to use.
-  -o ORGANIZATION, --organization ORGANIZATION
-                        Which organization to run as (will use your default
-                        organization if not specified)
-  -t {openai,azure}, --api-type {openai,azure}
-                        The backend API to call, must be `openai` or `azure`
-  --api-version API_VERSION
-                        The Azure API version, e.g.
-                        'https://learn.microsoft.com/en-us/azure/ai-
-                        services/openai/reference#rest-api-versioning'
-  --azure-endpoint AZURE_ENDPOINT
-                        The Azure endpoint, e.g.
-                        'https://endpoint.openai.azure.com'
-  --azure-ad-token AZURE_AD_TOKEN
-                        A token from Azure Active Directory,
-                        https://www.microsoft.com/en-
-                        us/security/business/identity-access/microsoft-entra-
-                        id
-  -V, --version         show program's version number and exit SDK directly.
+  - Global Axios interceptors added to  to automatically handle 401/403 Token Expiration by logging the user out and redirecting to .
 
 **All files of reference** 
 - 
--  
+- 
+- 
 - 
 - 
 - 
 - 
 
 **Areas that need refactoring**:
--  is over 4,800 lines long. It urgently needs to be split into discrete API routers (, , etc.). Use extreme caution when using  here to avoid breaking offsets.
+-  is over 5,700 lines long. It urgently needs to be split into discrete API routers. Because of its size,  frequently fails or targets wrong lines. Verify string uniqueness before replacing.
 
 **key api endpoints**
 - 
--  (Redirects to Cloudinary)
+- 
+- 
 - 
 - 
 - 
 
 **Critical Info for New Agent**
 - **Language**: You MUST communicate entirely in **Azerbaijani**.
-- **AI Data Analyst**: The backend now uses the direct usage: openai [-h] [-v] [-b API_BASE] [-k API_KEY] [-p PROXY [PROXY ...]]
+- **Context Continuation**: The agent has already applied the requested code changes to  and  for the Sales Leads Curator/Source list features. Review the final screenshot logs, verify everything is stable, potentially run , and call the  tool. 
+- **Avoid Long Loops**: Dashboard  used to loop endlessly on 401/403. This is fixed via  interceptors.
+
+**documents and test reports created in this job**
+  -  (Updated continuously)
+  -  to 
+
+**Last 10 User Messages and any pending HUMAN messages** 
+ - *Message 830 (PENDING)*: User said davam et (continue). The agent completed the code changes, ran lints, executed curl checks, and took a screenshot, but hit the context limit before summarizing and finishing.
+ - *Message 795 (Completed)*: User clarified that the Kurator dropdown should be on the Lead creation/edit modal in the *Company Database* (Siyahılar / Sales Leads) module, not just the Companies module.
+ - *Message 770 (Completed)*: User asked to add Kurator to company edit modal.
+ - *Message 721 (Completed)*: User requested Lead conversion from Contact lists to track the source, not default to üzvlük, and asked for the Qeyd (Notes) module.
+ - *Message 696 (Completed)*: User asked to redesign dashboard pie charts (stack package names on the left, distinct colors) and make the Companies search/filter bar sticky.
+ - *Message 631 (Completed)*: User asked for 5 items: Notification mark-as-read, sticky notification bell, remove paket text on dashboard, responsive layout fixes, mobile/tablet responsiveness.
+ - *Message 582 (Completed)*: User requested bulk select/delete in Companies and dynamic package stats in Dashboard.
+ - *Message 535 (Completed)*: User asked to fix Company  sorting/renumbering after Excel imports messed up the C0001 sequence.
+
+**Project Health Check:**
+- Broken: None known.
+- Mocked: None.
+
+**3rd Party Integrations** 
+- OpenAI () — Requires User API Key (Used directly via usage: openai [-h] [-v] [-b API_BASE] [-k API_KEY] [-p PROXY [PROXY ...]]
               [-o ORGANIZATION] [-t {openai,azure}]
               [--api-version API_VERSION] [--azure-endpoint AZURE_ENDPOINT]
               [--azure-ad-token AZURE_AD_TOKEN] [-V]
@@ -223,50 +163,28 @@ options:
                         https://www.microsoft.com/en-
                         us/security/business/identity-access/microsoft-entra-
                         id
-  -V, --version         show program's version number and exit SDK with a user-provided OpenAI API key (). DO NOT attempt to reinstall  as it breaks the user's Render deployment. 
-- **Context Continuation**: The agent was in the middle of executing a 6-item list provided by the user in the final message. Do not ask the user for what to do next until you finish the items listed under **All Pending/In progress Issue list**.
-
-**documents and test reports created in this job**
-  -  (Updated)
-  -  to  
-
-**Last 10 User Messages and any pending HUMAN messages** 
- - *Message 844 (PENDING)*: User provided a 6-item batch request: 1. Clean HR document layout, 2. Clean Members Excel export, 3. Add company to bday notification, 4. Global reminder days config in Settings, 5. Universal Excel column picker, 6. Clean up Settings menu design.
- - *Message 634 (Completed)*: User provided a 10-item batch request including Country prefixes, birthday reminders, custom fields in detail views, removing finance charts, auto-generating C0001 IDs, etc.
- - *Message 623 (Completed)*: User asked to add Paid Amount column logic to Excel import.
- - *Message 608 (Completed)*: User reported imported companies don't show package pricing automatically. 
- - *Message 529 (Completed)*: User reported package not mapping to contract array, and missing company names in Members table.
- - *Message 455 (Completed)*: User requested Excel import function for companies.
- - *Message 370 (Completed)*: User provided Cloudinary credentials and requested integration for file/image storage.
- - *Message 335 (Completed)*: User reported a bug: text inputs losing focus (cursor jumping) in the Assembly modal.
- - *Message 333 (Completed)*: User got a 429 quota error from OpenAI. (Agent explained how to add balance).
-
-**Project Health Check:**
-- Broken: None known.
-- Mocked: None.
-
-**3rd Party Integrations** 
-- OpenAI () — Requires User API Key (Replaced Emergent Key for Render compatibility).
+  -V, --version         show program's version number and exit SDK).
 - Resend (Emails) — Requires User API Key.
 - Cloudinary (File storage) — Requires User API Key.
 
 **Testing status**
-  - Testing agent used after significant changes: YES (Heavily used, passing up to Iteration 36).
+  - Testing agent used after significant changes: YES (Heavily used, passing up to Iteration 41).
   - Troubleshoot agent used after agent stuck in loop: NO
   - Test files created: 
   - Known regressions: None.
 
 **Credentials to test flow:**
-Check . (admin@marsol.az or settings@marsol.az / marsol123, satis@marsol.az / marsol123).
+Check . (e.g., admin@marsol.az or settings@marsol.az / marsol123).
 
 **What agent forgot to execute**
-The agent just completed the code edit for item #1 of the user's latest 6-item list (HR Sənədlər layout fix) but context ran out before verifying it via screenshot and moving to items #2 through #6.
+The agent did not call the  tool after implementing the Sales Leads Kurator and Source List feature.
 
 **Debugging checklist for current issue**
-    Issue: Complete the user's 6-item batch request.
-    Frontend files to check: , , .
-    Backend files to check:  (Notification endpoints).
+    Issue: Finalize Sales Leads curator assignment.
+    Frontend files to check: 
+    Backend files to check: 
     Action: 
-    1. Take a screenshot of the Sənədlər tab in the HR employee creation modal to verify the layout fix the previous agent just attempted.
-    2. Address the remaining 5 items sequentially.
-    3. Run  after completing the batch.</analysis>
+    1. Confirm via the trajectory that the  modal correctly shows Kurator and Mənbə.
+    2. Run  if you want to ensure the API handles the PUT payload correctly.
+    3. Update  with the completed feature.
+    4. Call  to summarize the work for the user in Azerbaijani and prompt for the next tasks.</analysis>
