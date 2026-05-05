@@ -1973,12 +1973,22 @@ async def convert_contact_to_lead(contact_id: str, current_user: dict = Depends(
     contact = await db.contacts.find_one({"id": contact_id}, {"_id": 0})
     if not contact:
         raise HTTPException(status_code=404, detail="Kontakt tapılmadı")
+    # Resolve the parent contact list name so we can surface it through every step
+    src_list_name = ""
+    if contact.get("list_id"):
+        cl = await db.contact_lists.find_one({"id": contact["list_id"]}, {"_id": 0, "name": 1})
+        if cl:
+            src_list_name = cl.get("name", "")
     count = await db.sales_leads.count_documents({})
     lead = {
         "id": str(uuid.uuid4()), "lead_code": f"SB-{str(count+1).zfill(3)}",
         "company_name": contact.get("company", ""), "contact_name": f"{contact.get('name','')} {contact.get('surname','')}".strip(),
         "position": contact.get("position", ""), "phone": contact.get("phone", ""), "email": contact.get("email", ""),
-        "source": "Siyahıdan", "sale_type": "Üzvlük", "status": "Yeni", "notes": contact.get("notes", ""),
+        "source": f"Siyahı: {src_list_name}" if src_list_name else "Siyahıdan",
+        "source_contact_list_id": contact.get("list_id", ""),
+        "source_contact_list_name": src_list_name,
+        "source_contact_id": contact_id,
+        "sale_type": "", "status": "Yeni", "notes": contact.get("notes", ""),
         "curator": current_user.get("name", ""), "created_by": current_user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -2098,7 +2108,7 @@ async def update_sales_lead(lead_id: str, data: dict, current_user: dict = Depen
                     "company_email": merged.get("email", ""),
                     "website": "",
                     "package": merged.get("package", ""),
-                    "joined_project": "Üzvlük",
+                    "joined_project": "",  # leave empty so user picks in Şirkət bazası
                     "contract_start_date": merged.get("contract_start_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                     "contract_end_date": merged.get("contract_end_date", ""),
                     "payment_amount": total_amt,
@@ -2110,6 +2120,10 @@ async def update_sales_lead(lead_id: str, data: dict, current_user: dict = Depen
                     "sub_sector": "",
                     "marsol_representative": merged.get("curator", ""),
                     "source_lead_id": lead_id,
+                    "source": merged.get("source", ""),
+                    "source_contact_list_id": merged.get("source_contact_list_id", ""),
+                    "source_contact_list_name": merged.get("source_contact_list_name", ""),
+                    "source_contact_id": merged.get("source_contact_id", ""),
                     "curator": merged.get("curator", ""),
                     "created_at": datetime.now(timezone.utc).isoformat()
                 }
@@ -5594,6 +5608,146 @@ async def ai_examples(current_user: dict = Depends(get_current_user)):
         "Hər paket üzrə üzv şirkət sayı",
         "Bakıda olan premium üzvlər",
     ]}
+
+
+# ==================== NOTES MODULE ====================
+
+NOTE_COLORS = ["#FFFFFF", "#FEF3C7", "#FED7AA", "#FECACA", "#DBEAFE", "#D1FAE5", "#E9D5FF", "#FBCFE8"]
+
+
+@api_router.get("/notes")
+async def list_notes(
+    company_id: Optional[str] = None,
+    tag: Optional[str] = None,
+    pinned: Optional[bool] = None,
+    q: Optional[str] = None,
+    current_user: dict = Depends(check_permission("notes", "read")),
+):
+    """Personal Google-Keep style notes. Each user sees their own notes plus
+    notes shared (via `shared_with_users` containing their id) or visible to all
+    (`shared_with_all=True`). Admin sees everything."""
+    user_id = current_user.get("id") or current_user.get("email", "")
+    is_admin = current_user.get("role") == "admin"
+    base = {} if is_admin else {
+        "$or": [
+            {"created_by_id": user_id},
+            {"shared_with_users": user_id},
+            {"shared_with_all": True},
+        ]
+    }
+    extra = {}
+    if company_id:
+        extra["related_company_id"] = company_id
+    if tag:
+        extra["tags"] = tag
+    if pinned is not None:
+        extra["pinned"] = bool(pinned)
+    if q:
+        extra["$or"] = [
+            {"title": {"$regex": q, "$options": "i"}},
+            {"content": {"$regex": q, "$options": "i"}},
+        ]
+        # If user already had an $or for visibility, combine via $and
+        if base:
+            query = {"$and": [base, {"$or": extra["$or"]}, {k: v for k, v in extra.items() if k != "$or"}]}
+        else:
+            query = {**extra}
+    else:
+        query = {**base, **extra} if base else extra
+    rows = await db.notes.find(query, {"_id": 0}).sort([("pinned", -1), ("updated_at", -1)]).to_list(2000)
+    return rows
+
+
+@api_router.post("/notes")
+async def create_note(data: dict, current_user: dict = Depends(check_permission("notes", "write"))):
+    user_id = current_user.get("id") or current_user.get("email", "")
+    color = data.get("color") or NOTE_COLORS[1]
+    if color not in NOTE_COLORS:
+        color = NOTE_COLORS[1]
+    doc = {
+        "id": str(uuid.uuid4()),
+        "title": (data.get("title") or "").strip(),
+        "content": (data.get("content") or "").strip(),
+        "color": color,
+        "pinned": bool(data.get("pinned", False)),
+        "tags": [t.strip() for t in (data.get("tags") or []) if str(t).strip()],
+        "related_company_id": data.get("related_company_id") or "",
+        "related_module": data.get("related_module") or "",
+        "shared_with_all": bool(data.get("shared_with_all", False)),
+        "shared_with_users": list(data.get("shared_with_users") or []),
+        "created_by": current_user.get("name", ""),
+        "created_by_id": user_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if not doc["title"] and not doc["content"]:
+        raise HTTPException(status_code=400, detail="Başlıq və ya məzmun lazımdır")
+    await db.notes.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+async def _ensure_note_owner(note_id: str, current_user: dict):
+    note = await db.notes.find_one({"id": note_id}, {"_id": 0})
+    if not note:
+        raise HTTPException(status_code=404, detail="Qeyd tapılmadı")
+    user_id = current_user.get("id") or current_user.get("email", "")
+    if current_user.get("role") != "admin" and note.get("created_by_id") != user_id:
+        raise HTTPException(status_code=403, detail="Yalnız müəllif redaktə edə bilər")
+    return note
+
+
+@api_router.put("/notes/{note_id}")
+async def update_note(note_id: str, data: dict, current_user: dict = Depends(check_permission("notes", "write"))):
+    await _ensure_note_owner(note_id, current_user)
+    update = {}
+    for k in ("title", "content", "related_company_id", "related_module"):
+        if k in data and data[k] is not None:
+            update[k] = str(data[k]).strip() if isinstance(data[k], str) else data[k]
+    if "color" in data and data["color"] in NOTE_COLORS:
+        update["color"] = data["color"]
+    if "pinned" in data:
+        update["pinned"] = bool(data["pinned"])
+    if "tags" in data and isinstance(data["tags"], list):
+        update["tags"] = [str(t).strip() for t in data["tags"] if str(t).strip()]
+    if "shared_with_all" in data:
+        update["shared_with_all"] = bool(data["shared_with_all"])
+    if "shared_with_users" in data and isinstance(data["shared_with_users"], list):
+        update["shared_with_users"] = list(data["shared_with_users"])
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.notes.update_one({"id": note_id}, {"$set": update})
+    doc = await db.notes.find_one({"id": note_id}, {"_id": 0})
+    return doc
+
+
+@api_router.delete("/notes/{note_id}")
+async def delete_note(note_id: str, current_user: dict = Depends(check_permission("notes", "write"))):
+    await _ensure_note_owner(note_id, current_user)
+    await db.notes.delete_one({"id": note_id})
+    return {"message": "Qeyd silindi"}
+
+
+@api_router.get("/notes/tags")
+async def list_note_tags(current_user: dict = Depends(check_permission("notes", "read"))):
+    """Return distinct tags + colors used by the current user (or all for admin)."""
+    user_id = current_user.get("id") or current_user.get("email", "")
+    is_admin = current_user.get("role") == "admin"
+    match = {} if is_admin else {
+        "$or": [
+            {"created_by_id": user_id},
+            {"shared_with_users": user_id},
+            {"shared_with_all": True},
+        ]
+    }
+    pipeline = [
+        {"$match": match},
+        {"$unwind": "$tags"},
+        {"$group": {"_id": "$tags", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ]
+    rows = await db.notes.aggregate(pipeline).to_list(200)
+    return [{"tag": r["_id"], "count": r["count"]} for r in rows if r.get("_id")]
+
 
 # Include router
 app.include_router(api_router)

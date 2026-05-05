@@ -544,6 +544,15 @@ export default function Companies() {
               <div><p className="text-slate-500 text-xs">Telefon</p><p className="font-medium">{v.contact_phone || '-'}</p></div>
               <div><p className="text-slate-500 text-xs">Email</p><p className="font-medium">{v.contact_email || '-'}</p></div>
               <div><p className="text-slate-500 text-xs">Kurator</p><p className="font-medium">{v.marsol_representative || '-'}</p></div>
+              {(v.source || v.source_contact_list_name) && (
+                <div className="col-span-full">
+                  <p className="text-slate-500 text-xs">Mənbə</p>
+                  <p className="font-medium flex items-center gap-2">
+                    <Badge className="bg-amber-100 text-amber-800">{v.source || 'Bilinmir'}</Badge>
+                    {v.source_contact_list_name && <span className="text-xs text-slate-500">· Siyahı: <span className="font-semibold text-[#3D4F6F]">{v.source_contact_list_name}</span></span>}
+                  </p>
+                </div>
+              )}
               <div className="col-span-full"><CustomFieldsView fields={customFields.filter(cf => cf.sub_tab === 'contact')} entity={v} /></div>
             </TabsContent>
             <TabsContent value="contract">
