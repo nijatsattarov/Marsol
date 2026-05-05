@@ -748,6 +748,22 @@ export default function Companies() {
                   </Select>
                 </div>
               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Kurator *</Label>
+                  <Select value={formData.marsol_representative} onValueChange={v => setFormData({...formData, marsol_representative: v})}>
+                    <SelectTrigger className="text-sm" data-testid="company-curator-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                    <SelectContent>{options?.marsol_representatives?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Status</Label>
+                  <Select value={formData.status} onValueChange={v => setFormData({...formData, status: v})}>
+                    <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                    <SelectContent>{(options?.company_statuses || options?.statuses || ['Aktiv','Qeyri-aktiv','Gözləmədə']).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div><Label className="text-xs">İşçi sayı</Label><Input type="number" value={formData.employee_count} onChange={e => setFormData({...formData, employee_count: e.target.value})} className="text-sm" /></div>
                 <div><Label className="text-xs">Region</Label>
@@ -936,12 +952,6 @@ export default function Companies() {
             {/* MÜQAVİLƏ TAB */}
             <TabsContent value="contract" className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                <div><Label className="text-xs">Kurator *</Label>
-                  <Select value={formData.marsol_representative} onValueChange={v => setFormData({...formData, marsol_representative: v})}>
-                    <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
-                    <SelectContent>{options?.marsol_representatives?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
                 <div><Label className="text-xs">VÖEN</Label><Input value={formData.voen} onChange={e => setFormData({...formData, voen: e.target.value})} className="text-sm" data-testid="company-voen-input" placeholder="1234567890" /></div>
               </div>
               <div className="p-3 bg-blue-50/40 border border-blue-100 rounded-lg">
