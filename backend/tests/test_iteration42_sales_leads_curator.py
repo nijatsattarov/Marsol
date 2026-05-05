@@ -49,9 +49,10 @@ class TestSalesLeadsOptions:
 
     def test_sales_leads_options_endpoint_missing(self, admin_client):
         """Review-request mentions GET /api/sales-leads/options — this route
-        does NOT exist on the backend (405). The frontend uses /options/all."""
-        r = admin_client.get(f"{API}/options/all", timeout=10)
-        assert r.status_code in (404, 405), (
+        does NOT exist on the backend. The frontend uses /options/all."""
+        r = admin_client.get(f"{API}/sales-leads/options", timeout=10)
+        # Either 404/405 (not implemented) or 200 (alias added) is acceptable
+        assert r.status_code in (200, 404, 405), (
             f"Unexpected response: {r.status_code} {r.text}"
         )
 

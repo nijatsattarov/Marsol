@@ -1976,9 +1976,9 @@ async def convert_contact_to_lead(contact_id: str, current_user: dict = Depends(
     # Resolve the parent contact list name so we can surface it through every step
     src_list_name = ""
     if contact.get("list_id"):
-        cl = await db.contact_lists.find_one({"id": contact["list_id"]}, {"_id": 0, "name": 1})
+        cl = await db.contact_lists.find_one({"id": contact["list_id"]}, {"_id": 0, "title": 1, "name": 1})
         if cl:
-            src_list_name = cl.get("name", "")
+            src_list_name = cl.get("title") or cl.get("name", "")
     count = await db.sales_leads.count_documents({})
     lead = {
         "id": str(uuid.uuid4()), "lead_code": f"SB-{str(count+1).zfill(3)}",
@@ -2051,7 +2051,7 @@ async def create_sales_lead(data: dict, current_user: dict = Depends(check_permi
         "total_amount": data.get("total_amount"),
         "participant_count": data.get("participant_count"),
         "marsol_company": data.get("marsol_company", ""),
-        "curator": current_user.get("name", ""),
+        "curator": data.get("curator") or current_user.get("name", ""),
         "created_by": current_user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
