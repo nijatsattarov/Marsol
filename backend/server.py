@@ -4836,7 +4836,8 @@ async def dispatch_notification_emails(current_user: dict = Depends(get_current_
 # ==================== SMS (LSIM Quick SMS) ====================
 
 def _admin_only(current_user: dict):
-    if current_user.get("role") != "admin":
+    role = (current_user.get("role") or "").lower()
+    if role != "admin":
         raise HTTPException(status_code=403, detail="Admin icazəsi tələb olunur")
 
 

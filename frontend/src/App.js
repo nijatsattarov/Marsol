@@ -39,7 +39,9 @@ import ContactLists from "./pages/ContactLists";
 import PublicForm from "./pages/PublicForm";
 
 // Global axios interceptor: expired/invalid token → auto logout + redirect to login.
-// Fixes the "only logout-login works" bug on every module.
+// Only 401 (token invalid/expired) triggers logout — 403 (not authorized) shows
+// the API error normally so the user stays where they are. Otherwise simply
+// browsing into an admin-only module would log non-admins out.
 let _redirecting = false;
 axios.interceptors.response.use(
   (response) => response,
@@ -48,7 +50,7 @@ axios.interceptors.response.use(
     const url = error?.config?.url || "";
     // Skip the login endpoint itself (that 401 is a real "wrong password" case)
     const isAuthAttempt = url.includes("/auth/login") || url.includes("/form/");
-    if (!isAuthAttempt && (status === 401 || status === 403)) {
+    if (!isAuthAttempt && status === 401) {
       if (!_redirecting) {
         _redirecting = true;
         try { localStorage.removeItem("token"); } catch { /* ignore */ }

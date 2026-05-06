@@ -35,7 +35,11 @@ export default function SmsPanel() {
     try {
       const r = await axios.get(`${API}/sms/balance`, { headers });
       setBalance(r.data);
-    } catch { setBalance({ ok: false, error_message: 'Xəta' }); }
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 403) setBalance({ ok: false, error_message: 'SMS modulu üçün admin icazəsi tələb olunur' });
+      else setBalance({ ok: false, error_message: 'Bağlantı xətası' });
+    }
     finally { setBalanceLoading(false); }
   }, []); // eslint-disable-line
 
