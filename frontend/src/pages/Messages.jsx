@@ -37,7 +37,7 @@ export default function Messages() {
       const [convRes, usersRes, groupsRes] = await Promise.all([
         axios.get(`${API}/messages/conversations`, { headers }),
         axios.get(`${API}/settings/users`, { headers }),
-        axios.get(`${API}/messages/groups`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/message-groups`, { headers }).catch(() => ({ data: [] })),
       ]);
       setConversations(convRes.data);
       setUsers(usersRes.data.filter(u => u.id !== currentUser.id));
@@ -52,7 +52,7 @@ export default function Messages() {
     }
     setSavingGroup(true);
     try {
-      await axios.post(`${API}/messages/groups`, groupForm, { headers });
+      await axios.post(`${API}/message-groups`, groupForm, { headers });
       toast.success('Qrup yaradıldı');
       setShowNewGroup(false);
       setGroupForm({ name: '', description: '', members: [] });

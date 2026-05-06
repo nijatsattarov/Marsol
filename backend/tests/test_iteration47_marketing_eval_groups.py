@@ -170,22 +170,22 @@ class TestMessageGroups:
     created_group_id = None
 
     def test_create_group_requires_min_2_members(self, admin_headers):
-        r = requests.post(f"{API}/messages/groups",
+        r = requests.post(f"{API}/message-groups",
                           json={"name": "TEST_bad", "members": ["only-one"]},
                           headers=admin_headers, timeout=30)
         assert r.status_code == 400
 
     def test_create_group_success(self, admin_headers):
         # Get 2 user ids
-        ur = requests.get(f"{API}/users", headers=admin_headers, timeout=30)
+        ur = requests.get(f"{API}/settings/users", headers=admin_headers, timeout=30)
         users = ur.json() if ur.status_code == 200 else []
         if isinstance(users, dict):
-            users = users.get("items", users)
+            users = users.get("items", users.get("users", []))
         other_ids = [u["id"] for u in users if u.get("email") != ADMIN["email"]][:2]
         assert len(other_ids) >= 2, f"Need 2 other users; found {len(other_ids)}"
 
         payload = {"name": f"TEST_group_{uuid.uuid4().hex[:6]}", "members": other_ids, "color": "#FF5500"}
-        r = requests.post(f"{API}/messages/groups", json=payload, headers=admin_headers, timeout=30)
+        r = requests.post(f"{API}/message-groups", json=payload, headers=admin_headers, timeout=30)
         assert r.status_code == 200, r.text
         g = r.json()
         assert g.get("id")
@@ -196,19 +196,19 @@ class TestMessageGroups:
         TestMessageGroups.created_group_id = g["id"]
 
     def test_list_groups_visible(self, admin_headers):
-        r = requests.get(f"{API}/messages/groups", headers=admin_headers, timeout=30)
+        r = requests.get(f"{API}/message-groups", headers=admin_headers, timeout=30)
         assert r.status_code == 200
         ids = [g["id"] for g in r.json()]
         assert TestMessageGroups.created_group_id in ids
 
     def test_post_message_and_read(self, admin_headers):
         gid = TestMessageGroups.created_group_id
-        r = requests.post(f"{API}/messages/groups/{gid}/messages",
+        r = requests.post(f"{API}/message-groups/{gid}/messages",
                           json={"body": "TEST_iter47 hello"}, headers=admin_headers, timeout=30)
         assert r.status_code == 200, r.text
         m = r.json()
         assert m.get("id") and m.get("body") == "TEST_iter47 hello"
-        rr = requests.get(f"{API}/messages/groups/{gid}/messages", headers=admin_headers, timeout=30)
+        rr = requests.get(f"{API}/message-groups/{gid}/messages", headers=admin_headers, timeout=30)
         assert rr.status_code == 200
         bodies = [x.get("body") for x in rr.json()]
         assert "TEST_iter47 hello" in bodies
@@ -217,31 +217,31 @@ class TestMessageGroups:
         gid = TestMessageGroups.created_group_id
         # Update group to remove sales user — first ensure sales is not a member
         me_sales = requests.get(f"{API}/auth/me", headers=sales_headers, timeout=30).json()
-        g = requests.get(f"{API}/messages/groups", headers=admin_headers, timeout=30).json()
+        g = requests.get(f"{API}/message-groups", headers=admin_headers, timeout=30).json()
         group = next(x for x in g if x["id"] == gid)
         if me_sales["id"] in group["members"]:
             new_members = [m for m in group["members"] if m != me_sales["id"]]
-            requests.put(f"{API}/messages/groups/{gid}", json={"members": new_members}, headers=admin_headers, timeout=30)
+            requests.put(f"{API}/message-groups/{gid}", json={"members": new_members}, headers=admin_headers, timeout=30)
         # Try read as sales — 403
-        r = requests.get(f"{API}/messages/groups/{gid}/messages", headers=sales_headers, timeout=30)
+        r = requests.get(f"{API}/message-groups/{gid}/messages", headers=sales_headers, timeout=30)
         assert r.status_code == 403
         # Try post
-        r2 = requests.post(f"{API}/messages/groups/{gid}/messages", json={"body": "nope"}, headers=sales_headers, timeout=30)
+        r2 = requests.post(f"{API}/message-groups/{gid}/messages", json={"body": "nope"}, headers=sales_headers, timeout=30)
         assert r2.status_code == 403
 
     def test_update_group_forbidden_for_non_member(self, sales_headers):
         gid = TestMessageGroups.created_group_id
-        r = requests.put(f"{API}/messages/groups/{gid}", json={"name": "HACK"}, headers=sales_headers, timeout=30)
+        r = requests.put(f"{API}/message-groups/{gid}", json={"name": "HACK"}, headers=sales_headers, timeout=30)
         assert r.status_code == 403
 
     def test_delete_group_only_creator(self, sales_headers):
         gid = TestMessageGroups.created_group_id
         # sales is not creator → 403
-        r = requests.delete(f"{API}/messages/groups/{gid}", headers=sales_headers, timeout=30)
+        r = requests.delete(f"{API}/message-groups/{gid}", headers=sales_headers, timeout=30)
         assert r.status_code == 403
 
     def test_delete_by_creator(self, admin_headers):
         gid = TestMessageGroups.created_group_id
-        r = requests.delete(f"{API}/messages/groups/{gid}", headers=admin_headers, timeout=30)
+        r = requests.delete(f"{API}/message-groups/{gid}", headers=admin_headers, timeout=30)
         assert r.status_code == 200
         assert r.json().get("deleted") is True

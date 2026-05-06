@@ -5375,7 +5375,7 @@ async def partner_evaluation_set_bonus(company_id: str, data: dict, current_user
 
 # ==================== MESSAGE GROUPS ====================
 
-@api_router.get("/messages/groups")
+@api_router.get("/message-groups")
 async def list_message_groups(current_user: dict = Depends(get_current_user)):
     user_id = current_user.get("id")
     # User sees groups they're a member of OR created
@@ -5385,7 +5385,7 @@ async def list_message_groups(current_user: dict = Depends(get_current_user)):
     return groups
 
 
-@api_router.post("/messages/groups")
+@api_router.post("/message-groups")
 async def create_message_group(data: dict, current_user: dict = Depends(get_current_user)):
     name = (data.get("name") or "").strip()
     members = data.get("members") or []
@@ -5410,7 +5410,7 @@ async def create_message_group(data: dict, current_user: dict = Depends(get_curr
     return group
 
 
-@api_router.put("/messages/groups/{group_id}")
+@api_router.put("/message-groups/{group_id}")
 async def update_message_group(group_id: str, data: dict, current_user: dict = Depends(get_current_user)):
     g = await db.message_groups.find_one({"id": group_id}, {"_id": 0})
     if not g:
@@ -5428,7 +5428,7 @@ async def update_message_group(group_id: str, data: dict, current_user: dict = D
     return g2
 
 
-@api_router.delete("/messages/groups/{group_id}")
+@api_router.delete("/message-groups/{group_id}")
 async def delete_message_group(group_id: str, current_user: dict = Depends(get_current_user)):
     g = await db.message_groups.find_one({"id": group_id}, {"_id": 0})
     if not g:
@@ -5440,7 +5440,7 @@ async def delete_message_group(group_id: str, current_user: dict = Depends(get_c
     return {"deleted": True}
 
 
-@api_router.get("/messages/groups/{group_id}/messages")
+@api_router.get("/message-groups/{group_id}/messages")
 async def get_group_messages(group_id: str, current_user: dict = Depends(get_current_user)):
     g = await db.message_groups.find_one({"id": group_id}, {"_id": 0})
     if not g or current_user.get("id") not in g.get("members", []):
@@ -5449,7 +5449,7 @@ async def get_group_messages(group_id: str, current_user: dict = Depends(get_cur
     return msgs
 
 
-@api_router.post("/messages/groups/{group_id}/messages")
+@api_router.post("/message-groups/{group_id}/messages")
 async def send_group_message(group_id: str, data: dict, current_user: dict = Depends(get_current_user)):
     g = await db.message_groups.find_one({"id": group_id}, {"_id": 0})
     if not g or current_user.get("id") not in g.get("members", []):

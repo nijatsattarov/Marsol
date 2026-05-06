@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 48 — Re-test of Message Groups after route rename /api/messages/groups → /api/message-groups. All 8 previously-failing TestMessageGroups tests now PASS. Full suite 20/20 passes (Mailchimp 7/7, PartnerEval 5/5, MessageGroups 8/8). Route-shadowing bug from iter 47 is fully resolved. The test file needed two fixes: (1) URL path updated to /api/message-groups throughout, (2) the non-existent GET /api/users endpoint was replaced with GET /api/settings/users which actually returns the user list (admin-only, returns 26 users).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/marketing/mailchimp/campaigns", "issue": "Returns 200 for successful draft creation — consider 201 per REST conventions. Not blocking. Carried over from iter 47."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration47_marketing_eval_groups.py",
+    "/app/test_reports/pytest/iteration_48_results.xml"
+  ],
+  "action_items": [
+    "None for Message Groups — fully working. Optional follow-ups from iter 47 (return 201 on Mailchimp draft POST; router extraction / server.py split) remain."
+  ],
+  "critical_code_review_comments": [
+    "server.py line 5378-5475 — message-groups block correctly registered with concrete /api/message-groups prefix, no longer collides with /api/messages/{conversation_id} catch-all. Authorization gates verified: non-members get 403 on read/write/update; non-creator gets 403 on delete; validation for members<2 returns 400.",
+    "Creator auto-added to members list works (verified via /auth/me check in test_create_group_success). Idempotency: if creator_id is passed in members by client, server does not duplicate (verified by list/detail not showing duplicates).",
+    "No new route-shadowing concerns introduced. Frontend Messages.jsx already updated to use ${API}/message-groups per problem statement; not re-tested (backend-only scope).",
+    "server.py remains 6459+ lines — router extraction (marketing, partner-evaluation, message-groups) still overdue per iter 47 note.",
+    "Test file referenced a non-existent GET /api/users endpoint (returns 404); the admin-only user listing is at GET /api/settings/users. Updated in this iteration."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration47_marketing_eval_groups.py (URL path /api/messages/groups → /api/message-groups across 10 references; users listing endpoint /api/users → /api/settings/users)"
+  ],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "not tested (backend-only scope per request)"},
+  "test_credentials": "Admin settings@marsol.az / marsol123 and Satış satis@marsol.az / marsol123 — both verified working. Rules from test_credentials.md followed (no real phones, TEST_ prefix, try/finally-style cleanup via test_delete_by_creator).",
+  "seed_data_creation": "test_create_group_success creates a group 'TEST_group_<hex>' with admin + 2 other users; test_delete_by_creator removes it at the end of the flow so no leftover data. Partner evaluation manual-bonus test still resets to 0 after clamp checks. One Mailchimp DRAFT campaign 'TEST_Draft_<hex>' created per run on MARSOL account (send_now=false, status=save) — requires manual cleanup from Mailchimp dashboard.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 48 confirms route-shadowing fix is successful. /api/message-groups* endpoints fully functional with proper RBAC. Full 20/20 suite green. If re-running ensure admin has >=2 other users in /api/settings/users (currently 26). Frontend Messages.jsx not tested this iteration — main agent requested backend-only.",
+  "rca_of_the_issue": "Iter 47 RCA was correct: FastAPI registration-order shadowing of /api/messages/groups by /api/messages/{conversation_id}. Main agent chose the rename mitigation (prefix /api/message-groups) over reordering — this eliminates the collision entirely and is more robust (order-independent). Verified by 8/8 MessageGroups tests passing including validation (400), RBAC (403), CRUD flow, and group messaging read/post."
+}
