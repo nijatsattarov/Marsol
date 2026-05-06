@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Plus, Search, Download, Loader2, Building2, User, Phone, Mail,
   Eye, Pencil, Trash2, ArrowLeft, Filter, X, CreditCard, Upload, Link, PlusCircle, MinusCircle,
-  CheckCircle2, XCircle, Hash
+  CheckCircle2, XCircle, Hash, MessageSquare
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { Button } from '../components/ui/button';
@@ -22,6 +22,7 @@ import { COUNTRIES } from '../lib/countries';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import ExcelColumnPicker from '../components/ExcelColumnPicker';
+import BulkSmsModal from '../components/BulkSmsModal';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -103,6 +104,7 @@ export default function Companies() {
   const [filters, setFilters] = useState({ sector: '', package: '', company_size: '', marsol_representative: '', status: '' });
   const [sortBy, setSortBy] = useState('id_asc'); // id_asc | id_desc | name_asc | name_desc | newest | oldest
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkSmsOpen, setBulkSmsOpen] = useState(false);
 
   const emptyOwner = { first_name: '', last_name: '', father_name: '', position: '', phone: '', email: '', birth_date: '', citizenship: '', education: '', specialty: '', university: '', social_links: [], children: [], desired_activities: [] };
   const emptyContract = { project: '', package: '', start_date: '', end_date: '', join_date: '', total_amount: 0, paid_amount: 0, debt_amount: 0, contract_file: '' };
@@ -650,6 +652,9 @@ export default function Companies() {
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className="text-white hover:bg-white/10 text-xs" data-testid="bulk-clear-btn">
             Seçimi təmizlə
           </Button>
+          <Button size="sm" onClick={() => setBulkSmsOpen(true)} className="bg-[#9ACD32] hover:bg-[#8BC125] text-[#3D4F6F] text-xs font-semibold" data-testid="bulk-sms-btn">
+            <MessageSquare className="w-3.5 h-3.5 mr-1" />Toplu SMS
+          </Button>
           <Button size="sm" onClick={handleBulkDelete} className="bg-red-500 hover:bg-red-600 text-white text-xs" data-testid="bulk-delete-btn">
             <Trash2 className="w-3.5 h-3.5 mr-1" />Seçilənləri sil
           </Button>
@@ -1057,6 +1062,13 @@ export default function Companies() {
         fileName="sirketler"
         storageKey="export_cols_companies"
         onSuccess={({ rows, cols }) => toast.success(`${rows} şirkət ixrac edildi (${cols} sütun)`)}
+      />
+      <BulkSmsModal
+        open={bulkSmsOpen}
+        onClose={() => setBulkSmsOpen(false)}
+        recipientType="companies"
+        ids={Array.from(selectedIds)}
+        summary={`${selectedIds.size} şirkət seçildi`}
       />
     </div>
   );

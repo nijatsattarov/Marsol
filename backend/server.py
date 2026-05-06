@@ -25,6 +25,9 @@ from email_service import notify as _email_notify  # noqa: E402
 # Cloudinary upload service
 from cloudinary_service import upload_file as _cl_upload, delete_asset as _cl_delete  # noqa: E402
 
+# SMS service (LSIM Quick SMS)
+import sms_service  # noqa: E402
+
 # MongoDB connection
 mongo_url = os.environ.get('MONGO_URL')
 if not mongo_url:
@@ -4787,6 +4790,341 @@ async def dispatch_notification_emails(current_user: dict = Depends(get_current_
         })
         sent += 1
     return {"sent": sent, "skipped": len(notifications) - sent}
+
+
+# ==================== SMS (LSIM Quick SMS) ====================
+
+def _admin_only(current_user: dict):
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin icazəsi tələb olunur")
+
+
+def _collect_company_phones(company: dict) -> List[Dict[str, str]]:
+    """Return list of {phone, name} extracted from a company doc.
+    Prefers owner_phone, then representative_phone, then company_phone.
+    Includes co-owners with phones."""
+    out = []
+    if not company:
+        return out
+    seen = set()
+    def _add(phone, role_name):
+        if phone and phone not in seen:
+            seen.add(phone)
+            out.append({"phone": phone, "name": role_name})
+    _add(company.get("owner_phone"), company.get("owner_name") or "Sahibkar")
+    _add(company.get("representative_phone"), company.get("representative_name") or "Nümayəndə")
+    _add(company.get("company_phone"), company.get("brand_name") or "Şirkət")
+    for o in (company.get("owners") or []):
+        nm = f"{o.get('first_name','')} {o.get('last_name','')}".strip() or o.get("name", "")
+        _add(o.get("phone"), nm or "Sahibkar")
+    return out
+
+
+@api_router.get("/sms/balance")
+async def sms_balance(current_user: dict = Depends(get_current_user)):
+    _admin_only(current_user)
+    return await sms_service.lsim_check_balance()
+
+
+@api_router.get("/sms/templates")
+async def sms_templates(current_user: dict = Depends(get_current_user)):
+    out = {}
+    for k in ("event_reminder", "birthday"):
+        out[k] = await sms_service.get_template(db, k)
+    return out
+
+
+@api_router.put("/sms/templates/{key}")
+async def sms_update_template(key: str, data: dict, current_user: dict = Depends(get_current_user)):
+    _admin_only(current_user)
+    if key not in ("event_reminder", "birthday"):
+        raise HTTPException(status_code=400, detail="Yanlış template açarı")
+    text = (data.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Mətn boş ola bilməz")
+    return await sms_service.set_template(db, key, text, current_user.get("name", ""))
+
+
+@api_router.post("/sms/send")
+async def sms_send_single(data: dict, current_user: dict = Depends(get_current_user)):
+    """Send single SMS. Body: {phone, text, sender?}."""
+    _admin_only(current_user)
+    phone = (data.get("phone") or "").strip()
+    text = (data.get("text") or "").strip()
+    if not phone or not text:
+        raise HTTPException(status_code=400, detail="phone və text tələb olunur")
+    sender = (data.get("sender") or sms_service.LSIM_SENDER).strip()
+    msisdn = sms_service.normalize_phone(phone)
+    res = await sms_service.lsim_send_sms(phone, text, sender)
+    log = await sms_service.log_sms(
+        db, phone=phone, msisdn=msisdn, text=text, sender=sender,
+        category="manual", ok=res.get("ok", False),
+        transid=res.get("transid"), error_code=res.get("error_code"),
+        error_message=res.get("error_message"),
+        recipient_type="manual", recipient_name=data.get("recipient_name", ""),
+        sent_by=current_user.get("name", ""),
+    )
+    return {**res, "log_id": log["id"]}
+
+
+@api_router.post("/sms/bulk")
+async def sms_send_bulk(data: dict, current_user: dict = Depends(get_current_user)):
+    """Send SMS to many recipients.
+    Body: { text, sender?, recipients: [{phone, name?, type?, id?}] }
+    OR: { text, sender?, recipient_type: 'companies'|'members'|'contacts',
+          ids: [...] }  // server will resolve phones.
+    """
+    _admin_only(current_user)
+    text = (data.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Mətn tələb olunur")
+    sender = (data.get("sender") or sms_service.LSIM_SENDER).strip()
+
+    recipients: List[Dict[str, Any]] = []
+    explicit = data.get("recipients") or []
+    if explicit:
+        for r in explicit:
+            ph = (r.get("phone") or "").strip()
+            if ph:
+                recipients.append({
+                    "phone": ph,
+                    "name": r.get("name", ""),
+                    "type": r.get("type", "manual"),
+                    "id": r.get("id", ""),
+                })
+    rtype = data.get("recipient_type")
+    ids = data.get("ids") or []
+    if rtype and ids:
+        if rtype == "companies":
+            comps = await db.companies.find({"id": {"$in": ids}}, {"_id": 0}).to_list(2000)
+            for c in comps:
+                for ph in _collect_company_phones(c):
+                    recipients.append({"phone": ph["phone"], "name": ph["name"],
+                                       "type": "company", "id": c.get("id", "")})
+        elif rtype == "contacts":
+            cts = await db.contacts.find({"id": {"$in": ids}},
+                                          {"_id": 0, "id": 1, "name": 1, "surname": 1, "phone": 1}).to_list(2000)
+            for ct in cts:
+                if ct.get("phone"):
+                    recipients.append({
+                        "phone": ct["phone"],
+                        "name": f"{ct.get('name','')} {ct.get('surname','')}".strip(),
+                        "type": "contact", "id": ct["id"],
+                    })
+        elif rtype == "members":
+            # Members = companies with status Aktiv
+            comps = await db.companies.find({"id": {"$in": ids}, "status": "Aktiv"}, {"_id": 0}).to_list(2000)
+            for c in comps:
+                for ph in _collect_company_phones(c):
+                    recipients.append({"phone": ph["phone"], "name": ph["name"],
+                                       "type": "member", "id": c.get("id", "")})
+
+    # Deduplicate by msisdn
+    seen = set()
+    unique: List[Dict[str, Any]] = []
+    for r in recipients:
+        msisdn = sms_service.normalize_phone(r["phone"])
+        if not msisdn or msisdn in seen:
+            continue
+        seen.add(msisdn)
+        unique.append({**r, "msisdn": msisdn})
+
+    if not unique:
+        raise HTTPException(status_code=400, detail="Heç bir yararlı telefon nömrəsi tapılmadı")
+
+    sent_ok = 0
+    sent_fail = 0
+    failures: List[Dict[str, Any]] = []
+    for r in unique:
+        ctx = {"name": r.get("name", "")}
+        msg = sms_service.render_template(text, ctx) if "{" in text else text
+        res = await sms_service.lsim_send_sms(r["phone"], msg, sender)
+        await sms_service.log_sms(
+            db, phone=r["phone"], msisdn=r["msisdn"], text=msg, sender=sender,
+            category="bulk", ok=res.get("ok", False),
+            transid=res.get("transid"), error_code=res.get("error_code"),
+            error_message=res.get("error_message"),
+            recipient_type=r.get("type", ""), recipient_id=r.get("id", ""),
+            recipient_name=r.get("name", ""), sent_by=current_user.get("name", ""),
+        )
+        if res.get("ok"):
+            sent_ok += 1
+        else:
+            sent_fail += 1
+            failures.append({"phone": r["phone"], "name": r.get("name", ""),
+                              "error": res.get("error_message")})
+    return {"total": len(unique), "sent": sent_ok, "failed": sent_fail, "failures": failures[:50]}
+
+
+@api_router.get("/sms/logs")
+async def sms_get_logs(category: Optional[str] = None,
+                        status: Optional[str] = None,
+                        limit: int = 200,
+                        current_user: dict = Depends(get_current_user)):
+    _admin_only(current_user)
+    q: Dict[str, Any] = {}
+    if category:
+        q["category"] = category
+    if status:
+        q["status"] = status
+    items = await db.sms_logs.find(q, {"_id": 0}).sort("created_at", -1).to_list(min(limit, 1000))
+    total = await db.sms_logs.count_documents(q)
+    return {"items": items, "total": total}
+
+
+@api_router.get("/sms/logs/stats")
+async def sms_log_stats(current_user: dict = Depends(get_current_user)):
+    _admin_only(current_user)
+    total = await db.sms_logs.count_documents({})
+    sent = await db.sms_logs.count_documents({"status": "sent"})
+    failed = await db.sms_logs.count_documents({"status": "failed"})
+    today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = await db.sms_logs.count_documents({"created_at": {"$gte": today_iso}})
+    by_category = {}
+    for cat in ("manual", "bulk", "event_reminder", "birthday"):
+        by_category[cat] = await db.sms_logs.count_documents({"category": cat})
+    return {"total": total, "sent": sent, "failed": failed, "today": today, "by_category": by_category}
+
+
+@api_router.post("/sms/dispatch-daily")
+async def sms_dispatch_daily(current_user: dict = Depends(get_current_user)):
+    """Send: (a) tomorrow's event reminders to invited companies' phones,
+    (b) today's birthday SMS to owners/reps/employees/contacts.
+    Idempotent — uses sms_logs to skip already-sent items in the same calendar day.
+    """
+    _admin_only(current_user)
+    now = datetime.now(timezone.utc)
+    today_iso = now.strftime("%Y-%m-%d")
+    tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+    today_md = now.strftime("%m-%d")
+
+    template_event = await sms_service.get_template(db, "event_reminder")
+    template_bday = await sms_service.get_template(db, "birthday")
+    sender = sms_service.LSIM_SENDER
+
+    sent_event = 0
+    sent_bday = 0
+    skipped = 0
+    failed = 0
+
+    async def _already_sent(category: str, key: str) -> bool:
+        return await db.sms_logs.count_documents({
+            "category": category,
+            "related_object_id": key,
+            "created_at": {"$gte": today_iso},
+        }) > 0
+
+    # ===== A) Event reminders for events scheduled tomorrow =====
+    events = await db.events.find({"date": tomorrow}, {"_id": 0}).to_list(500)
+    for ev in events:
+        invs = await db.invitations.find({"event_id": ev["id"]}, {"_id": 0}).to_list(2000)
+        for inv in invs:
+            if (inv.get("participation_status") or "").lower() == "imtina":
+                continue
+            comp_id = inv.get("company_id")
+            if not comp_id:
+                continue
+            comp = await db.companies.find_one({"id": comp_id}, {"_id": 0})
+            phones = _collect_company_phones(comp)
+            for ph in phones:
+                key = f"{ev['id']}:{comp_id}:{ph['phone']}"
+                if await _already_sent("event_reminder", key):
+                    skipped += 1
+                    continue
+                ctx = {
+                    "name": ph.get("name", ""),
+                    "event_name": ev.get("name", ""),
+                    "event_type": ev.get("event_type", ""),
+                    "date": ev.get("date", ""),
+                    "time": ev.get("time", ""),
+                    "venue": ev.get("venue", ""),
+                    "company": comp.get("brand_name", "") if comp else "",
+                }
+                msg = sms_service.render_template(template_event, ctx)
+                res = await sms_service.lsim_send_sms(ph["phone"], msg, sender)
+                await sms_service.log_sms(
+                    db, phone=ph["phone"], msisdn=sms_service.normalize_phone(ph["phone"]),
+                    text=msg, sender=sender, category="event_reminder",
+                    ok=res.get("ok", False), transid=res.get("transid"),
+                    error_code=res.get("error_code"), error_message=res.get("error_message"),
+                    recipient_type="company", recipient_id=comp_id, recipient_name=ph.get("name", ""),
+                    sent_by=current_user.get("name", "") + " (auto)",
+                    related_object_id=key, related_object_type="event",
+                )
+                if res.get("ok"):
+                    sent_event += 1
+                else:
+                    failed += 1
+
+    # ===== B) Birthday SMS today =====
+    def _md(d):
+        if not d:
+            return None
+        try:
+            return datetime.strptime(str(d)[:10], "%Y-%m-%d").strftime("%m-%d")
+        except (ValueError, TypeError):
+            return None
+
+    async def _send_bday(person_name: str, phone: str, kind: str, key: str):
+        nonlocal sent_bday, skipped, failed
+        if not phone:
+            return
+        if await _already_sent("birthday", key):
+            skipped += 1
+            return
+        ctx = {"name": person_name}
+        msg = sms_service.render_template(template_bday, ctx)
+        res = await sms_service.lsim_send_sms(phone, msg, sender)
+        await sms_service.log_sms(
+            db, phone=phone, msisdn=sms_service.normalize_phone(phone),
+            text=msg, sender=sender, category="birthday",
+            ok=res.get("ok", False), transid=res.get("transid"),
+            error_code=res.get("error_code"), error_message=res.get("error_message"),
+            recipient_type=kind, recipient_name=person_name,
+            sent_by=current_user.get("name", "") + " (auto)",
+            related_object_id=key, related_object_type="birthday",
+        )
+        if res.get("ok"):
+            sent_bday += 1
+        else:
+            failed += 1
+
+    # Owners / reps / contact_person on companies
+    bday_companies = await db.companies.find({}, {"_id": 0}).to_list(2000)
+    for c in bday_companies:
+        cid = c.get("id", "")
+        if _md(c.get("owner_birth_date")) == today_md and c.get("owner_phone"):
+            await _send_bday(c.get("owner_name", "") or "Sahibkar", c["owner_phone"],
+                              "owner", f"owner:{cid}:{today_md}")
+        for idx, o in enumerate(c.get("owners") or []):
+            if _md(o.get("birth_date")) == today_md and o.get("phone"):
+                pname = f"{o.get('first_name','')} {o.get('last_name','')}".strip() or o.get("name", "Sahibkar")
+                await _send_bday(pname, o["phone"], "owner", f"owner-co:{cid}:{idx}:{today_md}")
+        if _md(c.get("representative_birth_date")) == today_md and c.get("representative_phone"):
+            await _send_bday(c.get("representative_name", "") or "Nümayəndə", c["representative_phone"],
+                              "representative", f"rep:{cid}:{today_md}")
+
+    # Employees
+    emps = await db.employees.find({"birth_date": {"$exists": True, "$ne": ""}}, {"_id": 0}).to_list(1000)
+    for e in emps:
+        if _md(e.get("birth_date")) == today_md and e.get("phone"):
+            full = f"{e.get('first_name','')} {e.get('last_name','')}".strip()
+            await _send_bday(full or "Əməkdaş", e["phone"], "employee", f"emp:{e.get('id','')}:{today_md}")
+
+    # Contacts (siyahılardakı)
+    cts = await db.contacts.find({"birthday": {"$exists": True, "$ne": ""}},
+                                  {"_id": 0, "id": 1, "name": 1, "surname": 1, "phone": 1, "birthday": 1}).to_list(2000)
+    for ct in cts:
+        if _md(ct.get("birthday")) == today_md and ct.get("phone"):
+            full = f"{ct.get('name','')} {ct.get('surname','')}".strip()
+            await _send_bday(full or "Kontakt", ct["phone"], "contact", f"ctc:{ct.get('id','')}:{today_md}")
+
+    return {
+        "event_reminders_sent": sent_event,
+        "birthday_sent": sent_bday,
+        "skipped": skipped,
+        "failed": failed,
+    }
 
 
 # Root
