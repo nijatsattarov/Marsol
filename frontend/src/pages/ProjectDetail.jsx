@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowLeft, Search, Loader2, Pencil, Filter, X, Calendar, MapPin, Target, Download } from 'lucide-react';
+import { ArrowLeft, Search, Loader2, Pencil, Filter, X, Calendar, MapPin, Target, Download, Plus } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
@@ -17,8 +17,9 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const TABLE_CONFIGS = {
   'Sərgi': [
     { key: 'lead_code', label: 'ID', type: 'text', readonly: true },
-    { key: 'company_name', label: 'Şirkət', type: 'text' },
-    { key: 'contact_name', label: 'Sahibkar', type: 'text' },
+    { key: 'company_name', label: 'Müəssisə', type: 'text' },
+    { key: 'contact_name', label: 'Ad Soyad', type: 'text' },
+    { key: 'contact_position', label: 'Vəzifə', type: 'text' },
     { key: 'phone', label: 'Telefon', type: 'text' },
     { key: 'email', label: 'Email', type: 'text' },
     { key: 'sector', label: 'Sektor', type: 'text', readonly: true },
@@ -30,8 +31,9 @@ const TABLE_CONFIGS = {
   ],
   'Tur': [
     { key: 'lead_code', label: 'ID', type: 'text', readonly: true },
-    { key: 'company_name', label: 'Şirkət', type: 'text' },
-    { key: 'contact_name', label: 'Sahibkar', type: 'text' },
+    { key: 'company_name', label: 'Müəssisə', type: 'text' },
+    { key: 'contact_name', label: 'Ad Soyad', type: 'text' },
+    { key: 'contact_position', label: 'Vəzifə', type: 'text' },
     { key: 'phone', label: 'Əlaqə №', type: 'text' },
     { key: 'email', label: 'Email', type: 'text' },
     { key: 'total_amount', label: 'Məbləğ', type: 'number' },
@@ -39,8 +41,9 @@ const TABLE_CONFIGS = {
   ],
   'Təlim': [
     { key: 'lead_code', label: 'ID', type: 'text', readonly: true },
-    { key: 'company_name', label: 'Şirkət', type: 'text' },
-    { key: 'contact_name', label: 'Sahibkar', type: 'text' },
+    { key: 'company_name', label: 'Müəssisə', type: 'text' },
+    { key: 'contact_name', label: 'Ad Soyad', type: 'text' },
+    { key: 'contact_position', label: 'Vəzifə', type: 'text' },
     { key: 'phone', label: 'Əlaqə №', type: 'text' },
     { key: 'total_amount', label: 'Məbləğ', type: 'number' },
     { key: 'notes', label: 'Qeyd', type: 'text' },
@@ -49,8 +52,9 @@ const TABLE_CONFIGS = {
 
 const DEFAULT_COLS = [
   { key: 'lead_code', label: 'ID', type: 'text', readonly: true },
-  { key: 'company_name', label: 'Şirkət', type: 'text' },
-  { key: 'contact_name', label: 'Sahibkar', type: 'text' },
+  { key: 'company_name', label: 'Müəssisə', type: 'text' },
+  { key: 'contact_name', label: 'Ad Soyad', type: 'text' },
+  { key: 'contact_position', label: 'Vəzifə', type: 'text' },
   { key: 'phone', label: 'Əlaqə', type: 'text' },
   { key: 'total_amount', label: 'Məbləğ', type: 'number' },
 ];
@@ -111,11 +115,23 @@ export default function ProjectDetail() {
         if (payload[k] === '' || payload[k] == null) payload[k] = null;
         else payload[k] = Number(payload[k]);
       });
-      await axios.put(`${API}/sales-leads/${editing.id}`, payload, { headers });
-      toast.success('Yadda saxlandı');
+      if (editing.id) {
+        await axios.put(`${API}/sales-leads/${editing.id}`, payload, { headers });
+        toast.success('Yadda saxlandı');
+      } else {
+        // New customer for this project — auto-link to project event and mark as Satıldı
+        payload.project_id = id;
+        if (!payload.status) payload.status = 'Satıldı';
+        if (!payload.company_name || !payload.contact_name) {
+          toast.error('Müəssisə və Ad Soyad tələb olunur');
+          return;
+        }
+        await axios.post(`${API}/sales-leads`, payload, { headers });
+        toast.success('Müştəri əlavə edildi');
+      }
       setEditing(null);
       fetchData();
-    } catch { toast.error('Xəta baş verdi'); }
+    } catch (err) { toast.error(err?.response?.data?.detail || 'Xəta baş verdi'); }
   };
 
   const exportExcel = () => {
@@ -160,6 +176,16 @@ export default function ProjectDetail() {
               </div>
             </div>
             <Button onClick={exportExcel} variant="outline" size="sm" className="text-[#3D4F6F] border-[#3D4F6F]/20" data-testid="detail-export-btn"><Download className="w-4 h-4 mr-1" />Excel</Button>
+            {_canEdit && (
+              <Button
+                onClick={() => setEditing({ company_name: '', contact_name: '', contact_position: '', phone: '', email: '', total_amount: '', notes: '', status: 'Satıldı' })}
+                size="sm"
+                className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold"
+                data-testid="add-customer-btn"
+              >
+                <Plus className="w-4 h-4 mr-1" />Müştəri əlavə et
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -236,7 +262,7 @@ export default function ProjectDetail() {
       {/* Edit Modal */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="text-[#3D4F6F]">Satışı redaktə et</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-[#3D4F6F]">{editing?.id ? 'Satışı redaktə et' : 'Müştəri əlavə et'}</DialogTitle></DialogHeader>
           {editing && (
             <div className="space-y-3">
               {columns.filter(c => !c.readonly).map(c => (

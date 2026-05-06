@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 46 — Phase 2 mid-level fixes (#6 Assembly DatePopover/PersonTags search, #8 CarryOverPicker, #10 ProjectDetail add-customer/columns, #17 Forum required fields). Backend: 6/6 pytest passed (forum required CRUD + subset enforcement, public GET fields[].required boolean, public POST 400 validation with Azerbaijani error message + 200 success path, sales-leads with project_id appears in /project-events/{id}/sales). Frontend: All 5 features visually verified through Playwright — Settings ★ button toggles amber and updates forumRequired state, save-forum-fields-btn visible, Assembly modal carry-over-btn opens popover with carry-apply-btn, 'Tarix seç' Popover opens shadcn Calendar, PersonTags search input '*-resp-search' filters live (test/Test Əməkdaş/test test seen), ProjectDetail add-customer-btn opens modal with title 'Müştəri əlavə et' and labels 'Müəssisə/Ad Soyad/Vəzifə', PublicForm renders 2 red asterisks next to required field labels (Hüquqi ad, VÖEN). All claimed acceptance criteria met.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All Radix Dialog modals (Yeni İclas, Müştəri əlavə et, etc.)", "issues": ["Recurring console warning: 'Missing Description or aria-describedby={undefined} for {DialogContent}'. Already flagged in iteration_45 — still unresolved. Add <DialogDescription> for accessibility."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration46_phase2_midfixes.py",
+    "/app/test_reports/pytest/iteration_46_results.xml"
+  ],
+  "action_items": [
+    "Optional polish: Add <DialogDescription> across Dialog modals to silence Radix accessibility warning (carried over from iter_45).",
+    "Optional: Backend POST /api/sales-leads — consider returning 201 instead of 200 for resource creation (current returns 200 on success — minor REST nit, not blocking)."
+  ],
+  "critical_code_review_comments": [
+    "server.py forum required-fields endpoint /api/public/form/{token} POST: validation correctly uses field labels in Azerbaijani; isinstance handling for blank-list and string strip is solid. Consider also rejecting list-of-empty-strings (e.g., [''] or whitespace-only items) as 'is_blank' for robustness.",
+    "PUT /api/forum/fields silently drops invalid required keys (subset filter). Acceptable defensive behavior, but consider returning a warning in the response body listing dropped keys so admins know about typos.",
+    "Settings.jsx forumRequired state: when a field is unchecked from forumEnabled, it is correctly removed from forumRequired (line 1110). Good defensive UX.",
+    "PublicForm.jsx red asterisk rendering — covers text/select/date/textarea/file types as claimed; verified visually with 2 asterisks.",
+    "Assembly.jsx CarryOverPicker (line ~14) — fetches /api/assemblies on open via parent state. Verify performance if there are >100 past meetings (consider date-based pagination or lazy load).",
+    "Assembly.jsx PersonTags search — controlled local state with case-insensitive filter; accessible. Good.",
+    "ProjectDetail.jsx — TABLE_CONFIGS hardcodes column labels; if user wants column-rename via Settings, this would need refactor to dynamic config. Acceptable for current scope.",
+    "Backend file is now 6152 lines (was 6131 in iter 45) — continued growth. Consider router extraction (companies, invitations, settings, sales-leads, forum) — past flagged."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration46_phase2_midfixes.py (new — 6 tests, 100% pass)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (5/5 claimed features verified)"},
+  "test_credentials": "Admin: settings@marsol.az / marsol123 — verified working. Phone fields kept empty per /app/memory/test_credentials.md.",
+  "seed_data_creation": "Tests create TEST_ForumReq_*, TEST_Customer_*, TEST_Proj_*, TEST_FE_PublicForm companies/projects/leads and clean them up via module fixture teardown + frontend Playwright test cleanup. Forum settings (enabled/required) are saved before test run and restored in teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 46 Phase 2 mid-fixes complete and validated end-to-end. Backend regression suite for forum required fields + sales-leads project linkage is at /app/backend/tests/test_iteration46_phase2_midfixes.py — preserve for future runs. Frontend Settings forum tab uses data-testids: forum-field-{key}, forum-required-{key}, save-forum-fields-btn. Assembly modal uses: carry-over-btn, carry-apply-btn, *-resp-search, add-general-task-btn. ProjectDetail uses: add-customer-btn. PublicForm renders red * via field.required boolean. The DialogDescription a11y warning (carried since iter_45) is still present across all modals — main agent has not addressed it; consider in a future polish pass.",
+  "rca_of_the_issue": "N/A — no functional bugs. Initial test failures (3) were due to my mistaken use of brand_name/owner_name as field keys; COMPANY_FORM_FIELDS list uses legal_name/voen — fixed in test file."
+}

@@ -109,6 +109,7 @@ export default function Settings() {
   const [roleForm, setRoleForm] = useState({ name: '', permissions: {}, scopes: {} });
   const [forumFields, setForumFields] = useState([]);
   const [forumEnabled, setForumEnabled] = useState([]);
+  const [forumRequired, setForumRequired] = useState([]);
   const [forumDescription, setForumDescription] = useState('Zəhmət olmasa şirkət məlumatlarını doldurun');
   const [branding, setBranding] = useState({ sidebar_logo_url: '', main_logo_url: '' });
   const [brandingUploading, setBrandingUploading] = useState({ sidebar: false, main: false });
@@ -194,6 +195,7 @@ export default function Settings() {
       setRoles(rolesRes.data || []);
       setForumFields(ffRes.data.fields || []);
       setForumEnabled(ffRes.data.enabled || []);
+      setForumRequired(ffRes.data.required || []);
       try { const descRes = await axios.get(`${API}/settings/lists/forum_description`, { headers }); setForumDescription((descRes.data && descRes.data[0]) || 'Zəhmət olmasa şirkət məlumatlarını doldurun'); } catch {}
       try { const brRes = await axios.get(`${API}/settings/branding`, { headers }); setBranding(brRes.data); } catch {}
     } catch (err) {
@@ -1078,7 +1080,7 @@ export default function Settings() {
                 <Button size="sm" variant="outline" onClick={() => setForumEnabled([])} data-testid="deselect-all-fields">Heç birini</Button>
                 <Button size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125]" onClick={async () => {
                   try {
-                    await axios.put(`${API}/forum/fields`, { enabled: forumEnabled }, { headers });
+                    await axios.put(`${API}/forum/fields`, { enabled: forumEnabled, required: forumRequired }, { headers });
                     await axios.put(`${API}/settings/lists/forum_description`, { values: [forumDescription] }, { headers });
                     toast.success('Forum tənzimləmələri yadda saxlandı');
                   } catch { toast.error('Xəta baş verdi'); }
@@ -1091,6 +1093,10 @@ export default function Settings() {
               <Label className="text-xs font-semibold">Forum açıqlama mətni</Label>
               <textarea value={forumDescription} onChange={(e) => setForumDescription(e.target.value)} className="w-full min-h-[60px] p-2 text-sm border rounded-lg resize-none mt-1" placeholder="Formun yuxarısında görünəcək açıqlama..." data-testid="forum-description-input" />
             </div>
+            <div className="bg-amber-50/60 border border-amber-200 rounded-md p-2.5 mb-3 flex items-start gap-2">
+              <span className="text-amber-700 font-bold text-sm">★</span>
+              <p className="text-[11px] text-amber-800">Sahənin yanındakı <strong>★</strong> ikonuna kliklədikdə həmin sahə "məcburi" olur — istifadəçi formu doldurarkən bu sahələri boş qoya bilməz.</p>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
               {forumFields.map(field => (
                 <label key={field.key} className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${forumEnabled.includes(field.key) ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-100'}`} data-testid={`forum-field-${field.key}`}>
@@ -1099,12 +1105,28 @@ export default function Settings() {
                     checked={forumEnabled.includes(field.key)}
                     onChange={(e) => {
                       if (e.target.checked) setForumEnabled([...forumEnabled, field.key]);
-                      else setForumEnabled(forumEnabled.filter(k => k !== field.key));
+                      else {
+                        setForumEnabled(forumEnabled.filter(k => k !== field.key));
+                        setForumRequired(forumRequired.filter(k => k !== field.key));
+                      }
                     }}
                     className="w-4 h-4 accent-[#9ACD32]"
                   />
-                  <span className="text-sm text-slate-700">{field.label}</span>
+                  <span className="text-sm text-slate-700 flex-1">{field.label}</span>
                   {field.custom && <span className="text-[10px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded">Xüsusi</span>}
+                  {forumEnabled.includes(field.key) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (forumRequired.includes(field.key)) setForumRequired(forumRequired.filter(k => k !== field.key));
+                        else setForumRequired([...forumRequired, field.key]);
+                      }}
+                      title={forumRequired.includes(field.key) ? 'Məcburi sahə (kliklə: ləğv et)' : 'Məcburi et'}
+                      className={`text-base leading-none ${forumRequired.includes(field.key) ? 'text-amber-500' : 'text-slate-300 hover:text-amber-400'}`}
+                      data-testid={`forum-required-${field.key}`}
+                    >★</button>
+                  )}
                 </label>
               ))}
             </div>

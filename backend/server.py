@@ -2576,21 +2576,27 @@ COMPANY_FORM_FIELDS = [
 
 @api_router.get("/forum/fields")
 async def get_forum_fields(current_user: dict = Depends(get_current_user)):
-    """Get available form fields and which are enabled"""
+    """Get available form fields, which are enabled, and which are required."""
     settings = await db.setting_lists.find_one({"key": "forum_enabled_fields"}, {"_id": 0})
     enabled = settings.get("values", []) if settings else [f["key"] for f in COMPANY_FORM_FIELDS]
+    req_doc = await db.setting_lists.find_one({"key": "forum_required_fields"}, {"_id": 0})
+    required = req_doc.get("values", []) if req_doc else []
     # Also get custom fields for companies
     custom_fields = await db.custom_fields.find({"module": "companies"}, {"_id": 0}).to_list(100)
     all_fields = COMPANY_FORM_FIELDS.copy()
     for cf in custom_fields:
         all_fields.append({"key": f"custom_{cf['id']}", "label": cf.get("label", cf.get("name", "")), "custom": True})
-    return {"fields": all_fields, "enabled": enabled}
+    return {"fields": all_fields, "enabled": enabled, "required": required}
 
 @api_router.put("/forum/fields")
 async def update_forum_fields(data: dict, current_user: dict = Depends(check_permission("settings", "write"))):
     enabled = data.get("enabled", [])
+    required = data.get("required", [])
+    # Required must be a subset of enabled
+    required = [r for r in required if r in enabled]
     await db.setting_lists.update_one({"key": "forum_enabled_fields"}, {"$set": {"values": enabled}}, upsert=True)
-    return {"message": "Forum sahələri yeniləndi", "enabled": enabled}
+    await db.setting_lists.update_one({"key": "forum_required_fields"}, {"$set": {"values": required}}, upsert=True)
+    return {"message": "Forum sahələri yeniləndi", "enabled": enabled, "required": required}
 
 
 async def _get_all_options():
@@ -2638,11 +2644,13 @@ async def get_public_form(token: str):
         raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
     settings = await db.setting_lists.find_one({"key": "forum_enabled_fields"}, {"_id": 0})
     enabled = settings.get("values", []) if settings else [f["key"] for f in COMPANY_FORM_FIELDS]
+    req_doc = await db.setting_lists.find_one({"key": "forum_required_fields"}, {"_id": 0})
+    required = req_doc.get("values", []) if req_doc else []
     fields_info = {f["key"]: {"label": f["label"], "type": f.get("type", "text")} for f in COMPANY_FORM_FIELDS}
     custom_fields = await db.custom_fields.find({"module": "companies"}, {"_id": 0}).to_list(100)
     for cf in custom_fields:
         fields_info[f"custom_{cf['id']}"] = {"label": cf.get("label", cf.get("name", "")), "type": "text"}
-    enabled_fields = [{"key": k, "label": fields_info[k]["label"], "type": fields_info[k]["type"]} for k in enabled if k in fields_info]
+    enabled_fields = [{"key": k, "label": fields_info[k]["label"], "type": fields_info[k]["type"], "required": k in required} for k in enabled if k in fields_info]
     # Get dynamic options for selects
     sectors_db = await db.sectors.find({}, {"_id": 0}).to_list(200)
     sub_sectors_db = await db.sub_sectors.find({}, {"_id": 0}).to_list(500)
@@ -2677,6 +2685,19 @@ async def submit_public_form(token: str, data: dict):
     company_id = form_token["company_id"]
     settings = await db.setting_lists.find_one({"key": "forum_enabled_fields"}, {"_id": 0})
     enabled = settings.get("values", []) if settings else [f["key"] for f in COMPANY_FORM_FIELDS]
+    req_doc = await db.setting_lists.find_one({"key": "forum_required_fields"}, {"_id": 0})
+    required = [r for r in (req_doc.get("values", []) if req_doc else []) if r in enabled]
+    field_labels = {f["key"]: f["label"] for f in COMPANY_FORM_FIELDS}
+    # Validate required fields are filled
+    missing = []
+    for rk in required:
+        val = data.get(rk, "")
+        # consider empty if string is blank or list is empty
+        is_blank = (val is None) or (isinstance(val, str) and not val.strip()) or (isinstance(val, list) and len(val) == 0)
+        if is_blank:
+            missing.append(field_labels.get(rk, rk))
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Aşağıdakı məcburi sahələr doldurulmalıdır: {', '.join(missing)}")
     pending_data = {}
     for key in enabled:
         if key in data:

@@ -158,7 +158,7 @@ export default function PublicForm() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {meta.fields.filter(f => ['text', 'select', 'date'].includes(f.type)).map(field => (
               <div key={field.key}>
-                <Label className="text-xs">{field.label}</Label>
+                <Label className="text-xs">{field.label}{field.required && <span className="text-red-500 ml-0.5">*</span>}</Label>
                 {selectFields[field.key] ? (
                   <DynSelect value={formData[field.key]} onChange={(v) => setFormData({ ...formData, [field.key]: v })} options={selectFields[field.key]} placeholder="Seçin" />
                 ) : field.type === 'date' ? (
@@ -172,7 +172,7 @@ export default function PublicForm() {
 
           {/* Textarea fields */}
           {meta.fields.filter(f => f.type === 'textarea').map(field => (
-            <div key={field.key}><Label className="text-xs">{field.label}</Label>
+            <div key={field.key}><Label className="text-xs">{field.label}{field.required && <span className="text-red-500 ml-0.5">*</span>}</Label>
               <textarea value={formData[field.key] || ''} onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })} className="w-full min-h-[60px] p-2 text-sm border rounded-lg resize-none" />
             </div>
           ))}
@@ -196,7 +196,7 @@ export default function PublicForm() {
           {/* File uploads */}
           {meta.fields.filter(f => f.type === 'file').map(field => (
             <div key={field.key}>
-              <Label className="text-xs">{field.label}</Label>
+              <Label className="text-xs">{field.label}{field.required && <span className="text-red-500 ml-0.5">*</span>}</Label>
               <div className="flex items-center gap-2 flex-wrap">
                 <label className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 rounded-lg cursor-pointer hover:bg-slate-200 text-xs">
                   <Upload className="w-3 h-3" />Fayl seç

@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import {
   Plus, Search, Loader2, Pencil, Trash2, X, Download,
-  Eye, Users2, Target, ListChecks, ClipboardList
+  Eye, Users2, Target, ListChecks, ClipboardList, Calendar as CalendarIcon
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
+import { Calendar } from '../components/ui/calendar';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
@@ -28,10 +30,122 @@ const emptyForm = {
   decisions: ['']
 };
 
-// Multi-select tag component
+// Carry-over picker — lets the user copy unfinished agendas/tasks from past assemblies
+// into the current draft. Shown next to "+ Gündəm əlavə et".
+function CarryOverPicker({ assemblies, editingId, onCarry }) {
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState({}); // { [assembly_id+agenda_idx]: agenda }
+  const past = (assemblies || [])
+    .filter(a => a.id !== editingId)
+    .sort((a, b) => (b.deadline || '').localeCompare(a.deadline || ''))
+    .slice(0, 30); // last 30 assemblies for performance
+
+  const toggle = (key, agenda) => {
+    setPicked(p => {
+      const next = { ...p };
+      if (next[key]) delete next[key];
+      else next[key] = agenda;
+      return next;
+    });
+  };
+
+  const handleApply = () => {
+    onCarry(Object.values(picked));
+    setPicked({});
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className="text-[10px] text-amber-600 hover:underline font-medium flex items-center gap-0.5" data-testid="carry-over-btn">
+          <ClipboardList className="w-3 h-3" /> Köhnə iclasdan köçür
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[420px] p-0" align="end">
+        <div className="px-3 py-2 border-b bg-slate-50">
+          <p className="text-xs font-semibold text-[#3D4F6F]">Yarımçıq qalan gündəmlər</p>
+          <p className="text-[10px] text-slate-400">Keçmiş iclaslardan istənilən gündəmi seçib köçürün</p>
+        </div>
+        <div className="max-h-[320px] overflow-y-auto p-2 space-y-2">
+          {past.length === 0 ? (
+            <p className="text-[11px] text-slate-400 text-center py-4">Keçmiş iclas tapılmadı</p>
+          ) : past.map(a => {
+            const ags = (a.agendas || []).filter(g => (g.title || '').trim());
+            if (ags.length === 0) return null;
+            return (
+              <div key={a.id} className="border border-slate-100 rounded p-2 bg-white">
+                <p className="text-[11px] font-semibold text-[#3D4F6F]">{a.purpose || a.department || 'İclas'}</p>
+                <p className="text-[10px] text-slate-400 mb-1.5">{a.deadline || a.date || ''} · {a.department || ''}</p>
+                <div className="space-y-1">
+                  {ags.map((g, gi) => {
+                    const key = `${a.id}:${gi}`;
+                    return (
+                      <label key={key} className="flex items-start gap-1.5 text-[11px] cursor-pointer hover:bg-slate-50 rounded px-1 py-0.5">
+                        <input type="checkbox" checked={!!picked[key]} onChange={() => toggle(key, g)} className="mt-0.5" data-testid={`carry-${a.id}-${gi}`} />
+                        <span className="flex-1">
+                          <span className="font-medium text-slate-700">{g.title}</span>
+                          {(g.tasks || []).length > 0 && <span className="text-[10px] text-slate-400 ml-1">({g.tasks.length} tapşırıq)</span>}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="px-3 py-2 border-t flex items-center justify-between bg-slate-50">
+          <span className="text-[11px] text-slate-500">{Object.keys(picked).length} seçildi</span>
+          <Button size="sm" onClick={handleApply} disabled={Object.keys(picked).length === 0} className="h-7 text-xs bg-[#9ACD32] hover:bg-[#8BC125] text-[#3D4F6F]" data-testid="carry-apply-btn">Köçür</Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Date picker (Popover + Calendar) — guaranteed calendar UI even if browser-native
+function DatePopoverInput({ value, onChange, testId }) {
+  const dateValue = value ? new Date(value) : undefined;
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="text-xs h-7 w-full flex items-center justify-start gap-1 px-2 border border-input bg-background rounded-md hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#9ACD32]/40"
+          data-testid={testId}
+        >
+          <CalendarIcon className="w-3 h-3 text-slate-400" />
+          <span className={value ? 'text-slate-700' : 'text-slate-400'}>{value || 'Tarix seç'}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={dateValue}
+          onSelect={(d) => {
+            if (d) {
+              const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+              onChange(iso);
+            }
+            setOpen(false);
+          }}
+          initialFocus
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Multi-select tag component (with search)
 function PersonTags({ selected, options, onChange, placeholder, testId }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const available = options.filter(o => !selected.includes(o));
+  const filtered = query.trim()
+    ? available.filter(o => o.toLowerCase().includes(query.toLowerCase()))
+    : available;
   return (
     <div className="relative">
       <div className="flex flex-wrap gap-1 min-h-[28px] border rounded-md px-1.5 py-1 cursor-pointer bg-white" onClick={() => setOpen(!open)} data-testid={testId}>
@@ -47,13 +161,27 @@ function PersonTags({ selected, options, onChange, placeholder, testId }) {
       </div>
       {open && available.length > 0 && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute z-50 top-full mt-1 left-0 w-full bg-white border rounded-md shadow-lg max-h-[140px] overflow-y-auto">
-            {available.map(n => (
-              <button key={n} type="button" className="w-full text-left text-xs px-2 py-1.5 hover:bg-slate-50" onClick={() => { onChange([...selected, n]); setOpen(false); }}>
-                {n}
-              </button>
-            ))}
+          <div className="fixed inset-0 z-40" onClick={() => { setOpen(false); setQuery(''); }} />
+          <div className="absolute z-50 top-full mt-1 left-0 w-full bg-white border rounded-md shadow-lg overflow-hidden">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              placeholder="Axtar..."
+              autoFocus
+              className="w-full text-xs px-2 py-1.5 border-b border-slate-100 focus:outline-none focus:bg-slate-50"
+              data-testid={testId ? `${testId}-search` : undefined}
+            />
+            <div className="max-h-[160px] overflow-y-auto">
+              {filtered.length === 0 ? (
+                <div className="text-[11px] text-slate-400 px-2 py-2 text-center">Tapılmadı</div>
+              ) : filtered.map(n => (
+                <button key={n} type="button" className="w-full text-left text-xs px-2 py-1.5 hover:bg-slate-50" onClick={() => { onChange([...selected, n]); setOpen(false); setQuery(''); }}>
+                  {n}
+                </button>
+              ))}
+            </div>
           </div>
         </>
       )}
@@ -88,8 +216,8 @@ function TaskRow({ task, onUpdate, onRemove, canRemove, prefix, employeeNames })
     <div className="space-y-1.5 bg-slate-50/80 rounded-md p-2 border border-slate-100" data-testid={`${prefix}`}>
       <div className="flex items-center gap-1.5">
         <Input value={task.title} onChange={(e) => onUpdate('title', e.target.value)} placeholder="Tapşırıq" className="text-sm h-7 flex-1" />
-        <div className="w-[120px]">
-          <Input type="date" value={task.deadline} onChange={(e) => onUpdate('deadline', e.target.value)} className="text-sm h-7" />
+        <div className="w-[140px]">
+          <DatePopoverInput value={task.deadline} onChange={(v) => onUpdate('deadline', v)} testId={`${prefix}-deadline`} />
         </div>
         {canRemove && (
           <button type="button" onClick={onRemove} className="p-1 hover:bg-red-100 rounded flex-shrink-0"><X className="w-3 h-3 text-red-500" /></button>
@@ -507,7 +635,14 @@ export default function Assembly() {
             <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
               <div className="flex items-center justify-between mb-2">
                 <Label className="text-xs font-semibold text-[#3D4F6F] flex items-center gap-1"><Target className="w-3.5 h-3.5" />Gündəmlər və Tapşırıqlar</Label>
-                <button type="button" onClick={addAgenda} className="text-[10px] text-[#9ACD32] hover:underline font-medium" data-testid="add-agenda-btn">+ Gündəm əlavə et</button>
+                <div className="flex items-center gap-2">
+                  <CarryOverPicker assemblies={assemblies} editingId={editing?.id} onCarry={(items) => {
+                    if (!items.length) return;
+                    setForm(p => ({ ...p, agendas: [...(p.agendas || []), ...items] }));
+                    toast.success(`${items.length} gündəm köçürüldü`);
+                  }} />
+                  <button type="button" onClick={addAgenda} className="text-[10px] text-[#9ACD32] hover:underline font-medium" data-testid="add-agenda-btn">+ Gündəm əlavə et</button>
+                </div>
               </div>
               {form.agendas.map((agenda, aIdx) => (
                 <div key={aIdx} className="mb-3 bg-white rounded-lg border border-slate-200 p-3" data-testid={`agenda-${aIdx}`}>
