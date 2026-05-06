@@ -375,7 +375,7 @@ export default function Assembly() {
                 <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Aparıcı Şöbə</th>
                 <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Məqsəd</th>
                 <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Şəxslər</th>
-                <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Son tarix</th>
+                <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">İclas tarixi</th>
                 <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Növbəti iclas</th>
                 <th className="text-center px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Detallar</th>
                 <th className="text-right px-3 py-3 text-xs font-semibold text-[#3D4F6F]"></th>
@@ -470,8 +470,17 @@ export default function Assembly() {
       </div>
 
       {/* Form Modal */}
-      <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={showModal} onOpenChange={(open) => {
+        if (open) { setShowModal(true); return; }
+        if (window.confirm('Bağlamaq istədiyinizdən əminsiniz? Saxlanılmamış dəyişikliklər itəcək.')) {
+          setShowModal(false);
+        }
+      }}>
+        <DialogContent
+          className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle style={{ color: '#3D4F6F' }}>{editing ? 'İclası redaktə et' : 'Yeni İclas'}</DialogTitle>
           </DialogHeader>
@@ -485,7 +494,7 @@ export default function Assembly() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Son tarix</Label>
+                <Label className="text-xs">İclasın keçirildiyi tarix</Label>
                 <Input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} className="text-sm" data-testid="assembly-deadline" />
               </div>
             </div>
@@ -558,7 +567,9 @@ export default function Assembly() {
               <Input type="date" value={form.next_assembly_date} onChange={(e) => setForm({ ...form, next_assembly_date: e.target.value })} className="text-sm" data-testid="assembly-next-date" />
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Ləğv et</Button>
+              <Button type="button" variant="outline" onClick={() => {
+                if (window.confirm('Bağlamaq istədiyinizdən əminsiniz? Saxlanılmamış dəyişikliklər itəcək.')) setShowModal(false);
+              }}>Ləğv et</Button>
               <Button type="submit" className="bg-[#3D4F6F] hover:bg-[#2A364C] text-white" data-testid="assembly-submit-btn">{editing ? 'Yadda saxla' : 'Yarat'}</Button>
             </div>
           </form>

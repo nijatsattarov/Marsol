@@ -139,11 +139,17 @@ export default function Tasks() {
   };
 
   const handleStatusChange = async (taskId, newStatus) => {
+    // Optimistic update — move card to new column immediately
+    const prev = tasks;
+    setTasks(prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
     try {
       await axios.put(`${API}/tasks/${taskId}`, { status: newStatus }, { headers });
       toast.success('Status yeniləndi');
       fetchData();
-    } catch (error) { toast.error('Xəta baş verdi'); }
+    } catch (error) {
+      setTasks(prev); // rollback
+      toast.error('Xəta baş verdi');
+    }
   };
 
   const handleRelatedTypeChange = (type) => {

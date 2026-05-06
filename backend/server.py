@@ -2813,6 +2813,7 @@ async def update_setting_list(key: str, data: dict, current_user: dict = Depends
 # ==== Manageable Lists Registry ====
 MANAGEABLE_LISTS = [
     {"key": "company_sizes", "label": "Şirkət ölçüləri", "defaults": ["Böyük", "Orta", "Kiçik", "Mikro"], "group": "Şirkət"},
+    {"key": "organization_forms", "label": "Təşkilat formaları", "defaults": ["MMC", "ASC", "QSC", "Fərdi sahibkar", "Fond", "İB", "Digər"], "group": "Şirkət"},
     {"key": "company_statuses", "label": "Şirkət statusları", "defaults": ["Aktiv", "Qeyri-aktiv", "Gözləmədə"], "group": "Şirkət"},
     {"key": "contract_statuses", "label": "Müqavilə statusları", "defaults": ["Aktiv", "Yeni", "Yeniləmə gözlənir", "Bitdi", "Ləğv edilib"], "group": "Şirkət"},
     {"key": "departments", "label": "Şöbələr", "defaults": ["Satış", "Marketing", "HR", "Maliyyə", "Layihə", "İT", "İdarəetmə"], "group": "HR"},
@@ -2952,6 +2953,7 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
         "reference_sources": await _get_setting_list("reference_sources", ["Şirkət", "Şəxs", "Media", "Digər"]),
         "statuses": await _get_setting_list("company_statuses", ["Aktiv", "Qeyri-aktiv", "Gözləmədə"]),
         "company_statuses": await _get_setting_list("company_statuses", ["Aktiv", "Qeyri-aktiv", "Gözləmədə"]),
+        "organization_forms": await _get_setting_list("organization_forms", ["MMC", "ASC", "QSC", "Fərdi sahibkar", "Fond", "İB", "Digər"]),
         "contract_statuses": await _get_setting_list("contract_statuses", ["Aktiv", "Yeni", "Yeniləmə gözlənir", "Bitdi", "Ləğv edilib"]),
         "citizenships": await _get_setting_list("citizenships", ["Azərbaycan", "Türkiyə", "Rusiya", "Gürcüstan", "Ukrayna", "Digər"]),
         "employee_statuses": await _get_setting_list("employee_statuses", ["Aktiv", "Məzuniyyətdə", "Xəstələnib", "İşdən çıxıb"]),
@@ -4189,6 +4191,20 @@ async def update_invitation_call(inv_id: str, data: dict, current_user: dict = D
         raise HTTPException(status_code=404, detail="Dəvət tapılmadı")
     inv = await db.invitations.find_one({"id": inv_id}, {"_id": 0})
     return inv
+
+@api_router.put("/invitations/{inv_id}/notes")
+async def update_invitation_notes(inv_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    """Persist a free-form note (e.g. reason for non-attendance) on an invitation."""
+    notes = (data.get("notes") or "").strip()
+    result = await db.invitations.update_one(
+        {"id": inv_id},
+        {"$set": {"notes": notes, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Dəvət tapılmadı")
+    inv = await db.invitations.find_one({"id": inv_id}, {"_id": 0})
+    return inv
+
 
 @api_router.delete("/invitations/{inv_id}")
 async def delete_invitation(inv_id: str, current_user: dict = Depends(get_current_user)):

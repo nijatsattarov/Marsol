@@ -110,7 +110,7 @@ export default function Companies() {
   const emptyContract = { project: '', package: '', start_date: '', end_date: '', join_date: '', total_amount: 0, paid_amount: 0, debt_amount: 0, contract_file: '' };
 
   const initialFormData = {
-    brand_name: '', legal_name: '', voen: '', sector: '', sub_sector: '', company_size: '', employee_count: '', region: '',
+    brand_name: '', legal_name: '', organization_form: '', voen: '', sector: '', sub_sector: '', company_size: '', employee_count: '', region: '',
     registration_date: '', address: '', country: 'AZ', company_phone: '', company_website: '',
     reference_source: '', reference_company_id: '', reference_company_name: '', reference_person_name: '', reference_person_surname: '', reference_person_position: '', reference_note: '',
     social_links: [],
@@ -515,6 +515,7 @@ export default function Companies() {
             <TabsContent value="company" className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
               <div><p className="text-slate-500 text-xs">Brend adı</p><p className="font-medium">{v.brand_name}</p></div>
               <div><p className="text-slate-500 text-xs">Hüquqi adı</p><p className="font-medium">{v.legal_name || '-'}</p></div>
+              <div><p className="text-slate-500 text-xs">Təşkilat forması</p><p className="font-medium">{v.organization_form || '-'}</p></div>
               <div><p className="text-slate-500 text-xs">VÖEN</p><p className="font-medium">{v.voen || '-'}</p></div>
               <div><p className="text-slate-500 text-xs">Sektor / Alt sektor</p><p className="font-medium">{v.sector}{v.sub_sector ? ` / ${v.sub_sector}` : ''}</p></div>
               <div><p className="text-slate-500 text-xs">Ölçü</p><p className="font-medium">{v.company_size || '-'}</p></div>
@@ -729,6 +730,17 @@ export default function Companies() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><Label className="text-xs">Brend adı *</Label><Input value={formData.brand_name} onChange={e => setFormData({...formData, brand_name: e.target.value})} required className="text-sm" data-testid="company-brand-input" /></div>
                 <div><Label className="text-xs">Hüquqi adı</Label><Input value={formData.legal_name} onChange={e => setFormData({...formData, legal_name: e.target.value})} className="text-sm" /></div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><Label className="text-xs">Təşkilat forması</Label>
+                  <Select value={formData.organization_form || ''} onValueChange={v => setFormData({...formData, organization_form: v})}>
+                    <SelectTrigger className="text-sm" data-testid="company-org-form"><SelectValue placeholder="Seçin (MMC, ASC, QSC...)" /></SelectTrigger>
+                    <SelectContent>
+                      {(options?.organization_forms || []).map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div><Label className="text-xs">VÖEN</Label><Input value={formData.voen} onChange={e => setFormData({...formData, voen: e.target.value})} className="text-sm" /></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div><Label className="text-xs">Sektor *</Label>
@@ -956,9 +968,6 @@ export default function Companies() {
 
             {/* MÜQAVİLƏ TAB */}
             <TabsContent value="contract" className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                <div><Label className="text-xs">VÖEN</Label><Input value={formData.voen} onChange={e => setFormData({...formData, voen: e.target.value})} className="text-sm" data-testid="company-voen-input" placeholder="1234567890" /></div>
-              </div>
               <div className="p-3 bg-blue-50/40 border border-blue-100 rounded-lg">
                 <Label className="text-xs font-semibold text-blue-700">Bank rekvizitləri</Label>
                 <div className="flex items-center gap-2 mt-2 flex-wrap">

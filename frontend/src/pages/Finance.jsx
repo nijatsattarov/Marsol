@@ -34,6 +34,7 @@ export default function Finance() {
   const [expenses, setExpenses] = useState([]);
   const [options, setOptions] = useState(null);
   const [marsolCompanies, setMarsolCompanies] = useState([]);
+  const [responsiblePersons, setResponsiblePersons] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Expense modal
@@ -63,7 +64,7 @@ export default function Finance() {
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({ package: '', marsol_representative: '', status: '', project: '' });
+  const [filters, setFilters] = useState({ package: '', marsol_representative: '', status: '', project: '', marsol_company: '' });
   const [expenseMarsolFilter, setExpenseMarsolFilter] = useState('all');
 
   // Projects for expense dropdown
@@ -199,6 +200,7 @@ export default function Finance() {
     if (filters.marsol_representative && filters.marsol_representative !== 'all' && c.marsol_representative !== filters.marsol_representative) return false;
     if (filters.status && filters.status !== 'all' && c.status !== filters.status) return false;
     if (filters.project && filters.project !== 'all' && c.joined_project !== filters.project) return false;
+    if (filters.marsol_company && filters.marsol_company !== 'all' && (c.marsol_company || '') !== filters.marsol_company) return false;
     return true;
   });
 
@@ -597,9 +599,19 @@ export default function Finance() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div>
+                    <Label className="text-xs text-slate-500 mb-1 block">Müəssisə</Label>
+                    <Select value={filters.marsol_company || 'all'} onValueChange={(v) => setFilters({ ...filters, marsol_company: v })}>
+                      <SelectTrigger className="text-sm" data-testid="filter-marsol-company"><SelectValue placeholder="Hamısı" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Hamısı</SelectItem>
+                        {(options.marsol_companies || []).map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 {activeFilterCount > 0 && (
-                  <Button variant="ghost" size="sm" onClick={() => setFilters({ package: '', marsol_representative: '', status: '', project: '' })} className="mt-3 text-slate-500 text-xs">
+                  <Button variant="ghost" size="sm" onClick={() => setFilters({ package: '', marsol_representative: '', status: '', project: '', marsol_company: '' })} className="mt-3 text-slate-500 text-xs">
                     <X className="w-3 h-3 mr-1" /> Filtrləri təmizlə
                   </Button>
                 )}
@@ -1203,7 +1215,16 @@ export default function Finance() {
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label className="text-xs">Məsul şəxs</Label><Input value={expenseForm.responsible_person} onChange={(e) => setExpenseForm({ ...expenseForm, responsible_person: e.target.value })} className="text-sm" /></div>
+              <div>
+                <Label className="text-xs">Məsul şəxs</Label>
+                <Select value={expenseForm.responsible_person || 'none'} onValueChange={(v) => setExpenseForm({ ...expenseForm, responsible_person: v === 'none' ? '' : v })}>
+                  <SelectTrigger className="text-sm" data-testid="expense-responsible-person"><SelectValue placeholder="Seçin" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Seçilməyib</SelectItem>
+                    {responsiblePersons.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
               <div>
                 <Label className="text-xs">Ödəniş üsulu</Label>
                 <Select value={expenseForm.payment_method} onValueChange={(v) => setExpenseForm({ ...expenseForm, payment_method: v === 'none' ? '' : v })}>

@@ -180,6 +180,15 @@ export default function Organization() {
     } catch { toast.error('Xəta baş verdi'); }
   };
 
+  const handleSaveInvitationNote = async (invId, notes) => {
+    try {
+      await axios.put(`${API}/invitations/${invId}/notes`, { notes }, { headers });
+      toast.success('Qeyd saxlandı');
+      // Update local state without refetch to keep focus
+      setInvitations(prev => prev.map(i => i.id === invId ? { ...i, notes } : i));
+    } catch { toast.error('Qeyd saxlanılmadı'); }
+  };
+
   const removeSuggestion = (companyId) => {
     setSuggestions(prev => prev.filter(s => s.company_id !== companyId));
   };
@@ -457,63 +466,79 @@ export default function Organization() {
                 ) : (
                   <div className="divide-y divide-slate-50 max-h-[400px] overflow-y-auto" data-testid="invitations-list">
                     {invitations.map((inv, idx) => (
-                      <div key={inv.id} className="flex items-center justify-between px-3 py-2.5 hover:bg-slate-50/50" data-testid={`invitation-row-${inv.id}`}>
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <span className="text-xs text-slate-400 font-mono w-6">{idx + 1}</span>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-[#3D4F6F] truncate">{inv.company_name}</p>
-                            <p className="text-xs text-slate-400">
-                              {inv.called_by && `Zəng: ${inv.called_by}`}
-                              {inv.called_at && ` · ${new Date(inv.called_at).toLocaleDateString('az-AZ')}`}
-                            </p>
+                      <div key={inv.id} className="px-3 py-2.5 hover:bg-slate-50/50" data-testid={`invitation-row-${inv.id}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <span className="text-xs text-slate-400 font-mono w-6">{idx + 1}</span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-[#3D4F6F] truncate">{inv.company_name}</p>
+                              <p className="text-xs text-slate-400">
+                                {inv.called_by && `Zəng: ${inv.called_by}`}
+                                {inv.called_at && ` · ${new Date(inv.called_at).toLocaleDateString('az-AZ')}`}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {getCallBadge(inv)}
+
+                            {/* WhatsApp button */}
+                            <button
+                              onClick={() => openWhatsApp(inv)}
+                              className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-600 transition-colors"
+                              title="WhatsApp ilə dəvət göndər"
+                              data-testid={`whatsapp-${inv.id}`}
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Call status buttons */}
+                            {(inv.call_status === 'Gözləyir' || inv.call_status === 'Cavab vermədi') && (
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => handleCallStatus(inv.id, 'Cavab verdi', 'Qatılır')}
+                                  className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-600 transition-colors"
+                                  title="Qatılır"
+                                  data-testid={`call-accept-${inv.id}`}
+                                >
+                                  <PhoneCall className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleCallStatus(inv.id, 'Cavab verdi', 'Qatılmır')}
+                                  className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 transition-colors"
+                                  title="Qatılmır"
+                                  data-testid={`call-decline-${inv.id}`}
+                                >
+                                  <PhoneOff className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleCallStatus(inv.id, 'Cavab vermədi')}
+                                  className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600 transition-colors"
+                                  title="Cavab vermədi"
+                                  data-testid={`call-noanswer-${inv.id}`}
+                                >
+                                  <Phone className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+
+                            <button onClick={() => handleRemoveInvitation(inv.id)} className="p-1 hover:bg-red-50 rounded">
+                              <Trash2 className="w-3.5 h-3.5 text-red-300 hover:text-red-500" />
+                            </button>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {getCallBadge(inv)}
-
-                          {/* WhatsApp button */}
-                          <button
-                            onClick={() => openWhatsApp(inv)}
-                            className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-600 transition-colors"
-                            title="WhatsApp ilə dəvət göndər"
-                            data-testid={`whatsapp-${inv.id}`}
-                          >
-                            <MessageCircle className="w-3.5 h-3.5" />
-                          </button>
-
-                          {/* Call status buttons */}
-                          {(inv.call_status === 'Gözləyir' || inv.call_status === 'Cavab vermədi') && (
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => handleCallStatus(inv.id, 'Cavab verdi', 'Qatılır')}
-                                className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-600 transition-colors"
-                                title="Qatılır"
-                                data-testid={`call-accept-${inv.id}`}
-                              >
-                                <PhoneCall className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleCallStatus(inv.id, 'Cavab verdi', 'Qatılmır')}
-                                className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 transition-colors"
-                                title="Qatılmır"
-                                data-testid={`call-decline-${inv.id}`}
-                              >
-                                <PhoneOff className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleCallStatus(inv.id, 'Cavab vermədi')}
-                                className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600 transition-colors"
-                                title="Cavab vermədi"
-                                data-testid={`call-noanswer-${inv.id}`}
-                              >
-                                <Phone className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          )}
-
-                          <button onClick={() => handleRemoveInvitation(inv.id)} className="p-1 hover:bg-red-50 rounded">
-                            <Trash2 className="w-3.5 h-3.5 text-red-300 hover:text-red-500" />
-                          </button>
+                        {/* Per-invitation note (e.g. non-attendance reason) */}
+                        <div className="ml-9 mt-1.5">
+                          <input
+                            type="text"
+                            defaultValue={inv.notes || ''}
+                            onBlur={(e) => {
+                              const v = e.target.value.trim();
+                              if (v !== (inv.notes || '')) handleSaveInvitationNote(inv.id, v);
+                            }}
+                            placeholder="Qeyd / qatılmama səbəbi..."
+                            className="w-full text-[11px] px-2 py-1 rounded border border-slate-200 bg-slate-50/40 focus:bg-white focus:border-[#9ACD32] focus:outline-none transition-colors"
+                            data-testid={`invitation-note-${inv.id}`}
+                          />
                         </div>
                       </div>
                     ))}
