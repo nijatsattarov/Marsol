@@ -5269,24 +5269,34 @@ async def mailchimp_create_send_campaign(data: dict, current_user: dict = Depend
 
 @api_router.post("/marketing/email/bulk")
 async def marketing_email_bulk(data: dict, current_user: dict = Depends(get_current_user)):
-    """Send a bulk email via Resend to selected internal recipients.
+    """Send a bulk email through Mailchimp to selected internal recipients.
 
-    Body: { subject, html, recipient_type: 'companies'|'members'|'contacts'|'project_leads', ids: [...] }
-    OR:   { subject, html, recipients: [{email, name?}] }
+    Body: { audience_id, subject, html, from_name?, reply_to?, preview_text?, send_now?,
+            recipient_type: 'companies'|'members'|'contacts'|'project_leads', ids: [...] }
+
+    Flow: 1) upsert recipients to the chosen Mailchimp audience, 2) create a
+    static segment containing those recipients, 3) create a regular campaign
+    targeted at that segment, 4) optionally send. The audience grows naturally
+    as new emails are added — but the campaign reaches ONLY the selected ones.
     """
     _admin_only(current_user)
+    audience_id = (data.get("audience_id") or "").strip()
     subject = (data.get("subject") or "").strip()
     html = data.get("html") or ""
-    if not subject or not html:
-        raise HTTPException(status_code=400, detail="subject və html tələb olunur")
+    if not audience_id or not subject or not html:
+        raise HTTPException(status_code=400, detail="audience_id, subject və html tələb olunur")
+    from_name = (data.get("from_name") or "Marsol Group").strip()
+    reply_to = (data.get("reply_to") or "info@marsol.az").strip()
+    preview_text = (data.get("preview_text") or "").strip()
+    send_now = bool(data.get("send_now"))
 
+    # Resolve recipients
     recipients: List[Dict[str, str]] = []
     explicit = data.get("recipients") or []
     for r in explicit:
         em = (r.get("email") or "").strip()
         if em:
-            recipients.append({"email": em, "name": r.get("name", ""), "type": "manual", "id": ""})
-
+            recipients.append({"email": em, "name": r.get("name", ""), "company": r.get("company", ""), "type": "manual", "id": ""})
     rtype = data.get("recipient_type")
     ids = data.get("ids") or []
     if rtype and ids:
@@ -5299,9 +5309,9 @@ async def marketing_email_bulk(data: dict, current_user: dict = Depends(get_curr
                     if em:
                         recipients.append({
                             "email": em,
-                            "name": c.get("brand_name") or c.get("legal_name", ""),
-                            "type": rtype,
-                            "id": c.get("id", ""),
+                            "name": c.get("contact_name") or c.get("owner_name", ""),
+                            "company": c.get("brand_name") or c.get("legal_name", ""),
+                            "type": rtype, "id": c.get("id", ""),
                         })
         elif rtype == "contacts":
             for ct in await db.contacts.find({"id": {"$in": ids}}, {"_id": 0}).to_list(2000):
@@ -5309,6 +5319,7 @@ async def marketing_email_bulk(data: dict, current_user: dict = Depends(get_curr
                     recipients.append({
                         "email": ct["email"],
                         "name": f"{ct.get('name','')} {ct.get('surname','')}".strip(),
+                        "company": ct.get("company", ""),
                         "type": "contact", "id": ct["id"],
                     })
         elif rtype == "project_leads":
@@ -5316,7 +5327,8 @@ async def marketing_email_bulk(data: dict, current_user: dict = Depends(get_curr
                 if ld.get("email"):
                     recipients.append({
                         "email": ld["email"],
-                        "name": ld.get("contact_name") or ld.get("company_name", ""),
+                        "name": ld.get("contact_name") or "",
+                        "company": ld.get("company_name", ""),
                         "type": "project_lead", "id": ld["id"],
                     })
 
@@ -5324,46 +5336,91 @@ async def marketing_email_bulk(data: dict, current_user: dict = Depends(get_curr
     seen = set()
     unique = []
     for r in recipients:
-        em = r["email"].strip().lower()
+        em = (r["email"] or "").strip().lower()
         if "@" not in em or em in seen:
             continue
         seen.add(em)
         unique.append({**r, "email": em})
-
     if not unique:
         raise HTTPException(status_code=400, detail="Heç bir yararlı email tapılmadı")
+    if len(unique) > 5000:
+        raise HTTPException(status_code=400, detail="Tək kampaniyada maksimum 5000 alıcı")
 
-    sent_ok = 0
-    failed = 0
-    failures = []
-    wrapped = email_service._wrap_html(subject, html) if "<table" not in html else html
+    # 1) Upsert each recipient to the audience
+    upsert_failed = []
     for r in unique:
-        ok = False
-        err = None
-        try:
-            ok = await email_service.send_email(r["email"], subject, wrapped)
-        except Exception as exc:
-            err = str(exc)
+        first, last = "", ""
+        if r.get("name"):
+            parts = r["name"].split(" ", 1)
+            first = parts[0]
+            last = parts[1] if len(parts) > 1 else ""
+        res = await mailchimp_service.upsert_member(audience_id, r["email"], first, last, r.get("company", ""))
+        if not res.get("ok"):
+            upsert_failed.append({"email": r["email"], "error": res.get("error")})
+
+    # If everyone failed (e.g. invalid audience), abort
+    if len(upsert_failed) >= len(unique):
+        raise HTTPException(status_code=400, detail=f"Heç bir alıcı Mailchimp-ə əlavə edilə bilmədi: {upsert_failed[0]['error'] if upsert_failed else 'naməlum xəta'}")
+
+    valid_emails = [r["email"] for r in unique if r["email"] not in {f["email"] for f in upsert_failed}]
+
+    # 2) Create static segment for these emails
+    segment_name = f"Marsol-bulk-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{str(uuid.uuid4())[:6]}"
+    seg_res = await mailchimp_service.create_static_segment(audience_id, segment_name, valid_emails)
+    if not seg_res.get("ok"):
+        raise HTTPException(status_code=400, detail=f"Statik seqment yaradıla bilmədi: {seg_res.get('error')}")
+    segment_id = seg_res["data"].get("id")
+    segment_member_count = seg_res["data"].get("member_count", len(valid_emails))
+
+    # 3) Create campaign for that segment
+    title = f"{subject} ({segment_name})"
+    cmp_res = await mailchimp_service.create_campaign_for_segment(audience_id, segment_id, subject, title, from_name, reply_to, preview_text)
+    if not cmp_res.get("ok"):
+        raise HTTPException(status_code=400, detail=f"Kampaniya yaradıla bilmədi: {cmp_res.get('error')}")
+    campaign_id = cmp_res["data"].get("id")
+
+    # 4) Set content
+    content_res = await mailchimp_service.set_campaign_content(campaign_id, html)
+    if not content_res.get("ok"):
+        raise HTTPException(status_code=400, detail=f"Məzmun yüklənə bilmədi: {content_res.get('error')}")
+
+    # 5) Send (if requested)
+    sent = False
+    send_error = None
+    if send_now:
+        send_res = await mailchimp_service.send_campaign(campaign_id)
+        if send_res.get("ok"):
+            sent = True
+        else:
+            send_error = send_res.get("error")
+
+    # Persist a log row per recipient (status reflects upsert result; campaign-send is one-shot)
+    for r in unique:
+        in_failed = next((f for f in upsert_failed if f["email"] == r["email"]), None)
         await db.email_logs.insert_one({
             "id": str(uuid.uuid4()),
-            "email": r["email"],
-            "name": r.get("name", ""),
-            "subject": subject,
-            "category": "bulk",
-            "status": "sent" if ok else "failed",
-            "error": err,
-            "recipient_type": r.get("type", ""),
-            "recipient_id": r.get("id", ""),
+            "email": r["email"], "name": r.get("name", ""), "subject": subject,
+            "category": "bulk", "provider": "mailchimp",
+            "status": "failed" if in_failed else ("sent" if sent else "queued"),
+            "error": (in_failed or {}).get("error") or send_error,
+            "recipient_type": r.get("type", ""), "recipient_id": r.get("id", ""),
+            "audience_id": audience_id, "segment_id": segment_id, "campaign_id": campaign_id,
             "sent_by": current_user.get("name", ""),
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
-        if ok:
-            sent_ok += 1
-        else:
-            failed += 1
-            failures.append({"email": r["email"], "name": r.get("name", ""), "error": err})
 
-    return {"total": len(unique), "sent": sent_ok, "failed": failed, "failures": failures[:50]}
+    return {
+        "ok": True,
+        "total": len(unique),
+        "synced_to_audience": len(valid_emails),
+        "upsert_failed": len(upsert_failed),
+        "segment_id": segment_id,
+        "segment_member_count": segment_member_count,
+        "campaign_id": campaign_id,
+        "campaign_status": "sent" if sent else "draft",
+        "send_error": send_error,
+        "failures": upsert_failed[:30],
+    }
 
 
 @api_router.get("/marketing/email/logs")

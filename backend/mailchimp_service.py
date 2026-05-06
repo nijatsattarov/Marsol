@@ -141,6 +141,28 @@ async def list_campaigns(count: int = 20, offset: int = 0, status: Optional[str]
     }
 
 
+async def create_static_segment(audience_id: str, name: str, emails: List[str]) -> Dict[str, Any]:
+    """Create a static segment with the given member emails. Members must already
+    exist in the audience."""
+    payload = {"name": name, "static_segment": emails}
+    return await _request("POST", f"/lists/{audience_id}/segments", json=payload)
+
+
+async def create_campaign_for_segment(audience_id: str, segment_id: int, subject: str, title: str, from_name: str, reply_to: str, preview_text: str = "") -> Dict[str, Any]:
+    payload = {
+        "type": "regular",
+        "recipients": {"list_id": audience_id, "segment_opts": {"saved_segment_id": segment_id}},
+        "settings": {
+            "subject_line": subject,
+            "preview_text": preview_text,
+            "title": title,
+            "from_name": from_name,
+            "reply_to": reply_to,
+        },
+    }
+    return await _request("POST", "/campaigns", json=payload)
+
+
 async def get_campaign_report(campaign_id: str) -> Dict[str, Any]:
     res = await _request("GET", f"/reports/{campaign_id}")
     if not res.get("ok"):
