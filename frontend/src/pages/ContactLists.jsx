@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import { Plus, Loader2, Search, Trash2, Download, Upload, ArrowRight, ArrowLeft, Users, FileSpreadsheet } from 'lucide-react';
+import { Plus, Loader2, Search, Trash2, Download, Upload, ArrowRight, ArrowLeft, Users, FileSpreadsheet, MessageSquare, Mail } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
@@ -11,12 +11,16 @@ import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import * as XLSX from 'xlsx';
 import PhoneInput from '../components/PhoneInput';
+import BulkSmsModal from '../components/BulkSmsModal';
+import BulkEmailModal from '../components/BulkEmailModal';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export default function ContactLists() {
   const [lists, setLists] = useState([]);
   const [selectedList, setSelectedList] = useState(null);
+  const [bulkSmsOpen, setBulkSmsOpen] = useState(false);
+  const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showListModal, setShowListModal] = useState(false);
@@ -224,6 +228,21 @@ export default function ContactLists() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <BulkSmsModal
+        open={bulkSmsOpen}
+        onClose={() => setBulkSmsOpen(false)}
+        recipientType="contacts"
+        ids={contacts.map(c => c.id)}
+        summary={`Siyahı: ${selectedList.title} (${contacts.length} kontakt)`}
+      />
+      <BulkEmailModal
+        open={bulkEmailOpen}
+        onClose={() => setBulkEmailOpen(false)}
+        recipientType="contacts"
+        ids={contacts.map(c => c.id)}
+        summary={`Siyahı: ${selectedList.title} (${contacts.length} kontakt)`}
+      />
     </div>
   );
 }

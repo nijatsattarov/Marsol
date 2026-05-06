@@ -21,6 +21,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 # Email notification service (Resend)
 from email_service import notify as _email_notify  # noqa: E402
+import email_service  # noqa: E402
 
 # Cloudinary upload service
 from cloudinary_service import upload_file as _cl_upload, delete_asset as _cl_delete  # noqa: E402
@@ -5264,6 +5265,116 @@ async def mailchimp_create_send_campaign(data: dict, current_user: dict = Depend
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     return {"ok": True, "campaign_id": campaign_id, "status": "sent" if sent else "draft"}
+
+
+@api_router.post("/marketing/email/bulk")
+async def marketing_email_bulk(data: dict, current_user: dict = Depends(get_current_user)):
+    """Send a bulk email via Resend to selected internal recipients.
+
+    Body: { subject, html, recipient_type: 'companies'|'members'|'contacts'|'project_leads', ids: [...] }
+    OR:   { subject, html, recipients: [{email, name?}] }
+    """
+    _admin_only(current_user)
+    subject = (data.get("subject") or "").strip()
+    html = data.get("html") or ""
+    if not subject or not html:
+        raise HTTPException(status_code=400, detail="subject və html tələb olunur")
+
+    recipients: List[Dict[str, str]] = []
+    explicit = data.get("recipients") or []
+    for r in explicit:
+        em = (r.get("email") or "").strip()
+        if em:
+            recipients.append({"email": em, "name": r.get("name", ""), "type": "manual", "id": ""})
+
+    rtype = data.get("recipient_type")
+    ids = data.get("ids") or []
+    if rtype and ids:
+        if rtype in ("companies", "members"):
+            q = {"id": {"$in": ids}}
+            if rtype == "members":
+                q["status"] = "Aktiv"
+            for c in await db.companies.find(q, {"_id": 0}).to_list(2000):
+                for em in [c.get("contact_email"), c.get("owner_email")]:
+                    if em:
+                        recipients.append({
+                            "email": em,
+                            "name": c.get("brand_name") or c.get("legal_name", ""),
+                            "type": rtype,
+                            "id": c.get("id", ""),
+                        })
+        elif rtype == "contacts":
+            for ct in await db.contacts.find({"id": {"$in": ids}}, {"_id": 0}).to_list(2000):
+                if ct.get("email"):
+                    recipients.append({
+                        "email": ct["email"],
+                        "name": f"{ct.get('name','')} {ct.get('surname','')}".strip(),
+                        "type": "contact", "id": ct["id"],
+                    })
+        elif rtype == "project_leads":
+            for ld in await db.sales_leads.find({"id": {"$in": ids}}, {"_id": 0}).to_list(2000):
+                if ld.get("email"):
+                    recipients.append({
+                        "email": ld["email"],
+                        "name": ld.get("contact_name") or ld.get("company_name", ""),
+                        "type": "project_lead", "id": ld["id"],
+                    })
+
+    # Deduplicate by email
+    seen = set()
+    unique = []
+    for r in recipients:
+        em = r["email"].strip().lower()
+        if "@" not in em or em in seen:
+            continue
+        seen.add(em)
+        unique.append({**r, "email": em})
+
+    if not unique:
+        raise HTTPException(status_code=400, detail="Heç bir yararlı email tapılmadı")
+
+    sent_ok = 0
+    failed = 0
+    failures = []
+    wrapped = email_service._wrap_html(subject, html) if "<table" not in html else html
+    for r in unique:
+        ok = False
+        err = None
+        try:
+            ok = await email_service.send_email(r["email"], subject, wrapped)
+        except Exception as exc:
+            err = str(exc)
+        await db.email_logs.insert_one({
+            "id": str(uuid.uuid4()),
+            "email": r["email"],
+            "name": r.get("name", ""),
+            "subject": subject,
+            "category": "bulk",
+            "status": "sent" if ok else "failed",
+            "error": err,
+            "recipient_type": r.get("type", ""),
+            "recipient_id": r.get("id", ""),
+            "sent_by": current_user.get("name", ""),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        if ok:
+            sent_ok += 1
+        else:
+            failed += 1
+            failures.append({"email": r["email"], "name": r.get("name", ""), "error": err})
+
+    return {"total": len(unique), "sent": sent_ok, "failed": failed, "failures": failures[:50]}
+
+
+@api_router.get("/marketing/email/logs")
+async def marketing_email_logs(category: Optional[str] = None, limit: int = 200, current_user: dict = Depends(get_current_user)):
+    _admin_only(current_user)
+    q: Dict[str, Any] = {}
+    if category:
+        q["category"] = category
+    items = await db.email_logs.find(q, {"_id": 0}).sort("created_at", -1).to_list(min(limit, 1000))
+    total = await db.email_logs.count_documents(q)
+    return {"items": items, "total": total}
 
 
 # ==================== PARTNER EVALUATION (Reytinq) ====================

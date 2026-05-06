@@ -23,6 +23,7 @@ import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import ExcelColumnPicker from '../components/ExcelColumnPicker';
 import BulkSmsModal from '../components/BulkSmsModal';
+import BulkEmailModal from '../components/BulkEmailModal';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -105,6 +106,7 @@ export default function Companies() {
   const [sortBy, setSortBy] = useState('id_asc'); // id_asc | id_desc | name_asc | name_desc | newest | oldest
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkSmsOpen, setBulkSmsOpen] = useState(false);
+  const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
 
   const emptyOwner = { first_name: '', last_name: '', father_name: '', position: '', phone: '', email: '', birth_date: '', citizenship: '', education: '', specialty: '', university: '', social_links: [], children: [], desired_activities: [] };
   const emptyContract = { project: '', package: '', start_date: '', end_date: '', join_date: '', total_amount: 0, paid_amount: 0, debt_amount: 0, contract_file: '' };
@@ -656,6 +658,9 @@ export default function Companies() {
           <Button size="sm" onClick={() => setBulkSmsOpen(true)} className="bg-[#9ACD32] hover:bg-[#8BC125] text-[#3D4F6F] text-xs font-semibold" data-testid="bulk-sms-btn">
             <MessageSquare className="w-3.5 h-3.5 mr-1" />Toplu SMS
           </Button>
+          <Button size="sm" onClick={() => setBulkEmailOpen(true)} className="bg-[#3D4F6F] hover:bg-[#2A364C] text-white text-xs font-semibold" data-testid="bulk-email-btn">
+            <Mail className="w-3.5 h-3.5 mr-1" />Toplu Email
+          </Button>
           <Button size="sm" onClick={handleBulkDelete} className="bg-red-500 hover:bg-red-600 text-white text-xs" data-testid="bulk-delete-btn">
             <Trash2 className="w-3.5 h-3.5 mr-1" />Seçilənləri sil
           </Button>
@@ -1075,6 +1080,13 @@ export default function Companies() {
       <BulkSmsModal
         open={bulkSmsOpen}
         onClose={() => setBulkSmsOpen(false)}
+        recipientType="companies"
+        ids={Array.from(selectedIds)}
+        summary={`${selectedIds.size} şirkət seçildi`}
+      />
+      <BulkEmailModal
+        open={bulkEmailOpen}
+        onClose={() => setBulkEmailOpen(false)}
         recipientType="companies"
         ids={Array.from(selectedIds)}
         summary={`${selectedIds.size} şirkət seçildi`}
