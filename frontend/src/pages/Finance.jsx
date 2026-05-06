@@ -88,13 +88,15 @@ export default function Finance() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [companiesRes, expensesRes, optionsRes, projectsRes, eventsRes, marsolRes] = await Promise.all([
+      const [companiesRes, expensesRes, optionsRes, projectsRes, eventsRes, marsolRes, employeesRes, usersRes] = await Promise.all([
         axios.get(`${API}/companies`, { headers }),
         axios.get(`${API}/finance/expenses`, { headers }),
         axios.get(`${API}/options/all`, { headers }),
         axios.get(`${API}/settings/projects`, { headers }),
         axios.get(`${API}/project-events`, { headers }),
         axios.get(`${API}/settings/marsol-companies`, { headers }),
+        axios.get(`${API}/employees`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/settings/users`, { headers }).catch(() => ({ data: [] })),
       ]);
       setAllCompanies(companiesRes.data);
       setExpenses(expensesRes.data);
@@ -102,6 +104,14 @@ export default function Finance() {
       setProjects(projectsRes.data);
       setProjectEvents(eventsRes.data || []);
       setMarsolCompanies(marsolRes.data || []);
+      // Build a unique list of system users + active employees for "Məsul şəxs" dropdowns
+      const names = new Set();
+      (usersRes.data || []).filter(u => (u.status || 'Aktiv') === 'Aktiv' && u.name).forEach(u => names.add(u.name));
+      (employeesRes.data || []).forEach(e => {
+        const full = `${e.first_name || ''} ${e.last_name || ''}`.trim();
+        if (full) names.add(full);
+      });
+      setResponsiblePersons([...names].sort());
     } catch (error) {
       console.error('Error:', error);
     } finally {
