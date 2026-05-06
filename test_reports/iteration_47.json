@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 47 — Phase 3 (Marketing Mailchimp + Partner Evaluation + Message Groups). Backend pytest: 12/20 passed. Mailchimp (7/7) and Partner Evaluation (5/5) working perfectly. MESSAGE GROUPS (0/8) is completely broken due to CRITICAL FastAPI route shadowing bug — all /api/messages/groups* endpoints defined at lines 5378-5470 are unreachable because /api/messages/{conversation_id} (lines 4010/4017) is registered earlier and matches 'groups' as the conversation_id path param. POST /api/messages/groups returns 200 with a garbage message object {conversation_id:'groups', text:'', sender_id:...} instead of creating a group. GET/PUT/DELETE behave similarly. Frontend: All UI elements render correctly (Marketing ping shows MARSOL GROUP us18 MMS with 2 audiences and 50 campaigns; TEST_Draft campaign I created is visible in list; Partner Evaluation page shows Up holding ranked #1 with scores object + Standart tier; Messages page has new-group-btn + modal with member checkboxes + create-group-btn). However clicking 'Yarat' in the group modal will hit the broken backend route so the feature is non-functional end-to-end.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET/POST/PUT/DELETE /api/messages/groups AND /api/messages/groups/{id}/messages", "issue": "FastAPI route shadowing: the catch-all /api/messages/{conversation_id} defined at server.py line 4010 (GET) and 4017 (POST) is matched BEFORE /api/messages/groups (lines 5378, 5388). POST /api/messages/groups with body {name,members} returns 200 with a message object (conversation_id='groups', sender_id=..., text='') instead of creating a group. Feature totally non-functional. FIX: move lines 5376-5475 (MESSAGE GROUPS block) to BEFORE line 4010, OR rename the group routes to /api/message-groups (and update Messages.jsx accordingly). Also note group message sub-routes /api/messages/groups/{group_id}/messages work only incidentally because path has 3 segments — but GET/POST on /api/messages/groups itself are shadowed.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/marketing/mailchimp/campaigns", "issue": "Returns 200 for successful draft creation — consider 201 per REST conventions. Not blocking."},
+      {"endpoint": "GET /api/messages/{conversation_id}", "issue": "Accepts literal 'groups' as a conversation_id and creates implicit empty message on POST — permissive validation masks the shadowing bug above. Consider rejecting reserved keyword."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Messages > Yeni qrup > Yarat", "issue": "UI modal opens and is fully wired with data-testids (new-group-btn, create-group-btn, members checkboxes), BUT the backend POST /api/messages/groups is shadowed so submission will silently fail (or create an empty chat message instead). End-to-end group creation is broken until backend route order is fixed.", "affected_selectors": ["[data-testid=new-group-btn]", "[data-testid=create-group-btn]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration47_marketing_eval_groups.py",
+    "/app/test_reports/pytest/iteration_47_results.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Fix route shadowing in /app/backend/server.py — move the MESSAGE GROUPS block (lines ~5376-5475) ABOVE the /api/messages/{conversation_id} catch-all routes (line ~4010) OR rename the group path prefix to /api/message-groups and update frontend Messages.jsx accordingly. After fix, re-run /app/backend/tests/test_iteration47_marketing_eval_groups.py::TestMessageGroups to verify 8/8 pass.",
+    "Optional: return 201 on POST /api/marketing/mailchimp/campaigns for REST compliance.",
+    "Optional: Clean up my TEST_Draft_* draft campaign from the MARSOL Mailchimp account (one was created as part of the valid POST test — status=save, NOT sent, so no emails went out)."
+  ],
+  "critical_code_review_comments": [
+    "server.py line 4010/4017 — /api/messages/{conversation_id} uses an unconstrained Path parameter which shadows any later concrete /messages/* route. Best practice: register all concrete paths before catch-alls OR add a Pydantic/Regex constraint like conversation_id: str = Path(..., regex='^(?!groups$).+$').",
+    "server.py line 5270+ — partner evaluation math is sound: payment ratio clamp [0,1]*40, meetings capped at 10, manual clamp [0,5]. GET /partner-evaluation computes synchronously across ALL active companies in a loop with per-company sub-queries (contracts, invitations, sales_leads, meetings, partner_evaluations = 5 queries each). For 2000 companies that is 10k serial queries — will be very slow at scale. Consider $lookup aggregation pipeline or batch pre-fetch.",
+    "mailchimp_service.py — clean async client with BasicAuth and datacenter extraction. Error handling is consistent ({ok:bool,error:str,raw:dict}). Good.",
+    "server.py line 5201-5202 — contact_first_name fallback uses `or owner_name.split()[0] if owner_name else ''` but Python operator precedence means `(a or b.split()[0]) if c else ''` → when `c` (owner_name) is empty string (falsy) the whole expression returns '' even if contact_first_name is set. Minor edge-case bug; rewrite as explicit if/else.",
+    "server.py file is now 6459 lines — continues to grow beyond the 700-line guideline. Router extraction overdue (suggested since iter 37): marketing, partner-evaluation, message-groups, companies, invitations would each be 200-400 lines.",
+    "test_iteration47_marketing_eval_groups.py deliberately avoids send_now=True to protect the real Mailchimp account (1485 real subscribers) — preserved for regression."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration47_marketing_eval_groups.py (new — 20 tests: 12 pass, 8 fail all due to the single route-shadowing root cause)"
+  ],
+  "success_rate": {"backend": "60% (12/20) — Mailchimp+PartnerEval 100%, MessageGroups 0% due to one routing bug", "frontend": "100% (UI renders all 3 modules correctly; integration for Messages blocked by backend bug)"},
+  "test_credentials": "Admin settings@marsol.az / marsol123 and Satış satis@marsol.az / marsol123 both verified working. Followed phone-empty rule per test_credentials.md.",
+  "seed_data_creation": "Created one Mailchimp DRAFT campaign on MARSOL GROUP account (TEST_Draft_<hex> / TEST_Iter47_Draft, reply_to=settings@marsol.az, send_now=false, status=save) — no emails sent to real subscribers. Should be manually deleted from Mailchimp dashboard after review. Also test_manual_bonus_clamp upserts/resets partner_evaluations for first Up holding company (resets to 0 in teardown).",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "Iteration 47 found ONE critical backend bug: route shadowing on /api/messages/groups by /api/messages/{conversation_id}. After main agent reorders routes, re-run /app/backend/tests/test_iteration47_marketing_eval_groups.py — the 8 failing MessageGroups tests should all pass. No frontend changes needed; data-testids (new-group-btn, create-group-btn) are already correctly wired. Mailchimp + Partner Evaluation are production-ready and fully covered by 12 passing pytest cases. The real Mailchimp account must NEVER be tested with send_now=true — there are 1485 live subscribers.",
+  "rca_of_the_issue": "Root cause: in FastAPI/Starlette, routes are matched in registration order. The file server.py registers /api/messages/{conversation_id} at line 4010 (GET) and 4017 (POST) BEFORE registering /api/messages/groups at line 5378 (GET) and 5388 (POST). When a request hits /api/messages/groups, the dynamic path {conversation_id} captures the string 'groups' and the concrete route never runs. Reproduction: `curl -X POST $BASE/api/messages/groups -H 'Authorization: Bearer <admin>' -d '{\"name\":\"x\",\"members\":[\"only-one\"]}'` → HTTP 200, response body `{\"id\":\"<uuid>\",\"conversation_id\":\"groups\",\"sender_id\":\"<admin id>\",\"text\":\"\",\"created_at\":\"...\"}` — proves the request was routed to the message-send endpoint, not group-create. Mitigation: move the MESSAGE GROUPS route block (lines 5376-5475) above line 4010, or change prefix to /api/message-groups (and update frontend Messages.jsx fetch URLs)."
+}

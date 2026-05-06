@@ -28,6 +28,9 @@ from cloudinary_service import upload_file as _cl_upload, delete_asset as _cl_de
 # SMS service (LSIM Quick SMS)
 import sms_service  # noqa: E402
 
+# Mailchimp Marketing service
+import mailchimp_service  # noqa: E402
+
 # MongoDB connection
 mongo_url = os.environ.get('MONGO_URL')
 if not mongo_url:
@@ -5162,6 +5165,310 @@ async def sms_dispatch_daily(current_user: dict = Depends(get_current_user)):
         "skipped": skipped,
         "failed": failed,
     }
+
+
+# ==================== MARKETING (Mailchimp + SMS Campaigns) ====================
+
+@api_router.get("/marketing/mailchimp/ping")
+async def mailchimp_ping(current_user: dict = Depends(get_current_user)):
+    _admin_only(current_user)
+    return await mailchimp_service.ping()
+
+
+@api_router.get("/marketing/mailchimp/audiences")
+async def mailchimp_audiences(current_user: dict = Depends(get_current_user)):
+    _admin_only(current_user)
+    return await mailchimp_service.list_audiences()
+
+
+@api_router.post("/marketing/mailchimp/audiences/{audience_id}/sync-companies")
+async def mailchimp_sync_companies(audience_id: str, data: dict = None, current_user: dict = Depends(get_current_user)):
+    """Push selected companies (or all active members) to a Mailchimp audience as subscribers."""
+    _admin_only(current_user)
+    data = data or {}
+    ids = data.get("ids") or []
+    query = {"id": {"$in": ids}} if ids else {"status": "Aktiv"}
+    companies = await db.companies.find(query, {"_id": 0}).to_list(2000)
+    sent = 0
+    failed = 0
+    skipped = 0
+    failures = []
+    for c in companies:
+        email = c.get("contact_email") or c.get("owner_email") or ""
+        if not email:
+            skipped += 1
+            continue
+        first = c.get("contact_first_name") or c.get("owner_first_name") or c.get("owner_name", "").split(" ")[0] if c.get("owner_name") else ""
+        last = c.get("contact_last_name") or c.get("owner_last_name") or " ".join((c.get("owner_name") or "").split(" ")[1:]) if c.get("owner_name") else ""
+        company_name = c.get("brand_name") or c.get("legal_name", "")
+        res = await mailchimp_service.upsert_member(audience_id, email, first or "", last or "", company_name)
+        if res.get("ok"):
+            sent += 1
+        else:
+            failed += 1
+            failures.append({"email": email, "company": company_name, "error": res.get("error")})
+    return {"total": len(companies), "synced": sent, "failed": failed, "skipped_no_email": skipped, "failures": failures[:30]}
+
+
+@api_router.get("/marketing/mailchimp/campaigns")
+async def mailchimp_list_campaigns(status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    _admin_only(current_user)
+    return await mailchimp_service.list_campaigns(count=50, status=status)
+
+
+@api_router.get("/marketing/mailchimp/campaigns/{campaign_id}/report")
+async def mailchimp_campaign_report(campaign_id: str, current_user: dict = Depends(get_current_user)):
+    _admin_only(current_user)
+    return await mailchimp_service.get_campaign_report(campaign_id)
+
+
+@api_router.post("/marketing/mailchimp/campaigns")
+async def mailchimp_create_send_campaign(data: dict, current_user: dict = Depends(get_current_user)):
+    """Body: {audience_id, subject, title, from_name, reply_to, preview_text, html, send_now}."""
+    _admin_only(current_user)
+    audience_id = (data.get("audience_id") or "").strip()
+    subject = (data.get("subject") or "").strip()
+    title = (data.get("title") or subject or "Marsol Kampaniya").strip()
+    from_name = (data.get("from_name") or "Marsol Group").strip()
+    reply_to = (data.get("reply_to") or "").strip()
+    html = data.get("html") or ""
+    send_now = bool(data.get("send_now"))
+    if not audience_id or not subject or not html or not reply_to:
+        raise HTTPException(status_code=400, detail="audience_id, subject, html, reply_to tələb olunur")
+    create_res = await mailchimp_service.create_campaign(audience_id, subject, title, from_name, reply_to, data.get("preview_text", ""))
+    if not create_res.get("ok"):
+        raise HTTPException(status_code=400, detail=create_res.get("error") or "Kampaniya yaradıla bilmədi")
+    campaign_id = create_res["data"].get("id")
+    content_res = await mailchimp_service.set_campaign_content(campaign_id, html)
+    if not content_res.get("ok"):
+        raise HTTPException(status_code=400, detail=content_res.get("error") or "Məzmun yüklənə bilmədi")
+    sent = False
+    if send_now:
+        send_res = await mailchimp_service.send_campaign(campaign_id)
+        if not send_res.get("ok"):
+            raise HTTPException(status_code=400, detail=send_res.get("error") or "Göndərmə baş tutmadı")
+        sent = True
+    # log
+    await db.email_campaigns.insert_one({
+        "id": str(uuid.uuid4()),
+        "mailchimp_id": campaign_id,
+        "subject": subject,
+        "title": title,
+        "audience_id": audience_id,
+        "html": html,
+        "from_name": from_name,
+        "reply_to": reply_to,
+        "send_now": send_now,
+        "status": "sent" if sent else "draft",
+        "created_by": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"ok": True, "campaign_id": campaign_id, "status": "sent" if sent else "draft"}
+
+
+# ==================== PARTNER EVALUATION (Reytinq) ====================
+# 100-point system:
+#   • Payment activity  — 40
+#   • Event attendance  — 30
+#   • Other projects    — 15
+#   • Meetings          — 10
+#   • Manual            —  5
+
+async def _calc_partner_score(company: dict) -> Dict[str, Any]:
+    cid = company.get("id")
+    # Payment (40): use latest contract paid_amount / total_amount ratio if available
+    contracts = await db.contracts.find({"company_id": cid}, {"_id": 0}).to_list(50) if hasattr(db, "contracts") else []
+    payment_score = 0
+    if contracts:
+        active = sorted(contracts, key=lambda c: c.get("created_at", ""), reverse=True)[0]
+        total = float(active.get("total_amount") or 0)
+        paid = float(active.get("paid_amount") or 0)
+        if total > 0:
+            ratio = min(paid / total, 1.0)
+            # Late payment penalty handled simply via ratio; bonus on full
+            payment_score = int(round(ratio * 40))
+    elif company.get("payment_status") == "Ödənilib":
+        payment_score = 40
+
+    # Events (30): how many invitations are 'Qatılır' / 'İştirak etdi' last 12 mo
+    one_year_ago = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat()
+    invs = await db.invitations.find({"company_id": cid, "called_at": {"$gte": one_year_ago}}, {"_id": 0}).to_list(500)
+    accepted = sum(1 for i in invs if (i.get("participation_status") or "") in ("Qatılır", "İştirak etdi"))
+    event_total = len(invs) or 1
+    event_score = int(round((accepted / event_total) * 30)) if invs else 0
+
+    # Other projects (15): sales-leads with status Satıldı / Üzv oldu
+    other = await db.sales_leads.count_documents({
+        "company_name": company.get("brand_name", ""),
+        "status": {"$in": ["Satıldı", "Üzv oldu"]},
+        "created_at": {"$gte": one_year_ago},
+    })
+    other_score = min(other * 3, 15)  # 5 projects = full
+
+    # Meetings (10): meetings with this company in last 12mo
+    meetings = await db.meetings.count_documents({
+        "company_id": cid,
+        "date": {"$gte": one_year_ago[:10]},
+    }) if cid else 0
+    meeting_score = min(meetings, 10)
+
+    # Manual (5): from db.partner_evaluations
+    manual_doc = await db.partner_evaluations.find_one({"company_id": cid}, {"_id": 0})
+    manual_score = int((manual_doc or {}).get("manual_bonus", 0) or 0)
+    manual_score = max(0, min(manual_score, 5))
+
+    total_score = payment_score + event_score + other_score + meeting_score + manual_score
+    return {
+        "company_id": cid,
+        "brand_name": company.get("brand_name", ""),
+        "scores": {
+            "payment": payment_score,
+            "event": event_score,
+            "other_projects": other_score,
+            "meetings": meeting_score,
+            "manual": manual_score,
+        },
+        "total": total_score,
+        "tier": "Platinum" if total_score >= 85 else "Qızıl" if total_score >= 65 else "Gümüş" if total_score >= 40 else "Standart",
+    }
+
+
+@api_router.get("/partner-evaluation")
+async def partner_evaluation_list(current_user: dict = Depends(get_current_user)):
+    """Compute reytinq for all active member companies and return top-down ordered list."""
+    companies = await db.companies.find({"status": "Aktiv"}, {"_id": 0}).to_list(2000)
+    results = []
+    for c in companies:
+        res = await _calc_partner_score(c)
+        results.append(res)
+    results.sort(key=lambda x: x["total"], reverse=True)
+    return {"items": results, "total": len(results)}
+
+
+@api_router.get("/partner-evaluation/{company_id}")
+async def partner_evaluation_one(company_id: str, current_user: dict = Depends(get_current_user)):
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
+    return await _calc_partner_score(company)
+
+
+@api_router.put("/partner-evaluation/{company_id}/manual-bonus")
+async def partner_evaluation_set_bonus(company_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    _admin_only(current_user)
+    bonus = max(0, min(int(data.get("manual_bonus") or 0), 5))
+    note = (data.get("note") or "").strip()
+    await db.partner_evaluations.update_one(
+        {"company_id": company_id},
+        {"$set": {
+            "company_id": company_id,
+            "manual_bonus": bonus,
+            "note": note,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": current_user.get("name", ""),
+        }},
+        upsert=True,
+    )
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    return await _calc_partner_score(company)
+
+
+# ==================== MESSAGE GROUPS ====================
+
+@api_router.get("/messages/groups")
+async def list_message_groups(current_user: dict = Depends(get_current_user)):
+    user_id = current_user.get("id")
+    # User sees groups they're a member of OR created
+    groups = await db.message_groups.find({
+        "$or": [{"members": user_id}, {"created_by_id": user_id}]
+    }, {"_id": 0}).sort("updated_at", -1).to_list(200)
+    return groups
+
+
+@api_router.post("/messages/groups")
+async def create_message_group(data: dict, current_user: dict = Depends(get_current_user)):
+    name = (data.get("name") or "").strip()
+    members = data.get("members") or []
+    if not name or len(members) < 2:
+        raise HTTPException(status_code=400, detail="Ad və ən azı 2 üzv tələb olunur")
+    user_id = current_user.get("id")
+    if user_id and user_id not in members:
+        members.append(user_id)
+    group = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "description": (data.get("description") or "").strip(),
+        "color": data.get("color") or "#9ACD32",
+        "members": list(set(members)),
+        "created_by": current_user.get("name", ""),
+        "created_by_id": user_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.message_groups.insert_one(group)
+    group.pop("_id", None)
+    return group
+
+
+@api_router.put("/messages/groups/{group_id}")
+async def update_message_group(group_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    g = await db.message_groups.find_one({"id": group_id}, {"_id": 0})
+    if not g:
+        raise HTTPException(status_code=404, detail="Qrup tapılmadı")
+    if current_user.get("id") not in g.get("members", []) and current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="İcazə yoxdur")
+    updates = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    for k in ("name", "description", "color", "members"):
+        if k in data:
+            updates[k] = data[k]
+    if "members" in updates and current_user.get("id") not in updates["members"]:
+        updates["members"].append(current_user.get("id"))
+    await db.message_groups.update_one({"id": group_id}, {"$set": updates})
+    g2 = await db.message_groups.find_one({"id": group_id}, {"_id": 0})
+    return g2
+
+
+@api_router.delete("/messages/groups/{group_id}")
+async def delete_message_group(group_id: str, current_user: dict = Depends(get_current_user)):
+    g = await db.message_groups.find_one({"id": group_id}, {"_id": 0})
+    if not g:
+        raise HTTPException(status_code=404, detail="Qrup tapılmadı")
+    if g.get("created_by_id") != current_user.get("id") and current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Yalnız yaradıcı və ya admin silə bilər")
+    await db.message_groups.delete_one({"id": group_id})
+    await db.group_messages.delete_many({"group_id": group_id})
+    return {"deleted": True}
+
+
+@api_router.get("/messages/groups/{group_id}/messages")
+async def get_group_messages(group_id: str, current_user: dict = Depends(get_current_user)):
+    g = await db.message_groups.find_one({"id": group_id}, {"_id": 0})
+    if not g or current_user.get("id") not in g.get("members", []):
+        raise HTTPException(status_code=403, detail="İcazə yoxdur")
+    msgs = await db.group_messages.find({"group_id": group_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    return msgs
+
+
+@api_router.post("/messages/groups/{group_id}/messages")
+async def send_group_message(group_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    g = await db.message_groups.find_one({"id": group_id}, {"_id": 0})
+    if not g or current_user.get("id") not in g.get("members", []):
+        raise HTTPException(status_code=403, detail="İcazə yoxdur")
+    body = (data.get("body") or "").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="Mətn boş ola bilməz")
+    msg = {
+        "id": str(uuid.uuid4()),
+        "group_id": group_id,
+        "body": body,
+        "sender_id": current_user.get("id"),
+        "sender_name": current_user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.group_messages.insert_one(msg)
+    await db.message_groups.update_one({"id": group_id}, {"$set": {"updated_at": msg["created_at"]}})
+    msg.pop("_id", None)
+    return msg
 
 
 # Root

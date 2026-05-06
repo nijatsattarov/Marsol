@@ -26,6 +26,7 @@ import VendorModule from "./pages/organization/VendorModule";
 import OrgRatings from "./pages/organization/OrgRatings";
 import { ORG_CONFIGS } from "./pages/organization/configs";
 import Reports from "./pages/Reports";
+import PartnerEvaluation from "./pages/PartnerEvaluation";
 import Assembly from "./pages/Assembly";
 import Files from "./pages/Files";
 import Notes from "./pages/Notes";
@@ -105,6 +106,7 @@ function App() {
             <Route path="organization/materials" element={<VendorModule config={ORG_CONFIGS.materials} />} />
             <Route path="activities" element={<Organization />} />
             <Route path="reports" element={<Reports />} />
+            <Route path="partner-evaluation" element={<PartnerEvaluation />} />
             <Route path="meetings" element={<Meetings />} />
             <Route path="assembly" element={<Assembly />} />
             <Route path="tasks" element={<Tasks />} />

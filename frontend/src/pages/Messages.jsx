@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import {
-  Plus, Search, Loader2, Send, User, ArrowLeft, MessageCircle
+  Plus, Search, Loader2, Send, User, ArrowLeft, MessageCircle, Users, X
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -20,6 +20,10 @@ export default function Messages() {
   const [loading, setLoading] = useState(true);
   const [msgText, setMsgText] = useState('');
   const [showNewChat, setShowNewChat] = useState(false);
+  const [showNewGroup, setShowNewGroup] = useState(false);
+  const [groupForm, setGroupForm] = useState({ name: '', description: '', members: [] });
+  const [savingGroup, setSavingGroup] = useState(false);
+  const [groups, setGroups] = useState([]);
   const [selectedUser, setSelectedUser] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const messagesEndRef = useRef(null);
@@ -30,15 +34,32 @@ export default function Messages() {
 
   const fetchConversations = useCallback(async () => {
     try {
-      const [convRes, usersRes] = await Promise.all([
+      const [convRes, usersRes, groupsRes] = await Promise.all([
         axios.get(`${API}/messages/conversations`, { headers }),
         axios.get(`${API}/settings/users`, { headers }),
+        axios.get(`${API}/messages/groups`, { headers }).catch(() => ({ data: [] })),
       ]);
       setConversations(convRes.data);
       setUsers(usersRes.data.filter(u => u.id !== currentUser.id));
+      setGroups(groupsRes.data || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  }, []);
+  }, []); // eslint-disable-line
+
+  const createGroup = async () => {
+    if (!groupForm.name.trim() || groupForm.members.length < 1) {
+      toast.error('Qrup adı və ən azı 1 üzv tələb olunur'); return;
+    }
+    setSavingGroup(true);
+    try {
+      await axios.post(`${API}/messages/groups`, groupForm, { headers });
+      toast.success('Qrup yaradıldı');
+      setShowNewGroup(false);
+      setGroupForm({ name: '', description: '', members: [] });
+      fetchConversations();
+    } catch (e) { toast.error(e?.response?.data?.detail || 'Xəta'); }
+    finally { setSavingGroup(false); }
+  };
 
   useEffect(() => { fetchConversations(); }, [fetchConversations]);
 
@@ -96,9 +117,14 @@ export default function Messages() {
 
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl sm:text-2xl font-bold" style={{ color: '#3D4F6F' }}>Mesajlar</h1>
-        <Button onClick={() => setShowNewChat(true)} size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="new-chat-btn">
-          <Plus className="w-4 h-4 mr-1" />Yeni söhbət
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setShowNewGroup(true)} size="sm" variant="outline" data-testid="new-group-btn">
+            <Users className="w-4 h-4 mr-1" />Yeni qrup
+          </Button>
+          <Button onClick={() => setShowNewChat(true)} size="sm" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="new-chat-btn">
+            <Plus className="w-4 h-4 mr-1" />Yeni söhbət
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 flex bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden min-h-0">
@@ -111,6 +137,25 @@ export default function Messages() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto">
+            {/* Groups section */}
+            {groups.length > 0 && (
+              <div className="border-b border-slate-100">
+                <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Users className="w-3 h-3" />Qruplar ({groups.length})</p>
+                {groups.map(g => (
+                  <div key={g.id} className="w-full text-left p-3 border-b border-slate-50 hover:bg-slate-50 transition-colors" data-testid={`group-${g.id}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: g.color || '#9ACD32' }}>
+                        <Users className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm text-[#3D4F6F] truncate">{g.name}</p>
+                        <p className="text-xs text-slate-500 truncate">{g.members?.length || 0} üzv {g.description ? `· ${g.description}` : ''}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             {filteredConvs.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
                 <MessageCircle className="w-10 h-10 mx-auto mb-2 opacity-40" />
@@ -204,6 +249,52 @@ export default function Messages() {
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowNewChat(false)}>Ləğv et</Button>
               <Button onClick={startNewChat} className="bg-[#3D4F6F] hover:bg-[#2A364C] text-white" data-testid="start-chat-btn">Başla</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Group Modal */}
+      <Dialog open={showNewGroup} onOpenChange={setShowNewGroup}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: '#3D4F6F' }}>Yeni qrup yarat</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Qrup adı *</Label>
+              <Input value={groupForm.name} onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })} className="text-sm" placeholder="məs. Satış qrupu" data-testid="group-name" />
+            </div>
+            <div>
+              <Label className="text-xs">Təsvir</Label>
+              <Input value={groupForm.description} onChange={(e) => setGroupForm({ ...groupForm, description: e.target.value })} className="text-sm" />
+            </div>
+            <div>
+              <Label className="text-xs">Üzvlər * ({groupForm.members.length} seçildi)</Label>
+              <div className="mt-1 max-h-[220px] overflow-y-auto border rounded-md p-2 space-y-1" data-testid="group-members-list">
+                {users.map(u => (
+                  <label key={u.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-50 cursor-pointer text-sm">
+                    <input
+                      type="checkbox"
+                      checked={groupForm.members.includes(u.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) setGroupForm({ ...groupForm, members: [...groupForm.members, u.id] });
+                        else setGroupForm({ ...groupForm, members: groupForm.members.filter(m => m !== u.id) });
+                      }}
+                      className="accent-[#9ACD32]"
+                      data-testid={`group-member-${u.id}`}
+                    />
+                    <span>{u.name} <span className="text-xs text-slate-400">({u.role})</span></span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <Button variant="outline" onClick={() => setShowNewGroup(false)}>Ləğv et</Button>
+              <Button onClick={createGroup} disabled={savingGroup} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125]" data-testid="create-group-btn">
+                {savingGroup ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Users className="w-4 h-4 mr-1" />}
+                Yarat
+              </Button>
             </div>
           </div>
         </DialogContent>
