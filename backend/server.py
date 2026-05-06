@@ -22,6 +22,7 @@ load_dotenv(ROOT_DIR / '.env')
 # Email notification service (Resend)
 from email_service import notify as _email_notify  # noqa: E402
 import email_service  # noqa: E402
+import asyncio  # noqa: E402
 
 # Cloudinary upload service
 from cloudinary_service import upload_file as _cl_upload, delete_asset as _cl_delete  # noqa: E402
@@ -293,7 +294,7 @@ MODULES = [
     "dashboard", "companies", "hr", "sales", "members", "obligations",
     "finance", "organization", "meetings", "assembly", "tasks",
     "marketing", "projects", "reports", "messages", "files", "notes",
-    "settings", "notifications"
+    "settings", "notifications", "sms"
 ]
 
 async def get_user_permissions(user: dict) -> dict:
@@ -4352,10 +4353,9 @@ async def get_obligations_dashboard(year: Optional[int] = None, current_user: di
     companies = await db.companies.find({"status": "Aktiv"}, {"_id": 0}).to_list(2000)
     if year is not None:
         companies = [c for c in companies if _company_covers_year(c, year)]
-    obligations = []
-    for c in companies:
-        obl = await _get_company_obligation(c, year=year)
-        obligations.append(obl)
+    # Parallelise per-company queries so 500+ companies don't trigger a 30s
+    # request timeout on Render's free tier.
+    obligations = list(await asyncio.gather(*[_get_company_obligation(c, year=year) for c in companies]))
     obligations.sort(key=lambda x: x["priority_score"], reverse=True)
     total = len(obligations)
     not_invited = sum(1 for o in obligations if o["total_invited"] == 0)
@@ -5506,10 +5506,8 @@ async def _calc_partner_score(company: dict) -> Dict[str, Any]:
 async def partner_evaluation_list(current_user: dict = Depends(get_current_user)):
     """Compute reytinq for all active member companies and return top-down ordered list."""
     companies = await db.companies.find({"status": "Aktiv"}, {"_id": 0}).to_list(2000)
-    results = []
-    for c in companies:
-        res = await _calc_partner_score(c)
-        results.append(res)
+    # Parallelise — without this, 500+ companies × 4 queries each runs sequentially.
+    results = list(await asyncio.gather(*[_calc_partner_score(c) for c in companies]))
     results.sort(key=lambda x: x["total"], reverse=True)
     return {"items": results, "total": len(results)}
 
