@@ -24,7 +24,7 @@ import * as XLSX from 'xlsx';
 import ExcelColumnPicker from '../components/ExcelColumnPicker';
 import BulkSmsModal from '../components/BulkSmsModal';
 import BulkEmailModal from '../components/BulkEmailModal';
-import { usePermissions, canEdit } from '../context/PermissionContext';
+import { usePermissions, canEdit, canView } from '../context/PermissionContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -128,6 +128,7 @@ export default function Companies() {
   const token = localStorage.getItem('token');
   const { permissions } = usePermissions();
   const _canEdit = canEdit(permissions, 'companies');
+  const _canSms = canView(permissions, 'sms');
   const headers = { Authorization: `Bearer ${token}` };
 
   const recalcTotals = (contracts) => {
@@ -655,9 +656,11 @@ export default function Companies() {
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className="text-white hover:bg-white/10 text-xs" data-testid="bulk-clear-btn">
             Seçimi təmizlə
           </Button>
-          <Button size="sm" onClick={() => setBulkSmsOpen(true)} className="bg-[#9ACD32] hover:bg-[#8BC125] text-[#3D4F6F] text-xs font-semibold" data-testid="bulk-sms-btn">
-            <MessageSquare className="w-3.5 h-3.5 mr-1" />Toplu SMS
-          </Button>
+          {_canSms && (
+            <Button size="sm" onClick={() => setBulkSmsOpen(true)} className="bg-[#9ACD32] hover:bg-[#8BC125] text-[#3D4F6F] text-xs font-semibold" data-testid="bulk-sms-btn">
+              <MessageSquare className="w-3.5 h-3.5 mr-1" />Toplu SMS
+            </Button>
+          )}
           <Button size="sm" onClick={() => setBulkEmailOpen(true)} className="bg-[#3D4F6F] hover:bg-[#2A364C] text-white text-xs font-semibold" data-testid="bulk-email-btn">
             <Mail className="w-3.5 h-3.5 mr-1" />Toplu Email
           </Button>

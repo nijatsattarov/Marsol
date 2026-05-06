@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
-import { usePermissions, canEdit } from '../context/PermissionContext';
+import { usePermissions, canEdit, canView } from '../context/PermissionContext';
 import * as XLSX from 'xlsx';
 import PhoneInput from '../components/PhoneInput';
 import BulkSmsModal from '../components/BulkSmsModal';
@@ -30,6 +30,8 @@ export default function ContactLists() {
   const [searchTerm, setSearchTerm] = useState('');
   const { permissions } = usePermissions();
   const _canEdit = canEdit(permissions, 'sales');
+  const _canSms = canView(permissions, 'sales') && canView(permissions, 'sms');
+  const _canMarketing = canView(permissions, 'marketing');
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
   const [searchParams, setSearchParams] = useSearchParams();
@@ -157,6 +159,12 @@ export default function ContactLists() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button onClick={exportContacts} variant="outline" className="text-[#3D4F6F]"><Download className="w-4 h-4 mr-1" />Export</Button>
+          {_canSms && contacts.length > 0 && (
+            <Button onClick={() => setBulkSmsOpen(true)} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="contacts-bulk-sms-btn"><MessageSquare className="w-4 h-4 mr-1" />Toplu SMS</Button>
+          )}
+          {_canMarketing && contacts.length > 0 && (
+            <Button onClick={() => setBulkEmailOpen(true)} className="bg-[#3D4F6F] text-white hover:bg-[#2A364C] font-semibold" data-testid="contacts-bulk-email-btn"><Mail className="w-4 h-4 mr-1" />Toplu Email</Button>
+          )}
           {_canEdit && <>
             <label className="inline-flex items-center gap-1 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg cursor-pointer hover:bg-blue-100 text-xs font-medium">
               <Upload className="w-4 h-4" />Import

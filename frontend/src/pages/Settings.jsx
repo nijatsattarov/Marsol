@@ -17,6 +17,7 @@ import { Toaster, toast } from 'sonner';
 import PackageServicesManager from '../components/PackageServicesManager';
 import ManageableListsPanel from '../components/ManageableListsPanel';
 import SmsPanel from '../components/SmsPanel';
+import { usePermissions, canView } from '../context/PermissionContext';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -75,6 +76,8 @@ const ROLES = [
 ];
 
 export default function Settings() {
+  const { permissions } = usePermissions();
+  const canSms = canView(permissions, 'sms');
   const [activeTab, setActiveTab] = useState('packages');
   const [loading, setLoading] = useState(true);
   const [packages, setPackages] = useState([]);
@@ -546,7 +549,7 @@ export default function Settings() {
                 { value: 'roles', icon: Shield, label: 'Rollar' },
                 { value: 'users', icon: Users, label: 'İstifadəçilər' },
                 { value: 'branding', icon: ImageIcon, label: 'Brendinq' },
-                { value: 'sms', icon: MessageSquare, label: 'SMS' },
+                ...(canSms ? [{ value: 'sms', icon: MessageSquare, label: 'SMS' }] : []),
               ]},
             ].map((group, gi) => (
               <div key={gi} className={gi > 0 ? 'border-t border-slate-100' : ''}>
@@ -1143,7 +1146,7 @@ export default function Settings() {
               <Button size="sm" onClick={() => {
                 setEditingRole(null);
                 const defaultPerms = {};
-                ['dashboard','companies','hr','sales','members','obligations','finance','organization','meetings','assembly','tasks','marketing','projects','reports','messages','files','notes','settings','notifications'].forEach(m => defaultPerms[m] = 'none');
+                ['dashboard','companies','hr','sales','members','obligations','finance','organization','meetings','assembly','tasks','marketing','projects','reports','messages','files','notes','sms','settings','notifications'].forEach(m => defaultPerms[m] = 'none');
                 setRoleForm({ name: '', permissions: defaultPerms, scopes: {} });
                 setShowRoleModal(true);
               }} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125]" data-testid="add-role-btn">
@@ -1218,7 +1221,7 @@ export default function Settings() {
                           ['finance', 'Maliyyə'], ['organization', 'Təşkilatçılıq'], ['meetings', 'Görüşlər'],
                           ['assembly', 'İclaslar'], ['tasks', 'Tapşırıqlar'], ['marketing', 'Marketinq'],
                           ['projects', 'Layihələr'], ['reports', 'Hesabatlar'], ['messages', 'Mesajlar'],
-                          ['files', 'Fayllar'], ['notes', 'Qeydlər'], ['settings', 'Tənzimləmələr'],
+                          ['files', 'Fayllar'], ['notes', 'Qeydlər'], ['sms', 'SMS'], ['settings', 'Tənzimləmələr'],
                           ['notifications', 'Bildirişlər']
                         ].map(([key, label]) => (
                           <tr key={key} className="border-b border-slate-100 hover:bg-slate-50/50">
@@ -1521,9 +1524,11 @@ export default function Settings() {
         </TabsContent>
 
         {/* ========= SMS TAB ========= */}
-        <TabsContent value="sms">
-          <SmsPanel />
-        </TabsContent>
+        {canSms && (
+          <TabsContent value="sms">
+            <SmsPanel />
+          </TabsContent>
+        )}
         </div>
       </Tabs>
 

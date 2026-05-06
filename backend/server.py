@@ -4348,14 +4348,121 @@ def _company_covers_year(company: dict, year: int) -> bool:
             return True
     return False
 
+async def _bulk_invitation_stats(company_ids: List[str], year: Optional[int] = None) -> Dict[str, Dict[str, int]]:
+    """Fetch invitation counts for many companies in ONE aggregation. Returns
+    {company_id: {used_quota, total_invited, total_attended, total_declined, total_no_answer}}.
+    """
+    if not company_ids:
+        return {}
+    match: Dict[str, Any] = {"company_id": {"$in": company_ids}}
+    if year is not None:
+        match["event_date"] = {"$regex": f"^{year}-"}
+    pipeline = [
+        {"$match": match},
+        {"$group": {
+            "_id": "$company_id",
+            "total_invited": {"$sum": 1},
+            "used_quota": {"$sum": {"$cond": [{"$eq": ["$obligation_deducted", True]}, 1, 0]}},
+            "total_attended": {"$sum": {"$cond": [{"$eq": ["$participation_status", "Qatılır"]}, 1, 0]}},
+            "total_declined": {"$sum": {"$cond": [{"$eq": ["$participation_status", "Qatılmır"]}, 1, 0]}},
+            "total_no_answer": {"$sum": {"$cond": [{"$eq": ["$call_status", "Cavab vermədi"]}, 1, 0]}},
+        }},
+    ]
+    rows = await db.invitations.aggregate(pipeline).to_list(5000)
+    return {r["_id"]: r for r in rows}
+
+
+def _build_company_obligation(company: dict, quotas: Dict[str, int], stats: Dict[str, int], year: Optional[int] = None) -> dict:
+    """Pure helper — combines pre-fetched quota + stats into the obligation dict."""
+    company_id = company.get("id", "")
+    current = {
+        "package": company.get("package", ""),
+        "contract_start": company.get("contract_start_date", ""),
+        "contract_end": company.get("contract_end_date", ""),
+    }
+    history = company.get("membership_history", []) or []
+
+    def period_covers_year(period, y):
+        try:
+            cs = period.get("contract_start") or period.get("contract_start_date") or ""
+            ce = period.get("contract_end") or period.get("contract_end_date") or ""
+            cs_y = int(cs[:4]) if cs else 0
+            ce_y = int(ce[:4]) if ce else 9999
+            return cs_y <= y <= ce_y
+        except (ValueError, TypeError):
+            return False
+
+    period = current
+    if year is not None and not period_covers_year(current, year):
+        for h in history:
+            if period_covers_year(h, year):
+                period = {
+                    "package": h.get("package", ""),
+                    "contract_start": h.get("contract_start", ""),
+                    "contract_end": h.get("contract_end", ""),
+                }
+                break
+
+    package = period["package"]
+    total_quota = quotas.get(package, 0)
+    start_date = period["contract_start"]
+    end_date = period["contract_end"]
+
+    now = datetime.now(timezone.utc)
+    days_remaining = 365
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            days_remaining = max((end_dt - now.replace(tzinfo=None)).days, 0)
+        except (ValueError, TypeError):
+            pass
+
+    used_quota = int(stats.get("used_quota", 0) or 0)
+    total_invited = int(stats.get("total_invited", 0) or 0)
+    total_attended = int(stats.get("total_attended", 0) or 0)
+    total_declined = int(stats.get("total_declined", 0) or 0)
+    total_no_answer = int(stats.get("total_no_answer", 0) or 0)
+    remaining = max(total_quota - used_quota, 0)
+    priority_score = 0
+    if days_remaining > 0 and remaining > 0:
+        priority_score = remaining * (365 / max(days_remaining, 1))
+    elif days_remaining == 0 and remaining > 0:
+        priority_score = remaining * 1000
+
+    return {
+        "company_id": company_id,
+        "company_name": company.get("brand_name", ""),
+        "owner_name": company.get("owner_name", ""),
+        "owner_phone": company.get("owner_phone", ""),
+        "company_phone": company.get("company_phone", ""),
+        "package": package,
+        "total_quota": total_quota,
+        "used_quota": used_quota,
+        "remaining_quota": remaining,
+        "contract_start_date": start_date,
+        "contract_end_date": end_date,
+        "days_remaining": days_remaining,
+        "priority_score": round(priority_score, 2),
+        "total_invited": total_invited,
+        "total_attended": total_attended,
+        "total_declined": total_declined,
+        "total_no_answer": total_no_answer,
+        "status": company.get("status", "Aktiv"),
+    }
+
+
 @api_router.get("/obligations/dashboard")
 async def get_obligations_dashboard(year: Optional[int] = None, current_user: dict = Depends(get_current_user)):
     companies = await db.companies.find({"status": "Aktiv"}, {"_id": 0}).to_list(2000)
     if year is not None:
         companies = [c for c in companies if _company_covers_year(c, year)]
-    # Parallelise per-company queries so 500+ companies don't trigger a 30s
-    # request timeout on Render's free tier.
-    obligations = list(await asyncio.gather(*[_get_company_obligation(c, year=year) for c in companies]))
+    # Bulk: fetch quotas once + 1 aggregation for invitation stats across ALL companies.
+    quotas = await get_package_quotas()
+    stats_map = await _bulk_invitation_stats([c.get("id", "") for c in companies], year=year)
+    obligations = [
+        _build_company_obligation(c, quotas, stats_map.get(c.get("id", ""), {}), year=year)
+        for c in companies
+    ]
     obligations.sort(key=lambda x: x["priority_score"], reverse=True)
     total = len(obligations)
     not_invited = sum(1 for o in obligations if o["total_invited"] == 0)
@@ -4841,6 +4948,19 @@ def _admin_only(current_user: dict):
         raise HTTPException(status_code=403, detail="Admin icazəsi tələb olunur")
 
 
+async def _require_sms_permission(current_user: dict, level: str = "read"):
+    """Allow admin OR any role with sms permission >= level."""
+    if (current_user.get("role") or "").lower() == "admin":
+        return
+    perms = await get_user_permissions(current_user)
+    user_level = perms.get("sms", "none")
+    if level == "read" and user_level in ("read", "write"):
+        return
+    if level == "write" and user_level == "write":
+        return
+    raise HTTPException(status_code=403, detail="SMS modulu üçün icazəniz yoxdur")
+
+
 def _collect_company_phones(company: dict) -> List[Dict[str, str]]:
     """Return list of {phone, name} extracted from a company doc.
     Prefers owner_phone, then representative_phone, then company_phone.
@@ -4864,12 +4984,13 @@ def _collect_company_phones(company: dict) -> List[Dict[str, str]]:
 
 @api_router.get("/sms/balance")
 async def sms_balance(current_user: dict = Depends(get_current_user)):
-    _admin_only(current_user)
+    await _require_sms_permission(current_user, "read")
     return await sms_service.lsim_check_balance()
 
 
 @api_router.get("/sms/templates")
 async def sms_templates(current_user: dict = Depends(get_current_user)):
+    await _require_sms_permission(current_user, "read")
     out = {}
     for k in ("event_reminder", "birthday"):
         out[k] = await sms_service.get_template(db, k)
@@ -4878,7 +4999,7 @@ async def sms_templates(current_user: dict = Depends(get_current_user)):
 
 @api_router.put("/sms/templates/{key}")
 async def sms_update_template(key: str, data: dict, current_user: dict = Depends(get_current_user)):
-    _admin_only(current_user)
+    await _require_sms_permission(current_user, "write")
     if key not in ("event_reminder", "birthday"):
         raise HTTPException(status_code=400, detail="Yanlış template açarı")
     text = (data.get("text") or "").strip()
@@ -4890,7 +5011,7 @@ async def sms_update_template(key: str, data: dict, current_user: dict = Depends
 @api_router.post("/sms/send")
 async def sms_send_single(data: dict, current_user: dict = Depends(get_current_user)):
     """Send single SMS. Body: {phone, text, sender?}."""
-    _admin_only(current_user)
+    await _require_sms_permission(current_user, "write")
     phone = (data.get("phone") or "").strip()
     text = (data.get("text") or "").strip()
     if not phone or not text:
@@ -4916,7 +5037,7 @@ async def sms_send_bulk(data: dict, current_user: dict = Depends(get_current_use
     OR: { text, sender?, recipient_type: 'companies'|'members'|'contacts',
           ids: [...] }  // server will resolve phones.
     """
-    _admin_only(current_user)
+    await _require_sms_permission(current_user, "write")
     text = (data.get("text") or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="Mətn tələb olunur")
@@ -5003,7 +5124,7 @@ async def sms_get_logs(category: Optional[str] = None,
                         status: Optional[str] = None,
                         limit: int = 200,
                         current_user: dict = Depends(get_current_user)):
-    _admin_only(current_user)
+    await _require_sms_permission(current_user, "read")
     q: Dict[str, Any] = {}
     if category:
         q["category"] = category
@@ -5016,7 +5137,7 @@ async def sms_get_logs(category: Optional[str] = None,
 
 @api_router.get("/sms/logs/stats")
 async def sms_log_stats(current_user: dict = Depends(get_current_user)):
-    _admin_only(current_user)
+    await _require_sms_permission(current_user, "read")
     total = await db.sms_logs.count_documents({})
     sent = await db.sms_logs.count_documents({"status": "sent"})
     failed = await db.sms_logs.count_documents({"status": "failed"})
@@ -5034,7 +5155,7 @@ async def sms_dispatch_daily(current_user: dict = Depends(get_current_user)):
     (b) today's birthday SMS to owners/reps/employees/contacts.
     Idempotent — uses sms_logs to skip already-sent items in the same calendar day.
     """
-    _admin_only(current_user)
+    await _require_sms_permission(current_user, "write")
     now = datetime.now(timezone.utc)
     today_iso = now.strftime("%Y-%m-%d")
     tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -5502,12 +5623,100 @@ async def _calc_partner_score(company: dict) -> Dict[str, Any]:
     }
 
 
+def _calc_partner_score_from_bulk(
+    company: dict,
+    inv_stats: Dict[str, int],
+    other_count: int,
+    meeting_count: int,
+    manual_bonus: int,
+) -> Dict[str, Any]:
+    """Pure helper — combines pre-fetched aggregates into a partner score dict."""
+    cid = company.get("id")
+    # Payment score: simplified (no per-company contracts query — use company.payment_status)
+    payment_score = 40 if company.get("payment_status") == "Ödənilib" else 0
+    # Or use top-level paid/total ratio if available
+    total = float(company.get("total_amount") or 0)
+    paid = float(company.get("paid_amount") or 0)
+    if total > 0:
+        ratio = min(paid / total, 1.0)
+        payment_score = int(round(ratio * 40))
+
+    invited = int(inv_stats.get("invited", 0) or 0)
+    accepted = int(inv_stats.get("accepted", 0) or 0)
+    event_score = int(round((accepted / invited) * 30)) if invited > 0 else 0
+
+    other_score = min(int(other_count) * 3, 15)
+    meeting_score = min(int(meeting_count), 10)
+    manual_score = max(0, min(int(manual_bonus or 0), 5))
+
+    total_score = payment_score + event_score + other_score + meeting_score + manual_score
+    return {
+        "company_id": cid,
+        "brand_name": company.get("brand_name", ""),
+        "scores": {
+            "payment": payment_score,
+            "event": event_score,
+            "other_projects": other_score,
+            "meetings": meeting_score,
+            "manual": manual_score,
+        },
+        "total": total_score,
+        "tier": "Platinum" if total_score >= 85 else "Qızıl" if total_score >= 65 else "Gümüş" if total_score >= 40 else "Standart",
+    }
+
+
 @api_router.get("/partner-evaluation")
 async def partner_evaluation_list(current_user: dict = Depends(get_current_user)):
-    """Compute reytinq for all active member companies and return top-down ordered list."""
+    """Compute reytinq for all active member companies. Bulk aggregation (4 queries total) instead of per-company loops."""
     companies = await db.companies.find({"status": "Aktiv"}, {"_id": 0}).to_list(2000)
-    # Parallelise — without this, 500+ companies × 4 queries each runs sequentially.
-    results = list(await asyncio.gather(*[_calc_partner_score(c) for c in companies]))
+    company_ids = [c.get("id", "") for c in companies]
+    company_names = [c.get("brand_name", "") for c in companies if c.get("brand_name")]
+    one_year_ago = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat()
+    one_year_ago_date = one_year_ago[:10]
+
+    # Run 4 aggregations in parallel (1 per metric)
+    inv_pipe = [
+        {"$match": {"company_id": {"$in": company_ids}, "called_at": {"$gte": one_year_ago}}},
+        {"$group": {
+            "_id": "$company_id",
+            "invited": {"$sum": 1},
+            "accepted": {"$sum": {"$cond": [{"$in": ["$participation_status", ["Qatılır", "İştirak etdi"]]}, 1, 0]}},
+        }},
+    ]
+    leads_pipe = [
+        {"$match": {
+            "company_name": {"$in": company_names},
+            "status": {"$in": ["Satıldı", "Üzv oldu"]},
+            "created_at": {"$gte": one_year_ago},
+        }},
+        {"$group": {"_id": "$company_name", "n": {"$sum": 1}}},
+    ]
+    meetings_pipe = [
+        {"$match": {"company_id": {"$in": company_ids}, "date": {"$gte": one_year_ago_date}}},
+        {"$group": {"_id": "$company_id", "n": {"$sum": 1}}},
+    ]
+
+    inv_rows, leads_rows, meeting_rows, manual_rows = await asyncio.gather(
+        db.invitations.aggregate(inv_pipe).to_list(5000),
+        db.sales_leads.aggregate(leads_pipe).to_list(5000),
+        db.meetings.aggregate(meetings_pipe).to_list(5000),
+        db.partner_evaluations.find({"company_id": {"$in": company_ids}}, {"_id": 0}).to_list(5000),
+    )
+    inv_map = {r["_id"]: r for r in inv_rows}
+    leads_map = {r["_id"]: r["n"] for r in leads_rows}
+    meeting_map = {r["_id"]: r["n"] for r in meeting_rows}
+    manual_map = {r["company_id"]: int(r.get("manual_bonus", 0) or 0) for r in manual_rows}
+
+    results = [
+        _calc_partner_score_from_bulk(
+            c,
+            inv_map.get(c.get("id", ""), {}),
+            leads_map.get(c.get("brand_name", ""), 0),
+            meeting_map.get(c.get("id", ""), 0),
+            manual_map.get(c.get("id", ""), 0),
+        )
+        for c in companies
+    ]
     results.sort(key=lambda x: x["total"], reverse=True)
     return {"items": results, "total": len(results)}
 
