@@ -119,6 +119,9 @@ export default function Dashboard() {
   }, [permsLoading, permissions, navigate]);
 
   const fetchStats = useCallback(async () => {
+    // Wait until permissions are loaded so we don't make a request that will
+    // 403 (and clutter the console) for users without dashboard access.
+    if (permsLoading) return;
     setLoading(true);
     const token = localStorage.getItem('token');
     if (!token) {
@@ -126,7 +129,7 @@ export default function Dashboard() {
       return;
     }
     // Skip fetch if user has no dashboard permission — we're about to redirect
-    if (!permsLoading && Object.keys(permissions || {}).length > 0 && !canView(permissions, 'dashboard')) {
+    if (Object.keys(permissions || {}).length > 0 && !canView(permissions, 'dashboard')) {
       setLoading(false);
       return;
     }
