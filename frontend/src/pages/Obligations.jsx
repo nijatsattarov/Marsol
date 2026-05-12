@@ -180,9 +180,13 @@ export default function Obligations() {
         { rows },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      const { updated = 0, skipped = 0, errors = [] } = res.data || {};
+      const { updated = 0, skipped = 0, errors = [], sample_keys = [] } = res.data || {};
       if (updated > 0) toast.success(`${updated} qeyd yeniləndi (atlanıldı: ${skipped})`);
-      else toast.warning(`Heç bir qeyd yenilənmədi (atlanıldı: ${skipped})`);
+      else {
+        const detail = errors[0]?.reason ? ` (${errors[0].reason})` : '';
+        const keysHint = sample_keys.length ? ` | Sütun adları: ${sample_keys.join(' | ')}` : '';
+        toast.warning(`Heç bir qeyd yenilənmədi (atlanıldı: ${skipped})${detail}${keysHint}`);
+      }
       if (errors.length > 0) console.warn('Import errors:', errors);
       await fetchData();
     } catch (err) {

@@ -4609,9 +4609,38 @@ async def import_obligations_excel(payload: dict, current_user: dict = Depends(c
     """Bulk-update companies based on the same xlsx schema we export from
     /obligations: rows is a list of dicts with keys 'Şirkət', 'Ad', 'Soyad',
     'Paket', 'Müqavilə başlama', 'Müqavilə bitmə'. Matches by brand_name."""
+    import unicodedata
     rows = payload.get("rows") or []
     if not isinstance(rows, list) or not rows:
         raise HTTPException(status_code=400, detail="rows boş ola bilməz")
+
+    def _norm_key(s: str) -> str:
+        """NFC-normalise + casefold + strip — so that 'Şirkət', ' şirkət ' and
+        a decomposed-unicode 'Şirkət' all collapse to the same key."""
+        if s is None:
+            return ""
+        return unicodedata.normalize("NFC", str(s)).strip().casefold()
+
+    # Synonym map: every accepted alias for each canonical field. Lookups go
+    # via a row's normalised keys so column-header drift (extra spaces,
+    # accent decomposition, case differences) doesn't silently drop data.
+    SYNONYMS = {
+        "brand": ["şirkət", "sirket", "şirket", "company", "müəssisə", "muessise"],
+        "first": ["ad", "first_name", "first name", "owner_first", "owner first name"],
+        "last":  ["soyad", "last_name", "last name", "owner_last", "owner last name"],
+        "owner_full": ["sahibkar", "sahibkar adı", "owner", "owner_name", "ad soyad"],
+        "package": ["paket", "package"],
+        "start": ["müqavilə başlama", "muqavile baslama", "contract start", "contract_start", "başlama", "baslama"],
+        "end":   ["müqavilə bitmə", "muqavile bitme", "contract end", "contract_end", "bitmə", "bitme"],
+    }
+    SYN_NORM = {k: [_norm_key(a) for a in v] for k, v in SYNONYMS.items()}
+
+    def _pick(row_dict_norm: Dict[str, Any], field: str):
+        for alias in SYN_NORM[field]:
+            v = row_dict_norm.get(alias)
+            if v is not None and v != "":
+                return v
+        return ""
 
     updated = 0
     skipped = 0
@@ -4619,7 +4648,14 @@ async def import_obligations_excel(payload: dict, current_user: dict = Depends(c
 
     for i, row in enumerate(rows, start=1):
         try:
-            brand = (str(row.get("Şirkət") or row.get("Sirket") or "")).strip()
+            if not isinstance(row, dict):
+                skipped += 1
+                errors.append({"row": i, "reason": "Sətir obyekt deyil"})
+                continue
+            # Re-key the row using normalised keys so we're resilient to
+            # accent/whitespace/case drift in column headers.
+            row_norm = {_norm_key(k): v for k, v in row.items()}
+            brand = str(_pick(row_norm, "brand") or "").strip()
             if not brand:
                 skipped += 1
                 errors.append({"row": i, "reason": "Şirkət adı boşdur"})
@@ -4630,17 +4666,22 @@ async def import_obligations_excel(payload: dict, current_user: dict = Depends(c
                 errors.append({"row": i, "reason": f"Şirkət tapılmadı: {brand}"})
                 continue
             update: Dict[str, Any] = {}
-            first = (str(row.get("Ad") or "")).strip()
-            last = (str(row.get("Soyad") or "")).strip()
+            first = str(_pick(row_norm, "first") or "").strip()
+            last = str(_pick(row_norm, "last") or "").strip()
             if first or last:
                 update["owner_name"] = (first + " " + last).strip()
-            pkg = (str(row.get("Paket") or "")).strip()
+            else:
+                # Backwards compat — old xlsx exports used a single 'Sahibkar' column.
+                full = str(_pick(row_norm, "owner_full") or "").strip()
+                if full:
+                    update["owner_name"] = full
+            pkg = str(_pick(row_norm, "package") or "").strip()
             if pkg:
                 update["package"] = pkg
-            start_iso = _parse_az_date(row.get("Müqavilə başlama"))
+            start_iso = _parse_az_date(_pick(row_norm, "start"))
             if start_iso:
                 update["contract_start_date"] = start_iso
-            end_iso = _parse_az_date(row.get("Müqavilə bitmə"))
+            end_iso = _parse_az_date(_pick(row_norm, "end"))
             if end_iso:
                 update["contract_end_date"] = end_iso
             if not update:
@@ -4653,7 +4694,14 @@ async def import_obligations_excel(payload: dict, current_user: dict = Depends(c
             skipped += 1
             errors.append({"row": i, "reason": str(ex)})
 
-    return {"updated": updated, "skipped": skipped, "total": len(rows), "errors": errors[:50]}
+    return {
+        "updated": updated,
+        "skipped": skipped,
+        "total": len(rows),
+        "errors": errors[:50],
+        # diagnostic — first row's actual keys help main agent debug column-name drift
+        "sample_keys": list(rows[0].keys()) if rows and isinstance(rows[0], dict) else [],
+    }
 
 # ==================== AUTO-SUGGEST (AVTO-TƏKLİF) ====================
 
