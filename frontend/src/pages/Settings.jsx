@@ -496,8 +496,11 @@ export default function Settings() {
   };
 
   const getRoleBadge = (role) => {
-    const r = ROLES.find(x => x.value === role) || ROLES[2];
-    return <Badge className={`${r.color} text-xs`}>{r.label}</Badge>;
+    if (!role) return <Badge className="bg-slate-100 text-slate-500 text-xs">Rol yoxdur</Badge>;
+    // Match hard-coded ROLES first (admin/manager/user/viewer), else show custom role name verbatim
+    const r = ROLES.find(x => x.value === role);
+    if (r) return <Badge className={`${r.color} text-xs`}>{r.label}</Badge>;
+    return <Badge className="bg-violet-100 text-violet-700 text-xs">{role}</Badge>;
   };
 
   const filteredFields = fieldModuleFilter === 'all' ? customFields : customFields.filter(f => f.module === fieldModuleFilter);

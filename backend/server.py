@@ -425,6 +425,10 @@ async def login(user_data: UserLogin):
     user = await db.users.find_one({"email": user_data.email})
     if not user or not verify_password(user_data.password, user["password"]):
         raise HTTPException(status_code=401, detail="Yanlış email və ya şifrə")
+    # Block inactive / suspended users from logging in
+    user_status = (user.get("status") or "Aktiv").strip()
+    if user_status and user_status.lower() not in ("aktiv", "active"):
+        raise HTTPException(status_code=403, detail="Hesabınız deaktiv edilib. Tənzimləmələrlə əlaqə saxlayın.")
     
     access_token = create_access_token({"sub": user["id"]})
     user_dict = {"id": user["id"], "email": user["email"], "name": user["name"], "role": user["role"]}
@@ -1242,7 +1246,26 @@ async def attendance_system_sessions(
             "active_seconds": active_seconds,
             "is_open": is_open,
         })
-    return out
+    # Aggregate per-user totals (sum of all session durations on the given date) so
+    # the UI can display "Bu gün toplam: Xh Ym" — a user with multiple logins gets
+    # a combined active duration instead of seeing them only as separate rows.
+    totals: Dict[str, Dict[str, Any]] = {}
+    for row in out:
+        uid = row.get("user_id") or ""
+        if uid not in totals:
+            totals[uid] = {
+                "user_id": uid,
+                "user_email": row.get("user_email", ""),
+                "user_name": row.get("user_name", ""),
+                "total_seconds": 0,
+                "sessions": 0,
+                "has_open": False,
+            }
+        totals[uid]["total_seconds"] += int(row.get("active_seconds") or 0)
+        totals[uid]["sessions"] += 1
+        if row.get("is_open"):
+            totals[uid]["has_open"] = True
+    return {"sessions": out, "totals": list(totals.values())}
 
 # ==================== LEAVE REQUESTS (MƏZUNİYYƏT SORĞULARI) ====================
 
@@ -1566,10 +1589,56 @@ async def delete_task(task_id: str, current_user: dict = Depends(check_permissio
     if not existing:
         raise HTTPException(status_code=404, detail="Tapşırıq tapılmadı")
     await assert_scope_ownership(current_user, "tasks", existing)
+    # Only the creator OR admin may delete a task. Assignees can update status but
+    # may NOT delete tasks created for them by others.
+    is_admin = (current_user.get("role") or "").lower() == "admin"
+    creator = (existing.get("created_by") or "").strip()
+    me = (current_user.get("name") or "").strip()
+    if not is_admin and creator and creator != me:
+        raise HTTPException(status_code=403, detail="Yalnız tapşırığı yaradan və ya admin silə bilər")
+    # Archive the task before deleting
+    archived = {**existing}
+    archived.pop("_id", None)
+    archived["archived_at"] = datetime.now(timezone.utc).isoformat()
+    archived["archived_by"] = current_user.get("name", "")
+    archived["archive_id"] = str(uuid.uuid4())
+    await db.tasks_archive.insert_one(archived)
     result = await db.tasks.delete_one({"id": task_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Tapşırıq tapılmadı")
-    return {"message": "Tapşırıq silindi"}
+    return {"message": "Tapşırıq arxivləndi"}
+
+
+@api_router.get("/tasks/archive")
+async def list_archived_tasks(current_user: dict = Depends(check_permission("tasks", "read"))):
+    """List archived (soft-deleted) tasks. Admin sees all; others see only those
+    they created or were assigned to."""
+    is_admin = (current_user.get("role") or "").lower() == "admin"
+    me = (current_user.get("name") or "").strip()
+    q: Dict[str, Any] = {}
+    if not is_admin and me:
+        q = {"$or": [{"created_by": me}, {"assignee": me}]}
+    items = await db.tasks_archive.find(q, {"_id": 0}).sort("archived_at", -1).to_list(500)
+    return items
+
+
+@api_router.post("/tasks/archive/{archive_id}/restore")
+async def restore_archived_task(archive_id: str, current_user: dict = Depends(check_permission("tasks", "write"))):
+    """Restore an archived task back to the active tasks collection. Admin
+    or original creator only."""
+    archived = await db.tasks_archive.find_one({"archive_id": archive_id}, {"_id": 0})
+    if not archived:
+        raise HTTPException(status_code=404, detail="Arxiv qeydi tapılmadı")
+    is_admin = (current_user.get("role") or "").lower() == "admin"
+    creator = (archived.get("created_by") or "").strip()
+    me = (current_user.get("name") or "").strip()
+    if not is_admin and creator and creator != me:
+        raise HTTPException(status_code=403, detail="Yalnız tapşırığı yaradan və ya admin bərpa edə bilər")
+    restored = {k: v for k, v in archived.items() if k not in ("archived_at", "archived_by", "archive_id")}
+    await db.tasks.insert_one(restored)
+    await db.tasks_archive.delete_one({"archive_id": archive_id})
+    restored.pop("_id", None)
+    return restored
 
 # ==================== MEETINGS (GÖRÜŞLƏR) ====================
 

@@ -110,26 +110,45 @@ export default function Tasks() {
     e.preventDefault();
     try {
       if (editingTask) {
-        await axios.put(`${API}/tasks/${editingTask.id}`, formData, { headers });
+        const { data: updated } = await axios.put(`${API}/tasks/${editingTask.id}`, formData, { headers });
         toast.success('Tapşırıq yeniləndi');
+        // Optimistic update — replace task in local state without waiting for refetch
+        setTasks(prev => prev.map(t => t.id === editingTask.id ? { ...t, ...updated } : t));
       } else {
-        await axios.post(`${API}/tasks`, formData, { headers });
+        const { data: created } = await axios.post(`${API}/tasks`, formData, { headers });
         toast.success('Tapşırıq əlavə edildi');
+        // Optimistic insert — prepend the new task so it appears on the board immediately
+        setTasks(prev => [created, ...prev]);
       }
       setShowModal(false);
       setEditingTask(null);
       setFormData(initialFormData);
-      fetchData();
     } catch (error) { toast.error('Xəta baş verdi'); }
   };
 
+  const currentUserName = (() => {
+    try { return JSON.parse(localStorage.getItem('user') || '{}').name || ''; } catch { return ''; }
+  })();
+  const currentUserRole = (() => {
+    try { return (JSON.parse(localStorage.getItem('user') || '{}').role || '').toLowerCase(); } catch { return ''; }
+  })();
+
+  const canDeleteTask = (task) => {
+    if (!_canEdit) return false;
+    if (currentUserRole === 'admin') return true;
+    const creator = (task.created_by || '').trim();
+    return !creator || creator === currentUserName;
+  };
+
   const handleDelete = async (id) => {
-    if (!window.confirm('Bu tapşırığı silmək istədiyinizə əminsiniz?')) return;
+    if (!window.confirm('Bu tapşırığı arxivə köçürmək istədiyinizə əminsiniz?')) return;
     try {
       await axios.delete(`${API}/tasks/${id}`, { headers });
-      toast.success('Tapşırıq silindi');
-      fetchData();
-    } catch (error) { toast.error('Silinmə zamanı xəta'); }
+      toast.success('Tapşırıq arxivləndi');
+      setTasks(prev => prev.filter(t => t.id !== id));
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Silinmə zamanı xəta');
+    }
   };
 
   const handleEdit = (task) => {
@@ -238,7 +257,7 @@ export default function Tasks() {
                 <p className="text-center text-slate-400 text-sm py-4">Tapşırıq yoxdur</p>
               ) : tasksByStatus[status].map(task => (
                 <div key={task.id} className="bg-white rounded-lg p-3 shadow-sm border border-slate-100" data-testid={`task-card-${task.id}`}>
-                  <div className="flex items-start justify-between mb-1">
+                  <div className="flex items-start justify-between mb-1.5">
                     <div className="flex-1 min-w-0">
                       {task.task_code && <span className="text-[10px] text-slate-400 font-mono">{task.task_code}</span>}
                       <h4 className="font-medium text-sm text-slate-800 line-clamp-2">{task.task_name}</h4>
@@ -254,7 +273,11 @@ export default function Tasks() {
                             {getStatusIcon(s)}<span className="ml-2">{s}</span>
                           </DropdownMenuItem>
                         ))}
-                        <DropdownMenuItem onClick={() => handleDelete(task.id)} className="text-red-600"><Trash2 className="w-4 h-4 mr-2" />Sil</DropdownMenuItem>
+                        {canDeleteTask(task) && (
+                          <DropdownMenuItem onClick={() => handleDelete(task.id)} className="text-red-600" data-testid={`task-delete-${task.id}`}>
+                            <Trash2 className="w-4 h-4 mr-2" />Arxivə köçür
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>}
                   </div>
@@ -262,21 +285,31 @@ export default function Tasks() {
                     <Flag className={`w-3.5 h-3.5 ${getPriorityColor(task.priority)}`} />
                     <span className={`text-xs ${getPriorityColor(task.priority)}`}>{task.priority}</span>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                    <div className="flex items-center gap-1">
-                      <User className="w-3 h-3" />
-                      <span className="truncate max-w-[100px]">{task.assignee || '-'}</span>
+                  {/* Left-aligned stack: Assignee, Responsible, Created date, Due date (highlighted) */}
+                  <div className="space-y-1 mb-1.5">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                      <User className="w-3 h-3 shrink-0 text-slate-400" />
+                      <span className="truncate">{task.assignee || '-'}</span>
                     </div>
+                    {task.responsible_person && (
+                      <p className="text-[10px] text-slate-400 pl-4">Məsul: {task.responsible_person}</p>
+                    )}
+                    {task.created_at && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500" data-testid={`task-created-${task.id}`}>
+                        <Clock className="w-3 h-3 shrink-0 text-slate-400" />
+                        <span>Yaradılıb: {String(task.created_at).slice(0, 10)}</span>
+                      </div>
+                    )}
                     {task.end_date && (
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        <span>{task.end_date}</span>
+                      <div
+                        className="flex items-center gap-1.5 text-xs font-semibold text-rose-600 bg-rose-50 rounded px-1.5 py-0.5 w-fit"
+                        data-testid={`task-due-${task.id}`}
+                      >
+                        <Calendar className="w-3 h-3 shrink-0" />
+                        <span>Bitmə: {task.end_date}</span>
                       </div>
                     )}
                   </div>
-                  {task.responsible_person && (
-                    <p className="text-[10px] text-slate-400">Məsul: {task.responsible_person}</p>
-                  )}
                   <div className="flex flex-wrap gap-1 mt-1.5">
                     {task.department && <Badge className="text-[10px] bg-slate-100 text-slate-600">{task.department}</Badge>}
                     {task.related_object_type && (

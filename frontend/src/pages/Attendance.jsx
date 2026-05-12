@@ -53,6 +53,7 @@ export default function Attendance() {
 
   // System sessions (giriş/çıxış vaxtları)
   const [sessions, setSessions] = useState([]);
+  const [sessionTotals, setSessionTotals] = useState([]);
   const [sessionsDate, setSessionsDate] = useState(today());
   const [sessionsLoading, setSessionsLoading] = useState(false);
 
@@ -80,8 +81,16 @@ export default function Attendance() {
     setSessionsLoading(true);
     try {
       const r = await axios.get(`${API}/attendance/system-sessions?date=${d}`, { headers });
-      setSessions(r.data);
-    } catch { setSessions([]); }
+      // Backend returns { sessions: [...], totals: [...] } (new shape). Keep
+      // backward compat in case an older payload is cached.
+      if (Array.isArray(r.data)) {
+        setSessions(r.data);
+        setSessionTotals([]);
+      } else {
+        setSessions(r.data?.sessions || []);
+        setSessionTotals(r.data?.totals || []);
+      }
+    } catch { setSessions([]); setSessionTotals([]); }
     finally { setSessionsLoading(false); }
   }, []);
 
@@ -199,9 +208,24 @@ export default function Attendance() {
       'Aktiv qalma müddəti (saat:dəq:san)': new Date((s.active_seconds || 0) * 1000).toISOString().substr(11, 8),
       'Status': s.is_open ? 'Aktiv' : 'Bağlı',
     }));
-    const wb = XLSX.utils.book_new(); const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(data);
     ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 18 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, ws, `Sistem ${sessionsDate}`);
+    XLSX.utils.book_append_sheet(wb, ws, `Sessiyalar ${sessionsDate}`);
+    // Per-user totals on a 2nd sheet
+    const totalsData = sessionTotals.map(t => ({
+      'Ad Soyad': t.user_name || '',
+      'Email': t.user_email || '',
+      'Sessiya sayı': t.sessions || 0,
+      'Cəmi aktiv vaxt (saat:dəq:san)': new Date((t.total_seconds || 0) * 1000).toISOString().substr(11, 8),
+      'Cəmi saniyə': t.total_seconds || 0,
+      'Aktiv sessiya var': t.has_open ? 'Bəli' : 'Xeyr',
+    }));
+    if (totalsData.length > 0) {
+      const ws2 = XLSX.utils.json_to_sheet(totalsData);
+      ws2['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 14 }, { wch: 28 }, { wch: 14 }, { wch: 16 }];
+      XLSX.utils.book_append_sheet(wb, ws2, `Toplam ${sessionsDate}`);
+    }
     XLSX.writeFile(wb, `sistem_fealiyyet_${sessionsDate}.xlsx`);
   };
 
@@ -424,6 +448,44 @@ export default function Attendance() {
             <div className="bg-white rounded-lg p-3 border" data-testid="stat-sessions-users"><p className="text-lg font-bold text-[#3D4F6F]">{new Set(sessions.map(s => s.user_id)).size}</p><p className="text-[10px] text-slate-500">Unikal istifadəçi</p></div>
             <div className="bg-white rounded-lg p-3 border" data-testid="stat-sessions-time"><p className="text-lg font-bold text-[#3D4F6F]">{fmtDuration(sessions.reduce((acc, s) => acc + (s.active_seconds || 0), 0))}</p><p className="text-[10px] text-slate-500">Ümumi aktiv vaxt</p></div>
           </div>
+
+          {/* Per-user daily totals — sums all sessions of the same user on this day */}
+          {sessionTotals.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border overflow-hidden mb-4" data-testid="session-totals-card">
+              <div className="px-4 py-2.5 bg-slate-50 border-b flex items-center justify-between">
+                <p className="text-xs font-semibold text-[#3D4F6F]">Bu gün toplam (istifadəçi üzrə)</p>
+                <span className="text-[10px] text-slate-500">{sessionTotals.length} istifadəçi</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-white border-b">
+                      <th className="text-left px-3 py-2 text-[11px] font-semibold text-[#3D4F6F]">İstifadəçi</th>
+                      <th className="text-left px-3 py-2 text-[11px] font-semibold text-[#3D4F6F]">Email</th>
+                      <th className="text-left px-3 py-2 text-[11px] font-semibold text-[#3D4F6F]">Sessiya</th>
+                      <th className="text-left px-3 py-2 text-[11px] font-semibold text-[#3D4F6F]">Cəmi aktiv vaxt</th>
+                      <th className="text-left px-3 py-2 text-[11px] font-semibold text-[#3D4F6F]">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...sessionTotals].sort((a, b) => (b.total_seconds || 0) - (a.total_seconds || 0)).map(t => (
+                      <tr key={t.user_id} className="border-b border-slate-50 hover:bg-slate-50/50" data-testid={`session-total-${t.user_id}`}>
+                        <td className="px-3 py-2 text-sm font-medium text-[#3D4F6F]">{t.user_name}</td>
+                        <td className="px-3 py-2 text-xs text-slate-500">{t.user_email}</td>
+                        <td className="px-3 py-2 text-xs text-slate-600">{t.sessions}</td>
+                        <td className="px-3 py-2 text-sm font-bold text-[#3D4F6F]">{fmtDuration(t.total_seconds)}</td>
+                        <td className="px-3 py-2">
+                          {t.has_open
+                            ? <Badge className="bg-green-100 text-green-700 text-[10px]">Aktiv sessiya var</Badge>
+                            : <Badge className="bg-slate-100 text-slate-600 text-[10px]">Hamısı bağlı</Badge>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
             <div className="overflow-x-auto">
