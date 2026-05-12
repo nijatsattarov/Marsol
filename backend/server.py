@@ -4576,7 +4576,11 @@ async def get_company_obligation(company_id: str, year: Optional[int] = None, cu
     company = await db.companies.find_one({"id": company_id}, {"_id": 0})
     if not company:
         raise HTTPException(status_code=404, detail="Şirkət tapılmadı")
-    obl = await _get_company_obligation(company, year=year)
+    # Reuse the bulk pipeline so override values written by the Excel import
+    # show up here too (the legacy helper bypassed obligation_overrides).
+    quotas = await get_package_quotas()
+    stats_map = await _bulk_invitation_stats([company_id], year=year)
+    obl = _build_company_obligation(company, quotas, stats_map.get(company_id, {}), year=year)
     inv_filter = {"company_id": company_id}
     if year is not None:
         inv_filter["event_date"] = {"$regex": f"^{year}-"}
