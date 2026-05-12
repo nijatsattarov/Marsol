@@ -175,9 +175,10 @@ export default function Obligations() {
       const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
       if (rows.length === 0) { toast.error('Excel faylı boşdur'); return; }
       const token = localStorage.getItem('token');
+      const yearScope = (filterYear && filterYear !== 'all') ? Number(filterYear) : null;
       const res = await axios.post(
         `${API}/obligations/import-excel`,
-        { rows },
+        { rows, year: yearScope },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const { updated = 0, skipped = 0, errors = [], sample_keys = [] } = res.data || {};

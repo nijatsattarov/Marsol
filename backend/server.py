@@ -4492,6 +4492,27 @@ def _build_company_obligation(company: dict, quotas: Dict[str, int], stats: Dict
     total_attended = int(stats.get("total_attended", 0) or 0)
     total_declined = int(stats.get("total_declined", 0) or 0)
     total_no_answer = int(stats.get("total_no_answer", 0) or 0)
+
+    # Manual overrides — if the company has an obligation_overrides[<year_key>]
+    # sub-document (set via the Excel import endpoint), prefer its values over
+    # the aggregated invitations stats. Lets users migrate historical data
+    # without backfilling 1000s of invitation rows.
+    overrides_doc = company.get("obligation_overrides") or {}
+    year_key = str(year) if year is not None else "all"
+    ov = overrides_doc.get(year_key) or {}
+    if "total_quota" in ov:
+        total_quota = int(ov["total_quota"] or 0)
+    if "used_quota" in ov:
+        used_quota = int(ov["used_quota"] or 0)
+    if "total_invited" in ov:
+        total_invited = int(ov["total_invited"] or 0)
+    if "total_attended" in ov:
+        total_attended = int(ov["total_attended"] or 0)
+    if "total_declined" in ov:
+        total_declined = int(ov["total_declined"] or 0)
+    if "total_no_answer" in ov:
+        total_no_answer = int(ov["total_no_answer"] or 0)
+
     remaining = max(total_quota - used_quota, 0)
     priority_score = 0
     if days_remaining > 0 and remaining > 0:
@@ -4616,10 +4637,16 @@ async def import_obligations_excel(payload: dict, current_user: dict = Depends(c
 
     def _norm_key(s: str) -> str:
         """NFC-normalise + casefold + strip — so that 'Şirkət', ' şirkət ' and
-        a decomposed-unicode 'Şirkət' all collapse to the same key."""
+        a decomposed-unicode 'Şirkət' all collapse to the same key.
+        Also strips combining marks (e.g. the dot-above produced when 'İ'
+        casefolds to 'i̇') so Azerbaijani capital İ matches latin 'i'."""
         if s is None:
             return ""
-        return unicodedata.normalize("NFC", str(s)).strip().casefold()
+        x = unicodedata.normalize("NFC", str(s)).strip().casefold()
+        # Decompose, drop combining marks, recompose
+        x = unicodedata.normalize("NFD", x)
+        x = "".join(ch for ch in x if not unicodedata.combining(ch))
+        return unicodedata.normalize("NFC", x)
 
     # Synonym map: every accepted alias for each canonical field. Lookups go
     # via a row's normalised keys so column-header drift (extra spaces,
@@ -4632,6 +4659,13 @@ async def import_obligations_excel(payload: dict, current_user: dict = Depends(c
         "package": ["paket", "package"],
         "start": ["müqavilə başlama", "muqavile baslama", "contract start", "contract_start", "başlama", "baslama"],
         "end":   ["müqavilə bitmə", "muqavile bitme", "contract end", "contract_end", "bitmə", "bitme"],
+        # Aggregated obligation metrics — stored as a per-year override on the company doc
+        "total_quota": ["ümumi kvota", "umumi kvota", "total_quota", "kvota"],
+        "used_quota": ["istifadə olunan", "istifade olunan", "istifadə olunan kvota", "used_quota"],
+        "total_invited": ["cəmi dəvət", "cemi devet", "total_invited", "dəvət sayı"],
+        "total_attended": ["qatıldı", "qatildi", "total_attended"],
+        "total_declined": ["rədd etdi", "redd etdi", "total_declined"],
+        "total_no_answer": ["cavab vermədi", "cavab vermedi", "total_no_answer"],
     }
     SYN_NORM = {k: [_norm_key(a) for a in v] for k, v in SYNONYMS.items()}
 
@@ -4645,6 +4679,20 @@ async def import_obligations_excel(payload: dict, current_user: dict = Depends(c
     updated = 0
     skipped = 0
     errors: List[Dict[str, Any]] = []
+
+    # Optional top-level year scope — when the user exports filtered by year
+    # they should be able to import metrics that apply ONLY to that year.
+    # Omit (or pass null) for "all years".
+    raw_year = payload.get("year")
+    year_key = str(int(raw_year)) if raw_year not in (None, "", 0) else "all"
+
+    def _to_int(v) -> Optional[int]:
+        if v is None or v == "":
+            return None
+        try:
+            return int(float(str(v).replace(",", ".").strip()))
+        except (ValueError, TypeError):
+            return None
 
     for i, row in enumerate(rows, start=1):
         try:
@@ -4684,6 +4732,25 @@ async def import_obligations_excel(payload: dict, current_user: dict = Depends(c
             end_iso = _parse_az_date(_pick(row_norm, "end"))
             if end_iso:
                 update["contract_end_date"] = end_iso
+
+            # ---- Obligation metric overrides ----
+            # used_quota / total_invited / total_attended / total_declined /
+            # total_no_answer / total_quota live inside an obligation_overrides
+            # sub-doc keyed by year (or 'all'). _build_company_obligation reads
+            # these and prefers them over the invitations aggregation, so
+            # imported numbers appear immediately on the dashboard.
+            metric_keys = ("total_quota", "used_quota", "total_invited",
+                           "total_attended", "total_declined", "total_no_answer")
+            new_override: Dict[str, int] = {}
+            for mk in metric_keys:
+                v = _to_int(_pick(row_norm, mk))
+                if v is not None:
+                    new_override[mk] = max(0, v)
+            if new_override:
+                existing = (company.get("obligation_overrides") or {}).get(year_key, {})
+                merged = {**existing, **new_override}
+                update[f"obligation_overrides.{year_key}"] = merged
+
             if not update:
                 skipped += 1
                 continue
