@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { usePermissions, canView } from '../context/PermissionContext';
 import { 
   Calendar, 
   Users, 
@@ -84,12 +85,49 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { permissions, loading: permsLoading } = usePermissions();
+
+  // RBAC: if Dashboard ('dashboard') permission is not granted, redirect to the
+  // first module the user IS allowed to access. Wait until permissions finish
+  // loading so we don't bounce mid-fetch.
+  useEffect(() => {
+    if (permsLoading) return;
+    if (Object.keys(permissions || {}).length === 0) return; // not loaded yet
+    if (canView(permissions, 'dashboard')) return;
+    const fallbackOrder = [
+      ['companies', '/companies'],
+      ['hr', '/hr'],
+      ['sales', '/sales'],
+      ['members', '/sales/members'],
+      ['obligations', '/sales/obligations'],
+      ['organization', '/organization'],
+      ['projects', '/projects'],
+      ['marketing', '/marketing'],
+      ['finance', '/finance'],
+      ['meetings', '/meetings'],
+      ['assembly', '/assembly'],
+      ['tasks', '/tasks'],
+      ['messages', '/messages'],
+      ['files', '/files'],
+      ['notes', '/notes'],
+      ['reports', '/reports'],
+      ['notifications', '/notifications'],
+      ['settings', '/settings'],
+    ];
+    const first = fallbackOrder.find(([m]) => canView(permissions, m));
+    navigate(first ? first[1] : '/login', { replace: true });
+  }, [permsLoading, permissions, navigate]);
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
     const token = localStorage.getItem('token');
     if (!token) {
       navigate('/login', { replace: true });
+      return;
+    }
+    // Skip fetch if user has no dashboard permission — we're about to redirect
+    if (!permsLoading && Object.keys(permissions || {}).length > 0 && !canView(permissions, 'dashboard')) {
+      setLoading(false);
       return;
     }
     try {
@@ -100,9 +138,15 @@ export default function Dashboard() {
       setStats(response.data);
     } catch (e) {
       // Expired/invalid token → force re-login silently
-      if (e.response?.status === 401 || e.response?.status === 403) {
+      if (e.response?.status === 401) {
         localStorage.removeItem('token');
         navigate('/login', { replace: true });
+        return;
+      }
+      // 403 (no dashboard permission) — RBAC redirect effect will handle navigation.
+      // Do NOT clear the token; just stop loading so the redirect can happen.
+      if (e.response?.status === 403) {
+        setStats({});
         return;
       }
       // Other failures → fall back to empty stats so UI still renders
@@ -111,7 +155,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [navigate]);
+  }, [navigate, permsLoading, permissions]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
 

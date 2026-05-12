@@ -1,0 +1,57 @@
+{
+  "summary": "Iteration 51 — Verified Dashboard RBAC enforcement (permissions.dashboard='none' blocks both backend access and UI visibility). Backend pytest 3/3 PASS. Frontend Playwright validated admin shows dashboard, NoDash user is redirected to /companies on login and on direct /dashboard URL, sidebar 'İdarə Paneli' is hidden along with its separator. Found and fixed one race-condition bug in Dashboard.jsx that was causing logout instead of RBAC redirect on initial dashboard fetch 403.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Dashboard.jsx (lines 139-148 prior to fix)",
+        "issue": "Race condition: On first render permsLoading=true, so the early-return guard at line 129 (!permsLoading && …) does NOT trigger. fetchStats then proceeds to call GET /api/dashboard/stats. Backend correctly returns 403 for a user with dashboard='none'. The catch-block treated 401 and 403 identically — removed the token and navigated to /login — effectively logging out the user instead of letting the RBAC redirect useEffect (lines 93-119) take them to the first allowed module. Result: NoDash users would be bounced back to /login on every load.",
+        "selector": "/app/frontend/src/pages/Dashboard.jsx:139-145",
+        "priority": "HIGH",
+        "fix_applied_by_test_agent": "Split 401 vs 403 handling: only 401 clears token + redirects to /login. 403 sets stats={} and returns silently so the RBAC redirect effect can navigate to /companies. After fix, NoDash user lands on /companies within ~1s without being logged out."
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend GET /api/dashboard/stats — admin (settings@marsol.az) → 200 + stats JSON",
+    "Backend GET /api/dashboard/stats — user with role.permissions.dashboard='none' → 403 with detail containing 'icazə' (Azerbaijani)",
+    "Backend GET /api/dashboard/stats — user with role.permissions.dashboard='read' → 200 + valid stats JSON",
+    "Frontend admin login → lands on /dashboard, 'İdarə Paneli' visible in sidebar, 4 stat-card data-testid elements render",
+    "Frontend NoDash user login → redirected from /dashboard to /companies within 1s (no /login bounce after fix)",
+    "Frontend NoDash sidebar — 'İdarə Paneli' link count = 0; first sidebar child is 'Şirkət Məlumatları' MenuLink, NOT an orphan border-t divider",
+    "Frontend NoDash sidebar — Şirkət Məlumatları, İnsan Resursları, Satış, Marketinq, Layihələr, Fəaliyyətlər, Təşkilatçılıq, Maliyyə, Hesabatlar, Partnyor Reytinqi, Görüşlər, İclas, Tapşırıqlar, Mesajlar, Fayllar, Qeydlər, Bildirişlər — all rendered correctly per role permissions",
+    "Frontend direct /dashboard URL by NoDash user → redirected to /companies within 0.5s, no spinner stuck, no infinite loop"
+  ],
+  "failed_tests": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iteration51_dashboard_rbac.py",
+    "/app/test_reports/pytest/iteration_51_results.xml"
+  ],
+  "action_items": [
+    "Review and confirm the fix applied to /app/frontend/src/pages/Dashboard.jsx (lines 139-150) — splitting 401 vs 403 handling. The fix is minimal and correctly preserves the RBAC redirect flow without logging the user out. Main agent should keep this change.",
+    "Optional: To eliminate the brief 403 console error during initial render, gate fetchStats to wait for permsLoading to be false. Currently the API is called before permissions arrive because the early-return at line 129 requires !permsLoading. Suggestion: change to 'if (permsLoading) return;' at the top of fetchStats so we never call /dashboard/stats before knowing the user's permission. This would be a UX polish (no 403 in console) but is not blocking."
+  ],
+  "critical_code_review_comments": [
+    "server.py:487 — get_dashboard_stats correctly uses Depends(check_permission('dashboard', 'read')). Returns 403 with 'Bu əməliyyat üçün icazəniz yoxdur' for users whose role.permissions.dashboard is not 'read'/'write' (verified for value 'none').",
+    "Sidebar.jsx:347-357 — Dashboard link + separator wrapped in canView(permissions, 'dashboard') fragment. When false, both elements are hidden — no orphan divider. ✓",
+    "Dashboard.jsx:93-119 — Fallback order is reasonable (companies first). useEffect dependencies are correct: re-runs when permissions resolve.",
+    "Dashboard.jsx fetchStats race condition (FIXED in this iteration): Previously called API while permsLoading=true; backend 403 was misinterpreted as expired-token and logged out the user. Fixed by treating 403 as 'no permission, let RBAC effect redirect' instead of clearing token.",
+    "Recommendation for future hardening: also gate fetchStats with 'if (permsLoading) return;' so we never even attempt the API call when we already know we won't have access — eliminates one network round-trip and a console error per page load."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration51_dashboard_rbac.py (new)",
+    "/app/frontend/src/pages/Dashboard.jsx (minimal fix: split 401 vs 403 handling in fetchStats catch block — lines 139-150)"
+  ],
+  "success_rate": {"backend": "100% (3/3)", "frontend": "100% (8/8 scenarios)"},
+  "test_credentials": "Admin settings@marsol.az / marsol123 ✓. Created/cleaned up: role TEST_NoDash_FE_<ts> and user test_nodash_fe_<ts>@marsol.test (FE Playwright fixture, deleted at end). Backend pytest fixtures use module-scope with try/finally cleanup so no test data persists.",
+  "seed_data_creation": "Transient only — both backend pytest fixtures and the frontend test fixture create role+user and clean up afterwards. Confirmed deletion at end of run (user del=200, role del=200).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 51 verified the dashboard RBAC bug fix end-to-end. Backend already enforces 403 via check_permission('dashboard','read'). Frontend Sidebar correctly hides İdarə Paneli + separator. Frontend Dashboard.jsx had a residual bug where the initial fetchStats call (made before permissions loaded due to the race) returned 403 and was treated as a logout trigger — fixed by splitting 401/403 handling. The RBAC redirect effect (Dashboard.jsx:93-119) takes the user to /companies (first allowed module). Admin/NoDash/DashRead users all verified at backend and frontend. NOTE: a minor 'GET 403' console error still appears once during initial load for nodash users — harmless because the redirect effect immediately navigates away, but could be eliminated by adding 'if (permsLoading) return;' at the top of fetchStats.",
+  "rca_of_the_issue": "Original bug: when role.permissions.dashboard='none', user could still access dashboard. Fix made by main agent: (a) backend gated /api/dashboard/stats with check_permission('dashboard','read'); (b) frontend Sidebar wrapped dashboard link+separator in canView gate; (c) frontend Dashboard page added RBAC redirect useEffect and a fetch-skip guard. Residual issue discovered by testing agent: the fetch-skip guard requires !permsLoading, but on first render permsLoading is true, so fetchStats still hit the API, got 403, and the catch-block treated 401 and 403 identically — clearing the token and bouncing to /login. After splitting 401 (real auth failure → /login) from 403 (no permission → let RBAC effect redirect), the flow works: NoDash users land on /companies as intended."
+}

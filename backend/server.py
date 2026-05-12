@@ -484,7 +484,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 # ==================== DASHBOARD ====================
 
 @api_router.get("/dashboard/stats")
-async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
+async def get_dashboard_stats(current_user: dict = Depends(check_permission("dashboard", "read"))):
     # Get real counts from database
     companies_count = await db.companies.count_documents({})
     employees_count = await db.employees.count_documents({})

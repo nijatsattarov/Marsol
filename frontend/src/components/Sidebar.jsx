@@ -343,15 +343,18 @@ export const Sidebar = () => {
 
         {/* Menu Items */}
         <nav className="flex-1 py-3 lg:py-4 overflow-y-auto scrollbar-thin">
-          {/* Dashboard link */}
-          <MenuLink 
-            item={{ path: '/dashboard', label: 'İdarə Paneli', icon: LayoutDashboard }} 
-            collapsed={collapsed} 
-            mobileOpen={mobileOpen} 
-            onClick={handleNavClick} 
-          />
-          
-          <div className="my-2 mx-4 border-t border-white/8" />
+          {/* Dashboard link — RBAC gated */}
+          {canView(permissions, 'dashboard') && (
+            <>
+              <MenuLink
+                item={{ path: '/dashboard', label: 'İdarə Paneli', icon: LayoutDashboard, module: 'dashboard' }}
+                collapsed={collapsed}
+                mobileOpen={mobileOpen}
+                onClick={handleNavClick}
+              />
+              <div className="my-2 mx-4 border-t border-white/8" />
+            </>
+          )}
 
           {/* Main menu items */}
           {menuItems.filter(isVisible).map((item) => 
