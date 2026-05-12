@@ -1,0 +1,53 @@
+{
+  "summary": "Iter 52 — Verified obligations Excel import (Ad/Soyad split + multi-format date parsing) and global DD/MM/YYYY date display. Backend pytest 8/8 PASS. Frontend Playwright confirmed Excel Import + Excel Export buttons on /sales/obligations, and DD/MM/YYYY display on Obligations, Tasks (task-created/task-due testids), Members, Meetings, Notes, ObligationHistory, Finance. No ISO YYYY-MM-DD leak detected in any visible page text outside <input type=date>.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "POST /api/obligations/import-excel happy path — DD/MM/YYYY '01/01/2026'→'2026-01-01', '31/12/2026'→'2026-12-31', owner_name merged 'Ad Soyad', package set, updated=1 skipped=0 errors=[]",
+    "POST /api/obligations/import-excel unknown brand → skipped=1, errors[0].reason contains 'tapılmadı: <name>'",
+    "POST /api/obligations/import-excel empty Şirkət → skipped=1, errors contains 'boşdur'",
+    "POST /api/obligations/import-excel only Ad → owner_name = 'OnlyFirst' (no trailing space)",
+    "POST /api/obligations/import-excel only Soyad → owner_name = 'OnlyLast'",
+    "POST /api/obligations/import-excel both names empty but package set → owner_name UNCHANGED, package updated, updated=1",
+    "POST /api/obligations/import-excel ISO '2026-01-15' → contract_start_date='2026-01-15' (parser accepts ISO alongside DD/MM/YYYY, DD.MM.YYYY, DD-MM-YYYY)",
+    "POST /api/obligations/import-excel — Satış meneceri (no obligations:write) → 403",
+    "Frontend admin /sales/obligations: data-testid='import-obligations-btn' visible with hidden file input (xlsx,xls); data-testid='export-obligations-btn' visible",
+    "Frontend /sales/obligations table row shows '31/12/2026' for contract_end_date (no '2026-12-31' ISO leak)",
+    "Frontend /tasks: data-testid='task-created-{id}' renders 'Yaradılıb: 12/05/2026' (DD/MM/YYYY); data-testid='task-due-{id}' renders 'Bitmə: 20/01/2026'",
+    "Frontend /sales/members: contract_end_date column shows '31/12/2026' (DD/MM/YYYY)",
+    "Frontend /meetings: meeting.date column shows '15/04/2026' (DD/MM/YYYY)",
+    "Frontend /notes: created_at on note card shows '05/05/2026'",
+    "Frontend /sales/obligation-history: event_date shown as '07/05/2026' (DD/MM/YYYY), no ISO leak",
+    "Frontend /finance/expenses and /finance/companies: no ISO YYYY-MM-DD leak in visible body text (HTML5 date inputs intentionally excluded from the scan)"
+  ],
+  "failed_tests": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iteration52_obligations_import_dateformat.py",
+    "/app/test_reports/pytest/iteration_52_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:4580 _parse_az_date correctly handles 4 formats (ISO, DD/MM/YYYY, DD.MM.YYYY, DD-MM-YYYY) and Excel-serial datetime via openpyxl cellDates, returning '' on invalid input. No DoS / injection risk.",
+    "server.py:4607 import_obligations_excel guards with check_permission('obligations','write'); matches companies by brand_name; merges first+last via 'Ad Soyad' with .strip(); if both empty leaves owner_name untouched — exactly the required behaviour.",
+    "Obligations.jsx:123 splitOwnerName splits on /\\s+/, taking first token as Ad and rest as Soyad — round-trips correctly with backend merge.",
+    "dateUtils.js formatDate slices the date portion before T/space and uses padStart — avoids common UTC-offset bug where 'YYYY-MM-DDT00:00:00Z' would render as previous day in UTC+4 locales. Good defensive coding.",
+    "server.py is now 6984 lines — router extraction (obligations import, partner-evaluation, sms) remains overdue (carry-over from iter 48/49/51). Not blocking but recommended for maintainability."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration52_obligations_import_dateformat.py (new)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (all 8 page scans verified DD/MM/YYYY, no ISO leak)"},
+  "test_credentials": "Admin settings@marsol.az / marsol123 ✓; Sales satis@marsol.az / marsol123 ✓ (returns 403 on obligations import as expected). test_credentials.md rules followed — no real phone numbers / birthdays used.",
+  "seed_data_creation": "Modified one existing company ('Up holding'): owner_name='ISO Date' (last write), package='Standart' (last write), contract_start_date='2026-01-15', contract_end_date='2026-06-30'. The pytest fixture has a try/finally restore step that PUTs the original values back at end of module. NOTE: visible UI screenshot during testing showed an interim state ('Test İmportFirst' / '31/12/2026') captured before the final restore; the fixture's finally-block runs the restore after all tests so the company should be back to its pre-test snapshot.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 52 verified obligations Excel import endpoint with DD/MM/YYYY (and ISO fallback) plus global DD/MM/YYYY date display. Backend pytest at /app/backend/tests/test_iteration52_obligations_import_dateformat.py is fully green (8/8). Frontend scans use document.body.innerText regex /20\\d{2}-\\d{2}-\\d{2}/ excluding <input type=date|datetime-local|hidden> — this is the right pattern to reuse for any future date-format regression check. The 'Up holding' company in the seed DB had owner_name='Test İmportFirst' at start; after restoration the fixture sets it back, but if you see drift, original owner_name in seed was likely empty / per main agent message.",
+  "rca_of_the_issue": "N/A — feature verification only; no bugs found this iteration."
+}

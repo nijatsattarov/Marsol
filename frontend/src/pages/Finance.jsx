@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { usePermissions, canEdit } from '../context/PermissionContext';
+import { formatDate } from '../lib/dateUtils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -488,7 +489,7 @@ export default function Finance() {
                     <div key={exp.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
                       <div>
                         <p className="font-medium text-sm text-slate-700">{exp.expense_name}</p>
-                        <p className="text-xs text-slate-500">{exp.category} - {exp.date}</p>
+                        <p className="text-xs text-slate-500">{exp.category} - {formatDate(exp.date)}</p>
                       </div>
                       <p className="font-bold text-red-600">{(exp.amount || 0).toLocaleString()} AZN</p>
                     </div>
@@ -668,7 +669,7 @@ export default function Finance() {
                         <td className="px-2 py-2"><Badge className="bg-[#3D4F6F] text-white text-[10px]">{c.package}</Badge></td>
                         <td className="px-2 py-2 text-xs text-slate-600 font-mono">{c.finance_contract_number || '—'}</td>
                         <td className="px-2 py-2 text-xs text-center">{c.contract_days != null ? <Badge className="bg-blue-50 text-blue-700 text-[10px]">{c.contract_days} gün</Badge> : '—'}</td>
-                        <td className={`px-2 py-2 text-xs ${isOverdue ? 'text-red-600 font-semibold' : 'text-slate-600'}`}>{c.payment_due_date || '—'}</td>
+                        <td className={`px-2 py-2 text-xs ${isOverdue ? 'text-red-600 font-semibold' : 'text-slate-600'}`}>{c.payment_due_date ? formatDate(c.payment_due_date) : '—'}</td>
                         <td className="px-2 py-2 text-xs text-slate-600 font-mono">{c.voen || '—'}</td>
                         <td className="px-2 py-2 text-xs text-slate-600">{c.e_invoice_date || '—'}</td>
                         <td className="px-2 py-2 text-xs text-slate-600 font-mono">{c.e_invoice_number || '—'}</td>
@@ -748,7 +749,7 @@ export default function Finance() {
                       <tr key={exp.id} className="border-b border-slate-50 hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm font-medium">{exp.expense_name}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{exp.category}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{exp.date}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{formatDate(exp.date)}</td>
                         <td className="px-4 py-3 text-sm font-medium text-red-600">{(exp.amount || 0).toLocaleString()} AZN</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{exp.payment_method || exp.payment_type || '—'}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{exp.marsol_company || '—'}</td>
@@ -998,7 +999,7 @@ export default function Finance() {
                         <div>
                           <span className="text-emerald-600 font-semibold">{(Number(p.amount) || 0).toLocaleString()} AZN</span>
                           <span className="text-slate-400 mx-2">•</span>
-                          <span className="text-slate-500">{p.date}</span>
+                          <span className="text-slate-500">{formatDate(p.date)}</span>
                           {p.note && <><span className="text-slate-400 mx-2">•</span><span className="text-slate-500">{p.note}</span></>}
                         </div>
                         <span className="text-[10px] text-slate-400">{p.added_by}</span>
@@ -1163,7 +1164,7 @@ export default function Finance() {
                   {paymentHistory.map((p, i) => (
                     <div key={p.id || i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg text-xs">
                       <div>
-                        <span className="text-slate-500">{p.date}</span>
+                        <span className="text-slate-500">{formatDate(p.date)}</span>
                         {p.note && <span className="text-slate-400 ml-2">— {p.note}</span>}
                       </div>
                       <div className="text-right">

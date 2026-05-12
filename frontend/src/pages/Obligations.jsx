@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Loader2, Search, AlertTriangle, CheckCircle2, Clock,
   Building2, Filter, X, ChevronDown, Eye, ArrowUpDown,
-  TrendingUp, Users2, Phone, PhoneOff, Download
+  TrendingUp, Users2, Phone, PhoneOff, Download, Upload
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -13,6 +13,7 @@ import { Badge } from '../components/ui/badge';
 import { Label } from '../components/ui/label';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { formatDate } from '../lib/dateUtils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -119,27 +120,37 @@ export default function Obligations() {
       if (level === 'done') return 'Tamamlanıb';
       return 'Normal';
     };
-    const excelData = filtered.map((obl, i) => ({
-      '№': i + 1,
-      'Şirkət': obl.company_name || '',
-      'Sahibkar': obl.owner_name || '',
-      'Paket': obl.package || '',
-      'Ümumi kvota': obl.total_quota,
-      'İstifadə olunan': obl.used_quota,
-      'Qalan kvota': obl.remaining_quota,
-      'Cəmi dəvət': obl.total_invited,
-      'Qatıldı': obl.total_attended,
-      'Rədd etdi': obl.total_declined,
-      'Cavab vermədi': obl.total_no_answer,
-      'Müqavilə başlama': obl.contract_start_date || '',
-      'Müqavilə bitmə': obl.contract_end_date || '',
-      'Qalan gün': obl.days_remaining,
-      'Prioritet bal': obl.priority_score,
-      'Vəziyyət': urgencyLabel(obl),
-    }));
+    const splitOwnerName = (full) => {
+      const s = String(full || '').trim();
+      if (!s) return { first: '', last: '' };
+      const parts = s.split(/\s+/);
+      return { first: parts[0], last: parts.slice(1).join(' ') };
+    };
+    const excelData = filtered.map((obl, i) => {
+      const { first, last } = splitOwnerName(obl.owner_name);
+      return {
+        '№': i + 1,
+        'Şirkət': obl.company_name || '',
+        'Ad': first,
+        'Soyad': last,
+        'Paket': obl.package || '',
+        'Ümumi kvota': obl.total_quota,
+        'İstifadə olunan': obl.used_quota,
+        'Qalan kvota': obl.remaining_quota,
+        'Cəmi dəvət': obl.total_invited,
+        'Qatıldı': obl.total_attended,
+        'Rədd etdi': obl.total_declined,
+        'Cavab vermədi': obl.total_no_answer,
+        'Müqavilə başlama': formatDate(obl.contract_start_date),
+        'Müqavilə bitmə': formatDate(obl.contract_end_date),
+        'Qalan gün': obl.days_remaining,
+        'Prioritet bal': obl.priority_score,
+        'Vəziyyət': urgencyLabel(obl),
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(excelData);
     ws['!cols'] = [
-      { wch: 5 }, { wch: 25 }, { wch: 20 }, { wch: 12 },
+      { wch: 5 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
       { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
       { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
       { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
@@ -148,6 +159,35 @@ export default function Obligations() {
     XLSX.utils.book_append_sheet(wb, ws, 'Öhdəliklər');
     XLSX.writeFile(wb, `ohdelikler_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast.success('Excel faylı yükləndi');
+  };
+
+  // Bulk-import obligations xlsx (same shape as export). Sends raw rows to the
+  // backend which matches by Şirkət name and updates owner_name / package /
+  // contract dates accordingly.
+  const importFromExcel = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      if (rows.length === 0) { toast.error('Excel faylı boşdur'); return; }
+      const token = localStorage.getItem('token');
+      const res = await axios.post(
+        `${API}/obligations/import-excel`,
+        { rows },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const { updated = 0, skipped = 0, errors = [] } = res.data || {};
+      if (updated > 0) toast.success(`${updated} qeyd yeniləndi (atlanıldı: ${skipped})`);
+      else toast.warning(`Heç bir qeyd yenilənmədi (atlanıldı: ${skipped})`);
+      if (errors.length > 0) console.warn('Import errors:', errors);
+      await fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'İdxal zamanı xəta');
+    }
   };
 
   return (
@@ -159,9 +199,15 @@ export default function Obligations() {
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Öhdəliklər</h1>
           <p className="text-slate-500 text-sm mt-1">Şirkətlərin dəvət kvotası icmalı və izlənməsi</p>
         </div>
-        <Button variant="outline" size="sm" onClick={exportToExcel} data-testid="export-obligations-btn">
-          <Download className="w-4 h-4 mr-1" />Excel Export
-        </Button>
+        <div className="flex items-center gap-2">
+          <label className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md cursor-pointer hover:bg-blue-100 text-xs font-medium border border-blue-100" data-testid="import-obligations-btn">
+            <Upload className="w-4 h-4" /> Excel Import
+            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={importFromExcel} />
+          </label>
+          <Button variant="outline" size="sm" onClick={exportToExcel} data-testid="export-obligations-btn">
+            <Download className="w-4 h-4 mr-1" />Excel Export
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -286,7 +332,7 @@ export default function Obligations() {
                         {obl.total_no_answer > 0 && <span className="text-amber-500 ml-1">({obl.total_no_answer})</span>}
                       </td>
                       <td className="px-3 py-2.5">
-                        <p className="text-xs text-slate-600">{obl.contract_end_date || '-'}</p>
+                        <p className="text-xs text-slate-600">{obl.contract_end_date ? formatDate(obl.contract_end_date) : '-'}</p>
                         {obl.days_remaining !== undefined && obl.remaining_quota > 0 && (
                           <p className={`text-[10px] font-medium ${obl.days_remaining < 60 ? 'text-red-500' : obl.days_remaining < 120 ? 'text-amber-500' : 'text-slate-400'}`}>
                             {obl.days_remaining} gün qalıb

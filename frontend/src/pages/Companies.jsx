@@ -19,6 +19,7 @@ import CustomFieldsView from '../components/CustomFieldsView';
 import PackageServicesView from '../components/PackageServicesView';
 import ServiceUsageTab from '../components/ServiceUsageTab';
 import { COUNTRIES } from '../lib/countries';
+import { formatDate } from '../lib/dateUtils';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import ExcelColumnPicker from '../components/ExcelColumnPicker';
@@ -567,8 +568,8 @@ export default function Companies() {
                   <div><p className="text-slate-500 text-xs">Layihə</p><p className="font-medium">{c.project || '-'}</p></div>
                   <div><p className="text-slate-500 text-xs">Paket</p><p className="font-medium">{c.package || '-'}</p></div>
                   <div><p className="text-slate-500 text-xs">Məbləğ</p><p className="font-medium">{(c.total_amount || 0).toLocaleString()} AZN</p></div>
-                  <div><p className="text-slate-500 text-xs">Başlama</p><p className="font-medium">{c.start_date || '-'}</p></div>
-                  <div><p className="text-slate-500 text-xs">Bitmə</p><p className="font-medium">{c.end_date || '-'}</p></div>
+                  <div><p className="text-slate-500 text-xs">Başlama</p><p className="font-medium">{c.start_date ? formatDate(c.start_date) : '-'}</p></div>
+                  <div><p className="text-slate-500 text-xs">Bitmə</p><p className="font-medium">{c.end_date ? formatDate(c.end_date) : '-'}</p></div>
                   <div><p className="text-slate-500 text-xs">Qoşulma</p><p className="font-medium">{c.join_date || '-'}</p></div>
                 </div>
               ))}

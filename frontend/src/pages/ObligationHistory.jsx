@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { formatDate } from '../lib/dateUtils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const EVENT_TYPES = ['Breakfast', 'Ofis ziyarəti', 'Mafia', 'Sosial fəaliyyət', 'Təlim', 'B2B görüş'];
@@ -271,7 +272,7 @@ export default function ObligationHistory() {
                     <td className="px-3 py-2 text-sm font-medium text-[#3D4F6F]">{inv.company_name}</td>
                     <td className="px-3 py-2 text-xs text-slate-600">{inv.event_name}</td>
                     <td className="px-3 py-2"><Badge className="bg-[#3D4F6F]/10 text-[#3D4F6F] text-xs">{inv.event_type}</Badge></td>
-                    <td className="px-3 py-2 text-xs text-slate-600">{inv.event_date}</td>
+                    <td className="px-3 py-2 text-xs text-slate-600">{formatDate(inv.event_date)}</td>
                     <td className="px-3 py-2">
                       {inv.participation_status === 'Qatılır' && <Badge className="bg-green-100 text-green-700 text-xs">Qatıldı</Badge>}
                       {inv.participation_status === 'Qatılmır' && <Badge className="bg-red-100 text-red-700 text-xs">Rədd</Badge>}
@@ -395,7 +396,7 @@ export default function ObligationHistory() {
                         <p className="text-sm font-medium text-[#3D4F6F] truncate">{inv.event_name}</p>
                         <div className="flex items-center gap-2 text-xs text-slate-500">
                           <span>{inv.event_type}</span>
-                          <span>{inv.event_date}</span>
+                          <span>{formatDate(inv.event_date)}</span>
                           {inv.called_by && <span>Zəng: {inv.called_by}</span>}
                         </div>
                       </div>

@@ -6,6 +6,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Toaster, toast } from 'sonner';
+import { formatDate } from '../lib/dateUtils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const NOTE_COLORS = ['#FFFFFF', '#FEF3C7', '#FED7AA', '#FECACA', '#DBEAFE', '#D1FAE5', '#E9D5FF', '#FBCFE8'];
@@ -269,7 +270,7 @@ function NotesGrid({ notes, onEdit, onPin, onDelete, onTagClick }) {
                 ))}
               </div>
             )}
-            <p className="text-[10px] text-slate-400 mt-2">{n.created_by} · {(n.updated_at || n.created_at || '').slice(0, 10)}</p>
+            <p className="text-[10px] text-slate-400 mt-2">{n.created_by} · {formatDate(n.updated_at || n.created_at)}</p>
           </div>
           {/* Hover actions */}
           <div className="absolute top-1.5 right-1.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">

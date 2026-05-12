@@ -13,6 +13,7 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../context/PermissionContext';
+import { formatDate } from '../lib/dateUtils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -317,7 +318,7 @@ export default function Meetings() {
                     </td>
                     <td className="px-3 py-2.5 text-xs text-slate-600">{m.department || '-'}</td>
                     <td className="px-3 py-2.5">
-                      <p className="text-xs text-slate-600">{m.date}</p>
+                      <p className="text-xs text-slate-600">{formatDate(m.date)}</p>
                       <p className="text-xs text-slate-400">{m.time}</p>
                     </td>
                     <td className="px-3 py-2.5">

@@ -6,6 +6,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import re
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -4574,6 +4575,85 @@ async def get_company_obligation(company_id: str, year: Optional[int] = None, cu
     obl["invitations"] = invitations
     obl["type_breakdown"] = type_breakdown
     return obl
+
+
+def _parse_az_date(value) -> str:
+    """Parse a date-ish value (DD/MM/YYYY, DD.MM.YYYY, ISO, datetime, Excel
+    serial via openpyxl) into ISO 'YYYY-MM-DD'. Returns '' for empty/invalid."""
+    if value is None or value == "":
+        return ""
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d")
+    s = str(value).strip()
+    if not s:
+        return ""
+    # Already ISO?
+    iso_m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", s)
+    if iso_m:
+        y, mo, da = iso_m.groups()
+        return f"{y}-{int(mo):02d}-{int(da):02d}"
+    m = re.match(r"^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$", s)
+    if m:
+        dd, mo, yy = m.groups()
+        if len(yy) == 2:
+            yy = "20" + yy
+        try:
+            return f"{int(yy):04d}-{int(mo):02d}-{int(dd):02d}"
+        except (ValueError, TypeError):
+            return ""
+    return ""
+
+
+@api_router.post("/obligations/import-excel")
+async def import_obligations_excel(payload: dict, current_user: dict = Depends(check_permission("obligations", "write"))):
+    """Bulk-update companies based on the same xlsx schema we export from
+    /obligations: rows is a list of dicts with keys 'Şirkət', 'Ad', 'Soyad',
+    'Paket', 'Müqavilə başlama', 'Müqavilə bitmə'. Matches by brand_name."""
+    rows = payload.get("rows") or []
+    if not isinstance(rows, list) or not rows:
+        raise HTTPException(status_code=400, detail="rows boş ola bilməz")
+
+    updated = 0
+    skipped = 0
+    errors: List[Dict[str, Any]] = []
+
+    for i, row in enumerate(rows, start=1):
+        try:
+            brand = (str(row.get("Şirkət") or row.get("Sirket") or "")).strip()
+            if not brand:
+                skipped += 1
+                errors.append({"row": i, "reason": "Şirkət adı boşdur"})
+                continue
+            company = await db.companies.find_one({"brand_name": brand}, {"_id": 0})
+            if not company:
+                skipped += 1
+                errors.append({"row": i, "reason": f"Şirkət tapılmadı: {brand}"})
+                continue
+            update: Dict[str, Any] = {}
+            first = (str(row.get("Ad") or "")).strip()
+            last = (str(row.get("Soyad") or "")).strip()
+            if first or last:
+                update["owner_name"] = (first + " " + last).strip()
+            pkg = (str(row.get("Paket") or "")).strip()
+            if pkg:
+                update["package"] = pkg
+            start_iso = _parse_az_date(row.get("Müqavilə başlama"))
+            if start_iso:
+                update["contract_start_date"] = start_iso
+            end_iso = _parse_az_date(row.get("Müqavilə bitmə"))
+            if end_iso:
+                update["contract_end_date"] = end_iso
+            if not update:
+                skipped += 1
+                continue
+            update["updated_at"] = datetime.now(timezone.utc).isoformat()
+            await db.companies.update_one({"id": company["id"]}, {"$set": update})
+            updated += 1
+        except Exception as ex:  # noqa: BLE001
+            skipped += 1
+            errors.append({"row": i, "reason": str(ex)})
+
+    return {"updated": updated, "skipped": skipped, "total": len(rows), "errors": errors[:50]}
 
 # ==================== AUTO-SUGGEST (AVTO-TƏKLİF) ====================
 

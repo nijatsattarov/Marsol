@@ -14,6 +14,7 @@ import { Badge } from '../components/ui/badge';
 import { Textarea } from '../components/ui/textarea';
 import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../context/PermissionContext';
+import { formatDate } from '../lib/dateUtils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -297,7 +298,7 @@ export default function Tasks() {
                     {task.created_at && (
                       <div className="flex items-center gap-1.5 text-[11px] text-slate-500" data-testid={`task-created-${task.id}`}>
                         <Clock className="w-3 h-3 shrink-0 text-slate-400" />
-                        <span>Yaradılıb: {String(task.created_at).slice(0, 10)}</span>
+                        <span>Yaradılıb: {formatDate(task.created_at)}</span>
                       </div>
                     )}
                     {task.end_date && (
@@ -306,7 +307,7 @@ export default function Tasks() {
                         data-testid={`task-due-${task.id}`}
                       >
                         <Calendar className="w-3 h-3 shrink-0" />
-                        <span>Bitmə: {task.end_date}</span>
+                        <span>Bitmə: {formatDate(task.end_date)}</span>
                       </div>
                     )}
                   </div>

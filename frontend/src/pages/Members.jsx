@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { formatDate } from '../lib/dateUtils';
 import { 
   Plus, 
   Download, 
@@ -622,7 +623,7 @@ export default function Members() {
                         }`}>{member.contract_status || 'Gözləyir'}</span>
                         {member.contract_end_date && (
                           <p className={`text-[10px] ${member.days_until_expiry !== null && member.days_until_expiry <= 10 ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
-                            {member.days_until_expiry !== null && member.days_until_expiry <= 0 ? 'Bitib!' : member.days_until_expiry !== null && member.days_until_expiry <= 10 ? `${member.days_until_expiry} gün qalıb` : member.contract_end_date}
+                            {member.days_until_expiry !== null && member.days_until_expiry <= 0 ? 'Bitib!' : member.days_until_expiry !== null && member.days_until_expiry <= 10 ? `${member.days_until_expiry} gün qalıb` : formatDate(member.contract_end_date)}
                           </p>
                         )}
                       </div>
@@ -890,7 +891,7 @@ export default function Members() {
             {renewMember && (
               <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-600">
                 <p>Cari müqavilə: <strong>{renewMember.package}</strong></p>
-                <p>Tarixlər: <strong>{renewMember.contract_start_date || '—'} → {renewMember.contract_end_date || '—'}</strong></p>
+                <p>Tarixlər: <strong>{renewMember.contract_start_date ? formatDate(renewMember.contract_start_date) : '—'} → {renewMember.contract_end_date ? formatDate(renewMember.contract_end_date) : '—'}</strong></p>
                 <p className="text-slate-500 mt-1">Cari müqavilə tarixçəyə köçürüləcək, yeni dövr başlayacaq.</p>
               </div>
             )}
