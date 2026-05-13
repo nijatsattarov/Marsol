@@ -56,7 +56,7 @@ export default function PartnerEvaluation() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b">
               <tr>
-                <th className="text-center px-3 py-2 text-xs font-semibold text-[#3D4F6F]">#</th>
+                <th className="text-center px-3 py-2 text-xs font-semibold text-[#3D4F6F]">ID</th>
                 <th className="text-left px-3 py-2 text-xs font-semibold text-[#3D4F6F]">Şirkət</th>
                 <th className="text-center px-3 py-2 text-xs font-semibold text-[#3D4F6F]">Ödəniş /40</th>
                 <th className="text-center px-3 py-2 text-xs font-semibold text-[#3D4F6F]">Tədbir /30</th>
@@ -71,9 +71,9 @@ export default function PartnerEvaluation() {
             <tbody>
               {items.length === 0 ? (
                 <tr><td colSpan={10} className="text-center py-12 text-slate-400 text-sm">Aktiv üzv şirkət yoxdur</td></tr>
-              ) : items.map((it, idx) => (
+              ) : items.map((it) => (
                 <tr key={it.company_id} className="border-b border-slate-50 hover:bg-slate-50/40" data-testid={`eval-row-${it.company_id}`}>
-                  <td className="text-center font-mono text-slate-400">{idx + 1}</td>
+                  <td className="text-center font-mono text-xs text-slate-500" data-testid={`eval-id-${it.company_id}`}>{it.display_id || '-'}</td>
                   <td className="px-3 py-2 font-medium text-[#3D4F6F]">{it.brand_name}</td>
                   <td className="text-center text-xs">{it.scores.payment}</td>
                   <td className="text-center text-xs">{it.scores.event}</td>

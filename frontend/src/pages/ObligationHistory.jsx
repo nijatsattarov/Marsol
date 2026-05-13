@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   Loader2, Search, Calendar, Building2, Eye,
   Phone, PhoneCall, PhoneOff, CheckCircle2, XCircle,
-  Filter, BarChart3, Download
+  Filter, BarChart3, Download, Trash2
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -60,6 +60,18 @@ export default function ObligationHistory() {
       setCompanyDetail(res.data);
     } catch { toast.error('Xəta baş verdi'); }
     finally { setDetailLoading(false); }
+  };
+
+  const deleteInvitation = async (inv) => {
+    if (!window.confirm(`"${inv.company_name}" üçün "${inv.event_name}" dəvətini silmək istədiyinizə əminsiniz?`)) return;
+    try {
+      await axios.delete(`${API}/invitations/${inv.id}`, { headers });
+      toast.success('Dəvət silindi');
+      // Optimistic update — no full refetch needed
+      setAllInvitations(prev => prev.filter(x => x.id !== inv.id));
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Silinmə zamanı xəta');
+    }
   };
 
   const exportExcel = () => {
@@ -281,9 +293,14 @@ export default function ObligationHistory() {
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-500">{inv.called_by || '-'}</td>
                     <td className="px-3 py-2 text-right">
-                      <Button variant="ghost" size="sm" onClick={() => openDetail(inv.company_id)} className="h-6">
-                        <Eye className="w-3 h-3 text-slate-500" />
-                      </Button>
+                      <div className="inline-flex items-center gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openDetail(inv.company_id)} className="h-6 w-6 p-0" title="Detal" data-testid={`view-inv-${inv.id}`}>
+                          <Eye className="w-3 h-3 text-slate-500" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => deleteInvitation(inv)} className="h-6 w-6 p-0 hover:bg-red-50" title="Sil" data-testid={`delete-inv-${inv.id}`}>
+                          <Trash2 className="w-3 h-3 text-red-500" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))

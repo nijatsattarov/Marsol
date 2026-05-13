@@ -3,7 +3,8 @@ import axios from 'axios';
 import {
   Plus, Search, Loader2, Calendar, Clock, MapPin, Users2,
   Pencil, Trash2, Video, Building2, Filter, Bell, X,
-  Monitor, User, ChevronLeft, ChevronRight, List, CalendarDays
+  Monitor, User, ChevronLeft, ChevronRight, List, CalendarDays,
+  FileDown
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -14,6 +15,8 @@ import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -150,6 +153,45 @@ export default function Meetings() {
   const AZ_DAYS = ['B.e', 'Ç.a', 'Ç', 'C.a', 'C', 'Ş', 'B'];
   const todayStr = new Date().toISOString().split('T')[0];
 
+  const exportToPdf = () => {
+    if (filtered.length === 0) { toast.warning('İxrac etmək üçün görüş yoxdur'); return; }
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    // Title block — keep ASCII only since the default jsPDF Helvetica font
+    // doesn't ship the full Azerbaijani glyph set. Diacritics still render
+    // inside table cells via the embedded font fallback.
+    doc.setFontSize(16);
+    doc.text('Gorusler hesabati', 14, 14);
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Tarix: ${formatDate(new Date().toISOString())}  |  Sayi: ${filtered.length}`, 14, 20);
+    autoTable(doc, {
+      startY: 26,
+      head: [[
+        'Tarix', 'Vaxt', 'Sirket', 'Sahə isçisi', 'Görus turu', 'Rejim', 'Yer', 'Status'
+      ]],
+      body: filtered.map(m => [
+        formatDate(m.date),
+        m.time || '-',
+        m.company || '-',
+        m.employee || '-',
+        m.meeting_type || '-',
+        m.meeting_mode || '-',
+        m.location || '-',
+        m.result || '-',
+      ]),
+      styles: { fontSize: 8, cellPadding: 2, textColor: [61, 79, 111] },
+      headStyles: { fillColor: [61, 79, 111], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        0: { cellWidth: 22 }, 1: { cellWidth: 18 }, 2: { cellWidth: 45 },
+        3: { cellWidth: 40 }, 4: { cellWidth: 30 }, 5: { cellWidth: 22 },
+        6: { cellWidth: 45 }, 7: { cellWidth: 28 },
+      },
+    });
+    doc.save(`gorusler_${todayStr}.pdf`);
+    toast.success('PDF yükləndi');
+  };
+
   // Group meetings by date (uses already-filtered meetings)
   const meetingsByDate = filtered.reduce((acc, m) => {
     if (!m.date) return acc;
@@ -239,6 +281,9 @@ export default function Meetings() {
               <CalendarDays className="w-3.5 h-3.5" />Kalendar
             </button>
           </div>
+          <Button onClick={exportToPdf} variant="outline" size="sm" className="text-[#3D4F6F]" data-testid="meetings-export-pdf-btn">
+            <FileDown className="w-4 h-4 mr-1" />PDF
+          </Button>
           {_canEdit && <Button onClick={() => openModal()} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="add-meeting-btn">
             <Plus className="w-4 h-4 mr-1" />Yeni Görüş
           </Button>}

@@ -5911,6 +5911,30 @@ def _calc_partner_score_from_bulk(
 
     invited = int(inv_stats.get("invited", 0) or 0)
     accepted = int(inv_stats.get("accepted", 0) or 0)
+
+    # Honor obligation_overrides written by the Excel import — when the user
+    # migrates historical data they fill total_invited / total_attended, and
+    # those should feed the event score too (otherwise reytinq always says 0).
+    overrides_doc = company.get("obligation_overrides") or {}
+    # Prefer the 'all' bucket; else merge any year-scoped buckets together
+    # so we don't silently miss a 2026-only override when no 'all' exists.
+    ov_all = overrides_doc.get("all") or {}
+    if not ov_all and overrides_doc:
+        merged_inv = 0
+        merged_att = 0
+        for v in overrides_doc.values():
+            if isinstance(v, dict):
+                if v.get("total_invited") is not None:
+                    merged_inv += int(v.get("total_invited") or 0)
+                if v.get("total_attended") is not None:
+                    merged_att += int(v.get("total_attended") or 0)
+        if merged_inv > 0 or merged_att > 0:
+            ov_all = {"total_invited": merged_inv, "total_attended": merged_att}
+    if ov_all.get("total_invited") is not None:
+        invited = max(invited, int(ov_all.get("total_invited") or 0))
+    if ov_all.get("total_attended") is not None:
+        accepted = max(accepted, int(ov_all.get("total_attended") or 0))
+
     event_score = int(round((accepted / invited) * 30)) if invited > 0 else 0
 
     other_score = min(int(other_count) * 3, 15)
@@ -5920,6 +5944,7 @@ def _calc_partner_score_from_bulk(
     total_score = payment_score + event_score + other_score + meeting_score + manual_score
     return {
         "company_id": cid,
+        "display_id": company.get("display_id", ""),
         "brand_name": company.get("brand_name", ""),
         "scores": {
             "payment": payment_score,
