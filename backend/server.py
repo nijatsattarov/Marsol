@@ -4206,6 +4206,17 @@ async def get_invitations(event_id: Optional[str] = None, company_id: Optional[s
     if company_id:
         query["company_id"] = company_id
     invitations = await db.invitations.find(query, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    # Enrich with display_id of the related company so every invitations table
+    # can show the company ID alongside its name (consistency across the app).
+    company_ids = [i.get("company_id") for i in invitations if i.get("company_id")]
+    if company_ids:
+        companies = await db.companies.find(
+            {"id": {"$in": list(set(company_ids))}},
+            {"_id": 0, "id": 1, "display_id": 1},
+        ).to_list(2000)
+        id_map = {c["id"]: c.get("display_id", "") for c in companies}
+        for inv in invitations:
+            inv["company_display_id"] = id_map.get(inv.get("company_id", ""), "")
     return invitations
 
 @api_router.post("/invitations")
@@ -4383,6 +4394,7 @@ async def _get_company_obligation(company: dict, year: Optional[int] = None) -> 
     total_no_answer = await db.invitations.count_documents({**inv_all_filter, "call_status": "Cavab vermədi"})
     return {
         "company_id": company_id,
+        "display_id": company.get("display_id", ""),
         "company_name": company.get("brand_name", ""),
         "owner_name": company.get("owner_name", ""),
         "owner_phone": company.get("owner_phone", ""),
@@ -4522,6 +4534,7 @@ def _build_company_obligation(company: dict, quotas: Dict[str, int], stats: Dict
 
     return {
         "company_id": company_id,
+        "display_id": company.get("display_id", ""),
         "company_name": company.get("brand_name", ""),
         "owner_name": company.get("owner_name", ""),
         "owner_phone": company.get("owner_phone", ""),
@@ -4656,6 +4669,7 @@ async def import_obligations_excel(payload: dict, current_user: dict = Depends(c
     # via a row's normalised keys so column-header drift (extra spaces,
     # accent decomposition, case differences) doesn't silently drop data.
     SYNONYMS = {
+        "company_id": ["id", "şirkət id", "sirket id", "company_id"],
         "brand": ["şirkət", "sirket", "şirket", "company", "müəssisə", "muessise"],
         "first": ["ad", "first_name", "first name", "owner_first", "owner first name"],
         "last":  ["soyad", "last_name", "last name", "owner_last", "owner last name"],
@@ -4707,15 +4721,17 @@ async def import_obligations_excel(payload: dict, current_user: dict = Depends(c
             # Re-key the row using normalised keys so we're resilient to
             # accent/whitespace/case drift in column headers.
             row_norm = {_norm_key(k): v for k, v in row.items()}
+            # Prefer matching by display_id (stable, never changes) — fall back to brand_name.
+            display_id = str(_pick(row_norm, "company_id") or "").strip()
             brand = str(_pick(row_norm, "brand") or "").strip()
-            if not brand:
-                skipped += 1
-                errors.append({"row": i, "reason": "Şirkət adı boşdur"})
-                continue
-            company = await db.companies.find_one({"brand_name": brand}, {"_id": 0})
+            company = None
+            if display_id:
+                company = await db.companies.find_one({"display_id": display_id}, {"_id": 0})
+            if not company and brand:
+                company = await db.companies.find_one({"brand_name": brand}, {"_id": 0})
             if not company:
                 skipped += 1
-                errors.append({"row": i, "reason": f"Şirkət tapılmadı: {brand}"})
+                errors.append({"row": i, "reason": f"Şirkət tapılmadı: {display_id or brand or '(boş)'}"})
                 continue
             update: Dict[str, Any] = {}
             first = str(_pick(row_norm, "first") or "").strip()

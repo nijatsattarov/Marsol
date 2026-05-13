@@ -86,8 +86,8 @@ export default function ObligationHistory() {
       if (inv.call_status === 'Gözləyir') return 'Gözləyir';
       return '';
     };
-    const invData = filteredInvitations.map((inv, i) => ({
-      '#': i + 1,
+    const invData = filteredInvitations.map((inv) => ({
+      'ID': inv.company_display_id || '',
       'Şirkət': inv.company_name || '',
       'Fəaliyyət': inv.event_name || '',
       'Növ': inv.event_type || '',
@@ -105,6 +105,7 @@ export default function ObligationHistory() {
       'Cavabsız': s.noAnswer
     }));
     const companyData = filtered.map(o => ({
+      'ID': o.display_id || '',
       'Şirkət': o.company_name,
       'Sahibkar': o.owner_name || '',
       'Paket': o.package || '',
@@ -264,7 +265,7 @@ export default function ObligationHistory() {
           <table className="w-full" data-testid="history-table">
             <thead>
               <tr className="bg-slate-50 border-b">
-                <th className="text-left px-3 py-2.5 text-xs font-semibold text-[#3D4F6F]">#</th>
+                <th className="text-left px-3 py-2.5 text-xs font-semibold text-[#3D4F6F]">ID</th>
                 <th className="text-left px-3 py-2.5 text-xs font-semibold text-[#3D4F6F]">Şirkət</th>
                 <th className="text-left px-3 py-2.5 text-xs font-semibold text-[#3D4F6F]">Fəaliyyət</th>
                 <th className="text-left px-3 py-2.5 text-xs font-semibold text-[#3D4F6F]">Növ</th>
@@ -278,9 +279,9 @@ export default function ObligationHistory() {
               {filteredInvitations.length === 0 ? (
                 <tr><td colSpan={8} className="text-center py-8 text-slate-400 text-sm">Nəticə tapılmadı</td></tr>
               ) : (
-                filteredInvitations.slice(0, 100).map((inv, idx) => (
+                filteredInvitations.slice(0, 100).map((inv) => (
                   <tr key={inv.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                    <td className="px-3 py-2 text-xs text-slate-400">{idx + 1}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-slate-500" data-testid={`inv-cid-${inv.id}`}>{inv.company_display_id || '-'}</td>
                     <td className="px-3 py-2 text-sm font-medium text-[#3D4F6F]">{inv.company_name}</td>
                     <td className="px-3 py-2 text-xs text-slate-600">{inv.event_name}</td>
                     <td className="px-3 py-2"><Badge className="bg-[#3D4F6F]/10 text-[#3D4F6F] text-xs">{inv.event_type}</Badge></td>
@@ -321,7 +322,10 @@ export default function ObligationHistory() {
           <div key={obl.company_id} className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 hover:shadow-md transition-shadow" data-testid={`history-card-${obl.company_id}`}>
             <div className="flex items-start justify-between mb-3">
               <div>
-                <p className="font-semibold text-[#3D4F6F]">{obl.company_name}</p>
+                <div className="flex items-center gap-1.5">
+                  {obl.display_id && <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{obl.display_id}</span>}
+                  <p className="font-semibold text-[#3D4F6F]">{obl.company_name}</p>
+                </div>
                 <p className="text-xs text-slate-500">{obl.package} · {obl.owner_name}</p>
               </div>
               <Badge className="bg-[#3D4F6F]/10 text-[#3D4F6F] text-xs">{obl.used_quota}/{obl.total_quota}</Badge>

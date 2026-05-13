@@ -126,10 +126,10 @@ export default function Obligations() {
       const parts = s.split(/\s+/);
       return { first: parts[0], last: parts.slice(1).join(' ') };
     };
-    const excelData = filtered.map((obl, i) => {
+    const excelData = filtered.map((obl) => {
       const { first, last } = splitOwnerName(obl.owner_name);
       return {
-        '№': i + 1,
+        'ID': obl.display_id || '',
         'Şirkət': obl.company_name || '',
         'Ad': first,
         'Soyad': last,
@@ -150,7 +150,7 @@ export default function Obligations() {
     });
     const ws = XLSX.utils.json_to_sheet(excelData);
     ws['!cols'] = [
-      { wch: 5 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
+      { wch: 8 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
       { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
       { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
       { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
@@ -292,7 +292,7 @@ export default function Obligations() {
           <table className="w-full" data-testid="obligations-table">
             <thead>
               <tr className="bg-slate-50 border-b">
-                <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">#</th>
+                <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">ID</th>
                 <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Şirkət</th>
                 <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Paket</th>
                 <th className="text-left px-3 py-3 text-xs font-semibold text-[#3D4F6F]">Kvota</th>
@@ -308,11 +308,11 @@ export default function Obligations() {
               {filtered.length === 0 ? (
                 <tr><td colSpan={10} className="text-center py-12 text-slate-400 text-sm">Nəticə tapılmadı</td></tr>
               ) : (
-                filtered.map((obl, idx) => {
+                filtered.map((obl) => {
                   const urgency = getUrgencyLevel(obl);
                   return (
                     <tr key={obl.company_id} className={`border-b border-slate-50 hover:bg-slate-50/50 ${urgency === 'critical' ? 'bg-red-50/30' : ''}`} data-testid={`obl-row-${obl.company_id}`}>
-                      <td className="px-3 py-2.5 text-xs text-slate-400">{idx + 1}</td>
+                      <td className="px-3 py-2.5 font-mono text-xs text-slate-500" data-testid={`obl-id-${obl.company_id}`}>{obl.display_id || '-'}</td>
                       <td className="px-3 py-2.5">
                         <p className="font-medium text-sm text-[#3D4F6F]">{obl.company_name}</p>
                         <p className="text-xs text-slate-400">{obl.owner_name}</p>

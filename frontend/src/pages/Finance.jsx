@@ -316,6 +316,7 @@ export default function Finance() {
     // Sheet 1 - Gəlirlər (Şirkət ödənişləri)
     const incomeData = filteredCompanies.map((c, i) => ({
       '№': i + 1,
+      'ID': c.display_id || '',
       'Şirkət': c.brand_name || '',
       'Sahibkar': c.owner_name || '',
       'Paket': c.package || '',
@@ -663,7 +664,10 @@ export default function Finance() {
                       <tr key={c.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors" data-testid={`finance-row-${c.id}`}>
                         <td className="px-2 py-2"><Badge className="bg-slate-100 text-slate-700 text-[10px] font-mono">{c.finance_id || '—'}</Badge></td>
                         <td className="px-2 py-2">
-                          <p className="font-medium text-xs text-[#3D4F6F]">{c.brand_name}</p>
+                          <div className="flex items-center gap-1.5">
+                            {c.display_id && <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1 py-0.5 rounded shrink-0">{c.display_id}</span>}
+                            <p className="font-medium text-xs text-[#3D4F6F]">{c.brand_name}</p>
+                          </div>
                           <p className="text-[10px] text-slate-500">{c.owner_name}</p>
                         </td>
                         <td className="px-2 py-2"><Badge className="bg-[#3D4F6F] text-white text-[10px]">{c.package}</Badge></td>
