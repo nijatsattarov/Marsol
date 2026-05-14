@@ -1427,6 +1427,11 @@ def _months_between(start_iso: str, end_dt: datetime) -> int:
     return max(delta_months, 0)
 
 
+def _years_completed(start_iso: str, end_dt: datetime) -> int:
+    """Return number of FULL years completed since start date."""
+    return _months_between(start_iso, end_dt) // 12
+
+
 def _compute_inventory_valuation(item: dict) -> dict:
     """Compute structured financial valuation for a single inventory item.
 
@@ -1447,16 +1452,52 @@ def _compute_inventory_valuation(item: dict) -> dict:
         purchase_price + delivery_cost + customs_cost + installation_cost + other_costs, 2
     )
 
+    # Depreciation rate (declining-balance per FULL year). When provided, this takes
+    # precedence over the legacy straight-line useful_life_years calculation.
+    depreciation_rate = _safe_nonneg(item.get("depreciable_asset_rate"))  # percent (0..100)
     useful_life_years = _safe_nonneg(item.get("useful_life_years"))
     annual_depr = 0.0
     monthly_depr = 0.0
-    if useful_life_years > 0 and total_initial_value > 0:
-        annual_depr = round(total_initial_value / useful_life_years, 2)
-        monthly_depr = round(annual_depr / 12.0, 2)
 
-    months_used = _months_between(item.get("purchase_date") or "", datetime.now(timezone.utc).replace(tzinfo=None))
-    accumulated_depr = round(min(monthly_depr * months_used, total_initial_value), 2)
-    book_value = round(max(total_initial_value - accumulated_depr, 0.0), 2)
+    now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+    months_used = _months_between(item.get("purchase_date") or "", now_dt)
+    years_completed = months_used // 12
+
+    if depreciation_rate > 0 and total_initial_value > 0:
+        # Declining balance: each completed year deducts rate% from the remaining book.
+        book = total_initial_value
+        yearly_breakdown: List[Dict[str, Any]] = []
+        for y in range(years_completed):
+            depr = round(book * (depreciation_rate / 100.0), 2)
+            if depr <= 0 or book <= 0:
+                break
+            new_book = round(max(book - depr, 0.0), 2)
+            yearly_breakdown.append({
+                "year": y + 1,
+                "opening_balance": round(book, 2),
+                "depreciation": depr,
+                "closing_balance": new_book,
+            })
+            book = new_book
+            if book <= 0:
+                break
+        accumulated_depr = round(total_initial_value - book, 2)
+        book_value = round(max(book, 0.0), 2)
+        # For reporting: first-year depreciation as the "annual" representative
+        annual_depr = yearly_breakdown[0]["depreciation"] if yearly_breakdown else round(
+            total_initial_value * (depreciation_rate / 100.0), 2
+        )
+        monthly_depr = round(annual_depr / 12.0, 2)
+        method = "declining_balance"
+    else:
+        # Legacy straight-line fallback
+        if useful_life_years > 0 and total_initial_value > 0:
+            annual_depr = round(total_initial_value / useful_life_years, 2)
+            monthly_depr = round(annual_depr / 12.0, 2)
+        accumulated_depr = round(min(monthly_depr * months_used, total_initial_value), 2)
+        book_value = round(max(total_initial_value - accumulated_depr, 0.0), 2)
+        yearly_breakdown = []
+        method = "straight_line" if useful_life_years > 0 else "none"
 
     market_value = _safe_nonneg(item.get("market_value"))
     is_operational = bool(item.get("is_operational", True))
@@ -1488,9 +1529,13 @@ def _compute_inventory_valuation(item: dict) -> dict:
         "other_costs": other_costs,
         "total_initial_value": total_initial_value,
         "useful_life_years": useful_life_years,
+        "depreciation_rate": depreciation_rate,
+        "depreciation_method": method,
         "annual_depreciation": annual_depr,
         "monthly_depreciation": monthly_depr,
         "months_used": months_used,
+        "years_completed": years_completed,
+        "yearly_breakdown": yearly_breakdown,
         "accumulated_depreciation": accumulated_depr,
         "book_value": book_value,
         "market_value": market_value,
@@ -1519,13 +1564,28 @@ async def create_inventory_item(data: dict, current_user: dict = Depends(check_p
     count = await db.inventory.count_documents({})
     display_id = data.get("display_id") or f"I{(count + 1):03d}"
     now_iso = datetime.now(timezone.utc).isoformat()
+    category_name = (data.get("category") or "").strip()
+    # Resolve auto-generated inventory_code based on category prefix when not provided
+    inventory_code = (data.get("inventory_code") or "").strip()
+    if not inventory_code and category_name:
+        inventory_code = await _generate_inventory_code(category_name)
+    # Snapshot depreciation rate from the depreciable_assets registry when name provided but rate not
+    depreciable_asset = (data.get("depreciable_asset") or "").strip()
+    depreciable_asset_rate = _safe_nonneg(data.get("depreciable_asset_rate"))
+    if depreciable_asset and not depreciable_asset_rate:
+        reg = await db.depreciable_assets.find_one({"name": depreciable_asset}, {"_id": 0})
+        if reg and reg.get("rate"):
+            depreciable_asset_rate = _safe_nonneg(reg.get("rate"))
     item = {
         "id": str(uuid.uuid4()),
         "display_id": display_id,
+        "marsol_company": (data.get("marsol_company") or "").strip(),
+        "depreciable_asset": depreciable_asset,
+        "depreciable_asset_rate": depreciable_asset_rate,
         "department": (data.get("department") or "").strip(),
         "asset_name": (data.get("asset_name") or "").strip(),
-        "category": (data.get("category") or "").strip(),
-        "inventory_code": (data.get("inventory_code") or "").strip(),
+        "category": category_name,
+        "inventory_code": inventory_code,
         "quantity": max(int(data.get("quantity") or 1), 1),
         "condition": (data.get("condition") or "").strip(),
         "responsible_person": (data.get("responsible_person") or "").strip(),
@@ -1561,24 +1621,55 @@ async def update_inventory_item(item_id: str, data: dict, current_user: dict = D
     if not existing:
         raise HTTPException(status_code=404, detail="İnventar tapılmadı")
     update: Dict[str, Any] = {}
-    for k in ("department", "asset_name", "category", "inventory_code", "condition",
-              "responsible_person", "location", "purchase_date", "last_check_date",
-              "status", "note"):
+    for k in ("marsol_company", "depreciable_asset", "department", "asset_name", "category",
+              "inventory_code", "condition", "responsible_person", "location", "purchase_date",
+              "last_check_date", "status", "note"):
         if k in data:
             update[k] = (str(data.get(k) or "")).strip()
     if "quantity" in data:
         update["quantity"] = max(int(data.get("quantity") or 1), 1)
     # Non-negative numeric fields
     for k in ("unit_value", "purchase_price", "delivery_cost", "customs_cost",
-              "installation_cost", "other_costs", "useful_life_years", "market_value"):
+              "installation_cost", "other_costs", "useful_life_years", "market_value",
+              "depreciable_asset_rate"):
         if k in data:
             update[k] = _safe_nonneg(data.get(k))
     if "is_operational" in data:
         update["is_operational"] = bool(data.get("is_operational"))
+    # Auto-fill rate from registry if depreciable_asset changed and explicit rate not provided
+    if "depreciable_asset" in data and "depreciable_asset_rate" not in data:
+        reg = await db.depreciable_assets.find_one({"name": update.get("depreciable_asset", "")}, {"_id": 0})
+        if reg and reg.get("rate"):
+            update["depreciable_asset_rate"] = _safe_nonneg(reg.get("rate"))
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.inventory.update_one({"id": item_id}, {"$set": update})
     updated = await db.inventory.find_one({"id": item_id}, {"_id": 0})
     return _enrich_inventory(updated)
+
+
+async def _generate_inventory_code(category_name: str) -> str:
+    """Generate `<PREFIX>-NNN` code based on category. Prefix comes from inventory_categories
+    registry (`code_prefix` field) or falls back to first 3 uppercase letters of the name."""
+    cat = await db.inventory_categories.find_one({"name": category_name}, {"_id": 0})
+    prefix = ""
+    if cat and cat.get("code_prefix"):
+        prefix = str(cat["code_prefix"]).strip().upper()
+    if not prefix:
+        # Strip non-alphabetic characters, uppercase, take first 3 chars
+        cleaned = "".join(ch for ch in category_name if ch.isalpha()).upper()
+        prefix = cleaned[:3] if cleaned else "INV"
+    # Find max existing code with this prefix
+    pattern = f"^{prefix}-(\\d+)$"
+    cursor = db.inventory.find({"inventory_code": {"$regex": pattern}}, {"_id": 0, "inventory_code": 1})
+    max_n = 0
+    async for doc in cursor:
+        try:
+            n = int(doc["inventory_code"].split("-")[-1])
+            if n > max_n:
+                max_n = n
+        except (ValueError, IndexError):
+            continue
+    return f"{prefix}-{(max_n + 1):03d}"
 
 
 @api_router.delete("/finance/inventory/{item_id}")
@@ -1684,6 +1775,141 @@ async def inventory_value_report(current_user: dict = Depends(check_permission("
         "writeoff_candidates": writeoff_candidates,
         "revaluation_candidates": revaluation_candidates,
     }
+
+
+# ---------- Settings: Depreciable Assets registry ----------
+DEFAULT_DEPRECIABLE_ASSETS = [
+    {"name": "Binalar və tikililər", "rate": 5},
+    {"name": "Maşın və avadanlıqlar", "rate": 20},
+    {"name": "Nəqliyyat vasitələri", "rate": 25},
+    {"name": "İT və ofis avadanlığı", "rate": 25},
+    {"name": "Mebel", "rate": 20},
+    {"name": "Digər əsas vəsait", "rate": 10},
+]
+
+
+@api_router.get("/settings/depreciable-assets")
+async def list_depreciable_assets(current_user: dict = Depends(get_current_user)):
+    items = await db.depreciable_assets.find({}, {"_id": 0}).sort("name", 1).to_list(200)
+    if not items:
+        seeded = []
+        for d in DEFAULT_DEPRECIABLE_ASSETS:
+            doc = {"id": str(uuid.uuid4()), "name": d["name"], "rate": float(d["rate"])}
+            await db.depreciable_assets.insert_one(doc)
+            doc.pop("_id", None)
+            seeded.append(doc)
+        return seeded
+    return items
+
+
+@api_router.post("/settings/depreciable-assets")
+async def create_depreciable_asset(data: dict, current_user: dict = Depends(get_current_user)):
+    name = (data.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Ad boş ola bilməz")
+    rate = _safe_nonneg(data.get("rate"))
+    if rate > 100:
+        rate = 100.0
+    if await db.depreciable_assets.find_one({"name": name}):
+        raise HTTPException(status_code=400, detail="Bu ad artıq mövcuddur")
+    doc = {"id": str(uuid.uuid4()), "name": name, "rate": rate}
+    await db.depreciable_assets.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/settings/depreciable-assets/{item_id}")
+async def update_depreciable_asset(item_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    update: Dict[str, Any] = {}
+    if "name" in data:
+        n = (data.get("name") or "").strip()
+        if not n:
+            raise HTTPException(status_code=400, detail="Ad boş ola bilməz")
+        update["name"] = n
+    if "rate" in data:
+        update["rate"] = min(_safe_nonneg(data.get("rate")), 100.0)
+    if not update:
+        raise HTTPException(status_code=400, detail="Yenilənəcək məlumat yoxdur")
+    result = await db.depreciable_assets.update_one({"id": item_id}, {"$set": update})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Tapılmadı")
+    return await db.depreciable_assets.find_one({"id": item_id}, {"_id": 0})
+
+
+@api_router.delete("/settings/depreciable-assets/{item_id}")
+async def delete_depreciable_asset(item_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.depreciable_assets.delete_one({"id": item_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Tapılmadı")
+    return {"message": "Silindi"}
+
+
+# ---------- Settings: Inventory Categories registry ----------
+DEFAULT_INVENTORY_CATEGORIES = [
+    {"name": "Kompüter texnikası", "code_prefix": "KOM"},
+    {"name": "Mebel", "code_prefix": "MEB"},
+    {"name": "Nəqliyyat", "code_prefix": "NQL"},
+    {"name": "Ofis avadanlığı", "code_prefix": "OFS"},
+    {"name": "Texniki avadanlıq", "code_prefix": "TXN"},
+    {"name": "Digər", "code_prefix": "DGR"},
+]
+
+
+@api_router.get("/settings/inventory-categories")
+async def list_inventory_categories(current_user: dict = Depends(get_current_user)):
+    items = await db.inventory_categories.find({}, {"_id": 0}).sort("name", 1).to_list(200)
+    if not items:
+        seeded = []
+        for d in DEFAULT_INVENTORY_CATEGORIES:
+            doc = {"id": str(uuid.uuid4()), "name": d["name"], "code_prefix": d["code_prefix"]}
+            await db.inventory_categories.insert_one(doc)
+            doc.pop("_id", None)
+            seeded.append(doc)
+        return seeded
+    return items
+
+
+@api_router.post("/settings/inventory-categories")
+async def create_inventory_category(data: dict, current_user: dict = Depends(get_current_user)):
+    name = (data.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Ad boş ola bilməz")
+    prefix = (data.get("code_prefix") or "").strip().upper()[:6]
+    if not prefix:
+        cleaned = "".join(ch for ch in name if ch.isalpha()).upper()
+        prefix = cleaned[:3] if cleaned else "INV"
+    if await db.inventory_categories.find_one({"name": name}):
+        raise HTTPException(status_code=400, detail="Bu ad artıq mövcuddur")
+    doc = {"id": str(uuid.uuid4()), "name": name, "code_prefix": prefix}
+    await db.inventory_categories.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/settings/inventory-categories/{item_id}")
+async def update_inventory_category(item_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    update: Dict[str, Any] = {}
+    if "name" in data:
+        n = (data.get("name") or "").strip()
+        if not n:
+            raise HTTPException(status_code=400, detail="Ad boş ola bilməz")
+        update["name"] = n
+    if "code_prefix" in data:
+        update["code_prefix"] = (data.get("code_prefix") or "").strip().upper()[:6]
+    if not update:
+        raise HTTPException(status_code=400, detail="Yenilənəcək məlumat yoxdur")
+    result = await db.inventory_categories.update_one({"id": item_id}, {"$set": update})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Tapılmadı")
+    return await db.inventory_categories.find_one({"id": item_id}, {"_id": 0})
+
+
+@api_router.delete("/settings/inventory-categories/{item_id}")
+async def delete_inventory_category(item_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.inventory_categories.delete_one({"id": item_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Tapılmadı")
+    return {"message": "Silindi"}
 
 
 
@@ -4241,6 +4467,7 @@ async def create_user(user_data: dict, current_user: dict = Depends(get_current_
         "password": hash_password(user_data.get("password", "123456")),
         "role": user_data.get("role", "user"),
         "department": user_data.get("department", ""),
+        "marsol_company": user_data.get("marsol_company", ""),
         "phone": user_data.get("phone", ""),
         "status": user_data.get("status", "Aktiv"),
         "created_at": datetime.now(timezone.utc).isoformat()

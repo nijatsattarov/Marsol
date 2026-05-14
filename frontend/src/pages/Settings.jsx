@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Toaster, toast } from 'sonner';
 import PackageServicesManager from '../components/PackageServicesManager';
 import ManageableListsPanel from '../components/ManageableListsPanel';
+import { DepreciableAssetsPanel, InventoryCategoriesPanel } from '../components/InventorySettingsPanels';
 import SmsPanel from '../components/SmsPanel';
 import { usePermissions, canView } from '../context/PermissionContext';
 
@@ -121,7 +122,7 @@ export default function Settings() {
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0, invitation_count: 0 });
   const [projectForm, setProjectForm] = useState({ name: '' });
   const [fieldForm, setFieldForm] = useState({ module: '', sub_tab: '', field_name: '', field_label: '', field_type: 'text', options: '', required: false });
-  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'user', department: '', phone: '', status: 'Aktiv' });
+  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'user', department: '', marsol_company: '', phone: '', status: 'Aktiv' });
   const [sectorForm, setSectorForm] = useState({ name: '' });
   const [subSectorForm, setSubSectorForm] = useState({ name: '', sector: '' });
   const [positionForm, setPositionForm] = useState({ name: '' });
@@ -455,10 +456,10 @@ export default function Settings() {
     refreshDepartments();
     if (user) {
       setEditingUser(user);
-      setUserForm({ name: user.name, email: user.email, password: '', role: user.role, department: user.department || '', phone: user.phone || '', status: user.status || 'Aktiv' });
+      setUserForm({ name: user.name, email: user.email, password: '', role: user.role, department: user.department || '', marsol_company: user.marsol_company || '', phone: user.phone || '', status: user.status || 'Aktiv' });
     } else {
       setEditingUser(null);
-      setUserForm({ name: '', email: '', password: '', role: 'user', department: '', phone: '', status: 'Aktiv' });
+      setUserForm({ name: '', email: '', password: '', role: 'user', department: '', marsol_company: '', phone: '', status: 'Aktiv' });
     }
     setShowUserModal(true);
   };
@@ -537,6 +538,10 @@ export default function Settings() {
                 { value: 'sale-types', icon: TrendingUp, label: 'Satış növləri' },
                 { value: 'lead-sources', icon: Target, label: 'Lead mənbələri' },
                 { value: 'meeting-types', icon: Calendar, label: 'Görüş növləri' },
+              ]},
+              { label: 'Maliyyə & İnventar', items: [
+                { value: 'depreciable-assets', icon: TrendingUp, label: 'Amortizasiya olunan aktivlər' },
+                { value: 'inventory-categories', icon: Package, label: 'İnventar kateqoriyaları' },
               ]},
               { label: 'Klassifikasiya', items: [
                 { value: 'lists', icon: List, label: 'Siyahılar' },
@@ -894,6 +899,16 @@ export default function Settings() {
               {marsolCompanies.length === 0 && <p className="col-span-full text-center text-slate-400 py-8 text-sm">Müəssisə yoxdur</p>}
             </div>
           </div>
+        </TabsContent>
+
+        {/* ========= DEPRECIABLE ASSETS TAB ========= */}
+        <TabsContent value="depreciable-assets">
+          <DepreciableAssetsPanel headers={headers} />
+        </TabsContent>
+
+        {/* ========= INVENTORY CATEGORIES TAB ========= */}
+        <TabsContent value="inventory-categories">
+          <InventoryCategoriesPanel headers={headers} />
         </TabsContent>
 
         {/* ========= MEETING TYPES TAB ========= */}
@@ -1395,6 +1410,7 @@ export default function Settings() {
                       <td className="px-4 py-3 text-sm font-medium">{usr.name}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{usr.email}</td>
                       <td className="px-4 py-3 text-sm text-slate-600 hidden sm:table-cell">{usr.department || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 hidden md:table-cell">{usr.marsol_company || '-'}</td>
                       <td className="px-4 py-3">{getRoleBadge(usr.role)}</td>
                       <td className="px-4 py-3 hidden sm:table-cell">
                         <Badge className={usr.status === 'Aktiv' ? 'bg-green-100 text-green-700 text-xs' : 'bg-slate-100 text-slate-600 text-xs'}>{usr.status || 'Aktiv'}</Badge>
@@ -1412,7 +1428,7 @@ export default function Settings() {
                     </tr>
                   ))}
                   {users.length === 0 && (
-                    <tr><td colSpan={6} className="text-center py-8 text-slate-400 text-sm">İstifadəçi yoxdur</td></tr>
+                    <tr><td colSpan={7} className="text-center py-8 text-slate-400 text-sm">İstifadəçi yoxdur</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1683,6 +1699,20 @@ export default function Settings() {
                     <SelectItem value="__none__">— Seçilməyib —</SelectItem>
                     {departments.map((d) => (
                       <SelectItem key={d} value={d}>{d}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Müəssisə</Label>
+                <Select value={userForm.marsol_company || '__none__'} onValueChange={(v) => setUserForm({ ...userForm, marsol_company: v === '__none__' ? '' : v })}>
+                  <SelectTrigger className="text-sm" data-testid="user-marsol-company-select">
+                    <SelectValue placeholder="Müəssisə seçin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Seçilməyib —</SelectItem>
+                    {marsolCompanies.map((mc) => (
+                      <SelectItem key={mc.id} value={mc.name}>{mc.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

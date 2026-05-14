@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 56 — Inventory enhancements (declining-balance depreciation + depreciable_assets/inventory_categories settings registries + auto-code generation + marsol_company): backend pytest 12/12 PASSED, frontend Playwright smoke 100% — all 6 new data-testids resolve, Settings sidebar exposes both new tabs, DepreciableAssetsPanel renders 6 seeded defaults with 6 rate-% badges, InventoryCategoriesPanel renders Kompüter texnikası + KOM prefix, Users table has Müəssisə column and user modal exposes user-marsol-company-select. Declining-balance math verified end-to-end: 1000@25% × 2 full years → book_value=562.5, accumulated_depreciation=437.5, yearly_breakdown=[{1, 1000, 250, 750}, {2, 750, 187.5, 562.5}], method='declining_balance'. Zero-floor verified with rate=90% × 10y (book≤1, no negative closing balances). Auto-code KOM-001/002/003 sequential. Rate auto-fill from registry on POST (İT və ofis avadanlığı → 25%) and PUT (change to Binalar və tikililər → 5%). marsol_company persists on inventory POST/PUT/GET. Users marsol_company persists on POST/PUT/GET. depreciable-assets POST clamps rate>100→100 and rejects duplicate names with 400. inventory-categories POST uppercases + truncates code_prefix to 6 chars. Straight-line fallback preserved when rate=0 but useful_life_years>0.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Settings → Users → Add modal", "issues": ["Modal background appears semi-transparent — table rows visible behind dialog content (likely missing Dialog overlay opacity / z-index). Functionality unaffected; all selects and inputs interactive. Cosmetic only."]},
+      {"screen": "All Radix Dialogs", "issues": ["(Carryover from iter54/55) 'Missing Description or aria-describedby' a11y console warning — cosmetic."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration56_inventory_declining_balance.py",
+    "/app/test_reports/pytest/iteration_56_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Add solid background or DialogOverlay to user-create modal to avoid visual bleed-through with underlying users table.",
+    "(Optional) Add aria-describedby / DialogDescription on all DialogContent components to clear Radix a11y warning."
+  ],
+  "critical_code_review_comments": [
+    "_compute_inventory_valuation declining-balance loop correctly breaks when book≤0 or depr≤0 — preventing infinite loops and negative book values.",
+    "yearly_breakdown[] is truncated correctly when book hits 0 — verified with rate=90% × 10y (≤10 entries, all closing_balance≥0).",
+    "_generate_inventory_code uses regex on inventory_code field and scans all docs — fine for current volume; for >50k items consider indexed counter document or atomic findAndModify per prefix to prevent race conditions on concurrent POST.",
+    "POST /api/settings/depreciable-assets auto-clamp rate>100 only happens on POST — UPDATE path also clamps via min(_safe_nonneg(...), 100.0). Consistent.",
+    "Duplicate-name check on PUT depreciable-assets/inventory-categories is NOT enforced (only on POST) — renaming an item to an existing name would succeed. Low priority since UI does not expose mass-edit.",
+    "InventoryTab.jsx remains >700 lines (carryover) — splitting the modal sub-component is still recommended.",
+    "User create payload allows marsol_company default empty-string — consistent with department/phone behavior. PUT accepts empty string to clear (current iter56 test only set non-empty)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration56_inventory_declining_balance.py (new, 12 tests across 5 classes)"
+  ],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100% (all 6 critical testids + 2 settings tabs + users column)"},
+  "test_credentials": "Admin settings@marsol.az / marsol123",
+  "seed_data_creation": "Created and cleaned up TEST_-prefixed rows via try/finally fixtures: TEST_DA_xxxx (depreciable_assets), TEST_CAT_xxxx (inventory_categories), TEST_AutoRate / TEST_KOM1-3 / TEST_RateRefresh / TEST_MS / TEST_DB_2y / TEST_DB_zero / TEST_SL (inventory), test_marsol_xxxx@marsol.test (users). All deleted via per-fixture teardown — verified no residual TEST_ rows in any of the 4 collections. Defaults (6 depreciable + 6 categories) preserved.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter56 covers declining-balance + registries. Suite at /app/backend/tests/test_iteration56_inventory_valuation*.py (iter55 = straight-line+report, iter56 = declining-balance+registries+auto-code+marsol). Frontend testids confirmed: inv-form-marsol-company, inv-form-depreciable-asset, inv-form-category, tab-depreciable-assets, tab-inventory-categories, user-marsol-company-select. To open inventory modal use [data-testid='inv-add-btn']. To open user-create modal use [data-testid='add-user-btn']. Login response field = `access_token`. Sequential inventory_code test must record the BEFORE-max and assert AFTER values are strictly +1, not absolute (other test rows may exist between runs).",
+  "rca of the issue": "N/A — all 6 enhancements behave per spec; only cosmetic modal-transparency note for Users add-dialog."
+}

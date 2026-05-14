@@ -20,6 +20,9 @@ const CONDITION_OPTIONS = ['Yeni', 'Yaxşı', 'Orta', 'Pis'];
 
 const emptyForm = {
   display_id: '',
+  marsol_company: '',
+  depreciable_asset: '',
+  depreciable_asset_rate: 0,
   department: '',
   asset_name: '',
   category: '',
@@ -62,6 +65,11 @@ export default function InventoryTab({ responsiblePersons = [], departments = []
   const [loading, setLoading] = useState(true);
   const [activeSub, setActiveSub] = useState('list');
 
+  // Registries (depreciable assets, categories, marsol companies)
+  const [depreciableAssets, setDepreciableAssets] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [marsolCompanies, setMarsolCompanies] = useState([]);
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [deptFilter, setDeptFilter] = useState('all');
@@ -74,12 +82,18 @@ export default function InventoryTab({ responsiblePersons = [], departments = []
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [itemsRes, reportRes] = await Promise.all([
+      const [itemsRes, reportRes, daRes, catRes, mcRes] = await Promise.all([
         axios.get(`${API}/finance/inventory`, { headers }),
         axios.get(`${API}/finance/inventory/value-report`, { headers }).catch(() => ({ data: null })),
+        axios.get(`${API}/settings/depreciable-assets`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/settings/inventory-categories`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/settings/marsol-companies`, { headers }).catch(() => ({ data: [] })),
       ]);
       setItems(itemsRes.data || []);
       setReport(reportRes.data);
+      setDepreciableAssets(daRes.data || []);
+      setCategories(catRes.data || []);
+      setMarsolCompanies(mcRes.data || []);
     } catch (e) {
       console.error('Inventory fetch error', e);
       toast.error('İnventar yüklənərkən xəta baş verdi');
@@ -96,10 +110,23 @@ export default function InventoryTab({ responsiblePersons = [], departments = []
     setShowModal(true);
   };
 
+  // When user picks a depreciable_asset, snapshot the rate from registry
+  const handleDepreciableAssetChange = (assetName) => {
+    const reg = depreciableAssets.find(d => d.name === assetName);
+    setForm(prev => ({
+      ...prev,
+      depreciable_asset: assetName,
+      depreciable_asset_rate: reg?.rate ?? 0,
+    }));
+  };
+
   const openEdit = (item) => {
     setEditing(item);
     setForm({
       display_id: item.display_id || '',
+      marsol_company: item.marsol_company || '',
+      depreciable_asset: item.depreciable_asset || '',
+      depreciable_asset_rate: item.depreciable_asset_rate || 0,
       department: item.department || '',
       asset_name: item.asset_name || '',
       category: item.category || '',
@@ -143,6 +170,7 @@ export default function InventoryTab({ responsiblePersons = [], departments = []
         other_costs: numField(form.other_costs),
         useful_life_years: numField(form.useful_life_years),
         market_value: numField(form.market_value),
+        depreciable_asset_rate: numField(form.depreciable_asset_rate),
         is_operational: !!form.is_operational,
       };
       if (editing) {
@@ -561,21 +589,68 @@ export default function InventoryTab({ responsiblePersons = [], departments = []
               <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Əsas məlumat</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
+                  <Label className="text-xs">Müəssisə</Label>
+                  <Select value={form.marsol_company || '__none__'} onValueChange={(v) => setForm({ ...form, marsol_company: v === '__none__' ? '' : v })}>
+                    <SelectTrigger data-testid="inv-form-marsol-company"><SelectValue placeholder="Müəssisə seçin" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— Seçilməyib —</SelectItem>
+                      {marsolCompanies.map(mc => <SelectItem key={mc.id} value={mc.name}>{mc.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Amortizasiya olunan aktiv</Label>
+                  <Select value={form.depreciable_asset || '__none__'} onValueChange={(v) => handleDepreciableAssetChange(v === '__none__' ? '' : v)}>
+                    <SelectTrigger data-testid="inv-form-depreciable-asset">
+                      <SelectValue placeholder="Aktiv növü seçin" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— Seçilməyib —</SelectItem>
+                      {depreciableAssets.map(d => (
+                        <SelectItem key={d.id} value={d.name}>
+                          {d.name} <span className="opacity-60 ml-1">({d.rate}%)</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {form.depreciable_asset && (
+                    <p className="text-[10px] text-amber-700 mt-0.5">Amortizasiya faizi: <span className="font-semibold">{form.depreciable_asset_rate}%</span> (illik, azalan qalıq)</p>
+                  )}
+                </div>
+                <div>
                   <Label className="text-xs">Əmlakın adı *</Label>
                   <Input value={form.asset_name} onChange={e => setForm({ ...form, asset_name: e.target.value })} required data-testid="inv-form-asset-name" />
+                </div>
+                <div>
+                  <Label className="text-xs">Kateqoriya</Label>
+                  <Select value={form.category || '__none__'} onValueChange={(v) => setForm({ ...form, category: v === '__none__' ? '' : v })}>
+                    <SelectTrigger data-testid="inv-form-category"><SelectValue placeholder="Kateqoriya seçin" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— Seçilməyib —</SelectItem>
+                      {categories.map(c => (
+                        <SelectItem key={c.id} value={c.name}>
+                          {c.name} <span className="opacity-60 ml-1">[{c.code_prefix}]</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">İnventar kodu</Label>
+                  <Input
+                    value={form.inventory_code}
+                    onChange={e => setForm({ ...form, inventory_code: e.target.value })}
+                    placeholder={!editing && form.category ? 'Avtomatik yaradılacaq' : ''}
+                    data-testid="inv-form-code"
+                  />
+                  {!editing && form.category && !form.inventory_code && (
+                    <p className="text-[10px] text-slate-400 mt-0.5">Yadda saxlandıqda kateqoriya prefiksi ilə avtomatik yaradılacaq</p>
+                  )}
                 </div>
                 <div>
                   <Label className="text-xs">Şöbə</Label>
                   <Input value={form.department} onChange={e => setForm({ ...form, department: e.target.value })} list="inv-dept-list" data-testid="inv-form-department" />
                   <datalist id="inv-dept-list">{uniqueDepartments.map(d => <option key={d} value={d} />)}</datalist>
-                </div>
-                <div>
-                  <Label className="text-xs">Kateqoriya</Label>
-                  <Input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} data-testid="inv-form-category" />
-                </div>
-                <div>
-                  <Label className="text-xs">İnventar kodu</Label>
-                  <Input value={form.inventory_code} onChange={e => setForm({ ...form, inventory_code: e.target.value })} data-testid="inv-form-code" />
                 </div>
                 <div>
                   <Label className="text-xs">Sayı</Label>
