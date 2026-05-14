@@ -6,7 +6,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -437,6 +437,9 @@ export default function InventoryTab({ responsiblePersons = [], departments = []
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-[#3D4F6F]">{editing ? 'İnventarı redaktə et' : 'Yeni inventar əlavə et'}</DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Əmlakın bütün məlumatlarını doldurun. * ilə işarələnmiş sahə məcburidir.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-3" data-testid="inv-form">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
