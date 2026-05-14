@@ -1390,6 +1390,119 @@ async def delete_income(income_id: str, current_user: dict = Depends(check_permi
         raise HTTPException(status_code=404, detail="Gəlir tapılmadı")
     return {"message": "Gəlir silindi"}
 
+
+# ---------- Inventar (Inventory) ----------
+@api_router.get("/finance/inventory")
+async def list_inventory(current_user: dict = Depends(check_permission("finance", "read"))):
+    items = await db.inventory.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    return items
+
+
+@api_router.post("/finance/inventory")
+async def create_inventory_item(data: dict, current_user: dict = Depends(check_permission("finance", "write"))):
+    # Auto-generate sequential display ID: I001, I002, ...
+    count = await db.inventory.count_documents({})
+    display_id = data.get("display_id") or f"I{(count + 1):03d}"
+    now_iso = datetime.now(timezone.utc).isoformat()
+    item = {
+        "id": str(uuid.uuid4()),
+        "display_id": display_id,
+        "department": (data.get("department") or "").strip(),
+        "asset_name": (data.get("asset_name") or "").strip(),
+        "category": (data.get("category") or "").strip(),
+        "inventory_code": (data.get("inventory_code") or "").strip(),
+        "quantity": int(data.get("quantity") or 1),
+        "condition": (data.get("condition") or "").strip(),
+        "responsible_person": (data.get("responsible_person") or "").strip(),
+        "location": (data.get("location") or "").strip(),
+        "purchase_date": (data.get("purchase_date") or "").strip(),
+        "last_check_date": (data.get("last_check_date") or "").strip(),
+        "status": (data.get("status") or "Aktiv").strip(),
+        "note": (data.get("note") or "").strip(),
+        "unit_value": float(data.get("unit_value") or 0),
+        "created_at": now_iso,
+        "created_by": current_user.get("name", ""),
+        "updated_at": now_iso,
+    }
+    if not item["asset_name"]:
+        raise HTTPException(status_code=400, detail="Əmlakın adı boş ola bilməz")
+    await db.inventory.insert_one(item)
+    item.pop("_id", None)
+    return item
+
+
+@api_router.put("/finance/inventory/{item_id}")
+async def update_inventory_item(item_id: str, data: dict, current_user: dict = Depends(check_permission("finance", "write"))):
+    existing = await db.inventory.find_one({"id": item_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="İnventar tapılmadı")
+    update: Dict[str, Any] = {}
+    for k in ("department", "asset_name", "category", "inventory_code", "condition",
+              "responsible_person", "location", "purchase_date", "last_check_date",
+              "status", "note"):
+        if k in data:
+            update[k] = (str(data.get(k) or "")).strip()
+    if "quantity" in data:
+        update["quantity"] = int(data.get("quantity") or 1)
+    if "unit_value" in data:
+        update["unit_value"] = float(data.get("unit_value") or 0)
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.inventory.update_one({"id": item_id}, {"$set": update})
+    updated = await db.inventory.find_one({"id": item_id}, {"_id": 0})
+    return updated
+
+
+@api_router.delete("/finance/inventory/{item_id}")
+async def delete_inventory_item(item_id: str, current_user: dict = Depends(check_permission("finance", "write"))):
+    result = await db.inventory.delete_one({"id": item_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="İnventar tapılmadı")
+    return {"message": "İnventar silindi"}
+
+
+@api_router.get("/finance/inventory/value-report")
+async def inventory_value_report(current_user: dict = Depends(check_permission("finance", "read"))):
+    """Aggregate inventory value by department, category, status — feeds the
+    'İnventar dəyər hesabatı' sub-tab."""
+    items = await db.inventory.find({}, {"_id": 0}).to_list(5000)
+    by_dept: Dict[str, Dict[str, Any]] = {}
+    by_cat: Dict[str, Dict[str, Any]] = {}
+    by_status: Dict[str, int] = {}
+    grand_total_value = 0.0
+    grand_total_count = 0
+    for it in items:
+        qty = int(it.get("quantity") or 0)
+        unit = float(it.get("unit_value") or 0)
+        value = qty * unit
+        grand_total_value += value
+        grand_total_count += qty
+        d = it.get("department") or "(boş)"
+        if d not in by_dept:
+            by_dept[d] = {"department": d, "items": 0, "quantity": 0, "value": 0.0}
+        by_dept[d]["items"] += 1
+        by_dept[d]["quantity"] += qty
+        by_dept[d]["value"] += value
+        c = it.get("category") or "(boş)"
+        if c not in by_cat:
+            by_cat[c] = {"category": c, "items": 0, "quantity": 0, "value": 0.0}
+        by_cat[c]["items"] += 1
+        by_cat[c]["quantity"] += qty
+        by_cat[c]["value"] += value
+        s = it.get("status") or "Aktiv"
+        by_status[s] = by_status.get(s, 0) + 1
+    return {
+        "totals": {
+            "items": len(items),
+            "quantity": grand_total_count,
+            "value": round(grand_total_value, 2),
+        },
+        "by_department": sorted(by_dept.values(), key=lambda x: x["value"], reverse=True),
+        "by_category": sorted(by_cat.values(), key=lambda x: x["value"], reverse=True),
+        "by_status": [{"status": k, "count": v} for k, v in by_status.items()],
+    }
+
+
+
 @api_router.get("/finance/expenses")
 async def get_expenses(current_user: dict = Depends(get_current_user)):
     expenses = await db.expenses.find({}, {"_id": 0}).to_list(1000)
