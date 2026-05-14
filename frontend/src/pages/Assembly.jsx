@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import {
   Plus, Search, Loader2, Pencil, Trash2, X, Download,
-  Eye, Users2, Target, ListChecks, ClipboardList, Calendar as CalendarIcon
+  Eye, Users2, Target, ListChecks, ClipboardList, Calendar as CalendarIcon, FileDown
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -15,6 +15,9 @@ import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { usePermissions, canEdit } from '../context/PermissionContext';
+import { formatDate } from '../lib/dateUtils';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -352,6 +355,115 @@ export default function Assembly() {
     } catch { toast.error('Xəta baş verdi'); }
   };
 
+  // Per-assembly PDF — a structured protocol with header info + every agenda
+  // + its tasks/discussion topics/decisions in a nested layout. Each section
+  // breaks naturally across pages (autoTable handles pagination).
+  const exportAssemblyPdf = (a) => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    // Header (ASCII for jsPDF default font compatibility)
+    doc.setFontSize(18);
+    doc.text('Iclas protokolu', 14, 18);
+    doc.setFontSize(11);
+    doc.setTextColor(120);
+    doc.text(`Kod: ${a.assembly_code || a.id || '-'}    |    Cap tarixi: ${formatDate(new Date().toISOString())}`, 14, 25);
+    doc.setDrawColor(220);
+    doc.line(14, 28, 196, 28);
+
+    // Top metadata 2-col table
+    const persons = (() => {
+      const set = new Set([
+        ...(a.responsible_persons || []),
+        ...(a.attendees || []),
+        ...((a.general_tasks || []).flatMap(t => [...(t.responsible_persons || []), ...(t.assignees || [])])),
+        ...((a.agendas || []).flatMap(ag => (ag.tasks || []).flatMap(t => [...(t.responsible_persons || []), ...(t.assignees || [])]))),
+      ].filter(Boolean));
+      return Array.from(set);
+    })();
+    autoTable(doc, {
+      startY: 32,
+      head: [['Sahə', 'Dəyər']],
+      body: [
+        ['Aparıcı Şöbə', a.department || '-'],
+        ['Məqsəd', a.purpose || '-'],
+        ['İclas tarixi', formatDate(a.deadline) || '-'],
+        ['Növbəti iclas', formatDate(a.next_assembly_date) || '-'],
+        ['İştirakçılar', persons.length ? persons.join(', ') : '-'],
+      ],
+      styles: { fontSize: 9, cellPadding: 2.5, textColor: [61, 79, 111] },
+      headStyles: { fillColor: [61, 79, 111], textColor: 255, fontStyle: 'bold' },
+      columnStyles: { 0: { cellWidth: 45, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
+    });
+
+    // Agendas (gündəlik) — each in its own table
+    (a.agendas || []).forEach((ag, idx) => {
+      const yStart = doc.lastAutoTable.finalY + 8;
+      doc.setFontSize(12);
+      doc.setTextColor(61, 79, 111);
+      doc.text(`Gündəlik #${idx + 1}: ${ag.title || '-'}`, 14, yStart);
+      const tasks = (ag.tasks || []).map(t => [
+        t.title || '-',
+        (t.responsible_persons || []).join(', ') || '-',
+        (t.assignees || []).join(', ') || '-',
+        t.deadline ? formatDate(t.deadline) : '-',
+        t.status || '-',
+      ]);
+      if (tasks.length) {
+        autoTable(doc, {
+          startY: yStart + 3,
+          head: [['Tapşırıq', 'Məsul', 'İcraçı', 'Son tarix', 'Status']],
+          body: tasks,
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [154, 205, 50], textColor: [61, 79, 111] },
+        });
+      } else {
+        doc.setFontSize(9);
+        doc.setTextColor(150);
+        doc.text('(tapşırıq yoxdur)', 18, yStart + 6);
+      }
+    });
+
+    // Ümumi tapşırıqlar
+    if ((a.general_tasks || []).length) {
+      const yStart = doc.lastAutoTable.finalY + 8;
+      doc.setFontSize(12);
+      doc.setTextColor(61, 79, 111);
+      doc.text('Ümumi tapşırıqlar', 14, yStart);
+      autoTable(doc, {
+        startY: yStart + 3,
+        head: [['Tapşırıq', 'Məsul', 'İcraçı', 'Son tarix', 'Status']],
+        body: (a.general_tasks || []).map(t => [
+          t.title || '-',
+          (t.responsible_persons || []).join(', ') || '-',
+          (t.assignees || []).join(', ') || '-',
+          t.deadline ? formatDate(t.deadline) : '-',
+          t.status || '-',
+        ]),
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [61, 79, 111], textColor: 255 },
+      });
+    }
+
+    // Müzakirə mövzuları + Qərarlar — text blocks
+    const writeList = (label, items) => {
+      const arr = (items || []).filter(Boolean);
+      if (!arr.length) return;
+      const y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : 60;
+      doc.setFontSize(12); doc.setTextColor(61, 79, 111);
+      doc.text(label, 14, y);
+      doc.setFontSize(10); doc.setTextColor(80);
+      arr.forEach((t, i) => {
+        const lines = doc.splitTextToSize(`${i + 1}. ${t}`, 180);
+        doc.text(lines, 14, y + 6 + i * 6);
+      });
+    };
+    writeList('Müzakirə mövzuları', a.discussion_topics);
+    writeList('Qərarlar', a.decisions);
+
+    const safe = (a.assembly_code || a.id || 'iclas').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40);
+    doc.save(`iclas_${safe}.pdf`);
+    toast.success('PDF yükləndi');
+  };
+
   // Agenda helpers
   const addAgenda = () => setForm(p => ({ ...p, agendas: [...p.agendas, emptyAgenda()] }));
   const removeAgenda = (idx) => setForm(p => ({ ...p, agendas: p.agendas.filter((_, i) => i !== idx) }));
@@ -534,6 +646,9 @@ export default function Assembly() {
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex justify-end gap-1">
+                        <button onClick={() => exportAssemblyPdf(a)} className="p-1.5 hover:bg-blue-50 rounded-lg" title="PDF" data-testid={`pdf-assembly-${a.id}`}>
+                          <FileDown className="w-3.5 h-3.5 text-blue-500" />
+                        </button>
                         {_canEdit && <button onClick={() => openModal(a)} className="p-1.5 hover:bg-slate-100 rounded-lg" data-testid={`edit-assembly-${a.id}`}><Pencil className="w-3.5 h-3.5 text-slate-400" /></button>}
                         {_canEdit && <button onClick={() => handleDelete(a.id)} className="p-1.5 hover:bg-red-50 rounded-lg" data-testid={`delete-assembly-${a.id}`}><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>}
                       </div>
