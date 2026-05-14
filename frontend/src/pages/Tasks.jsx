@@ -53,6 +53,8 @@ const getStatusIcon = (status) => {
 
 export default function Tasks() {
   const [tasks, setTasks] = useState([]);
+  const [archivedTasks, setArchivedTasks] = useState([]);
+  const [showArchive, setShowArchive] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [users, setUsers] = useState([]);
   const [options, setOptions] = useState({ departments: [], projects: [] });
@@ -99,6 +101,26 @@ export default function Tasks() {
   }, [filters]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const fetchArchive = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/tasks/archive`, { headers });
+      setArchivedTasks(res.data || []);
+    } catch (_e) { toast.error('Arxiv yüklənmədi'); }
+  }, []);
+
+  useEffect(() => { if (showArchive) fetchArchive(); }, [showArchive, fetchArchive]);
+
+  const restoreArchivedTask = async (archiveId) => {
+    try {
+      await axios.post(`${API}/tasks/archive/${archiveId}/restore`, {}, { headers });
+      toast.success('Tapşırıq bərpa olundu');
+      setArchivedTasks(prev => prev.filter(t => t.archive_id !== archiveId));
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Bərpa olunmadı');
+    }
+  };
 
   const employeeNames = [...new Set([
     ...users.filter(u => (u.status || 'Aktiv') === 'Aktiv' && u.name).map(u => u.name),
@@ -210,6 +232,11 @@ export default function Tasks() {
             <Filter className="w-4 h-4 mr-1" />Filtr
             {activeFilterCount > 0 && <Badge className="ml-1 bg-[#9ACD32] text-[#3D4F6F] text-xs">{activeFilterCount}</Badge>}
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowArchive(v => !v)}
+            className={showArchive ? 'border-amber-400 bg-amber-50 text-amber-700' : ''} data-testid="toggle-archive-btn">
+            <Trash2 className="w-4 h-4 mr-1" />{showArchive ? 'Arxivi bağla' : 'Arxiv'}
+            {archivedTasks.length > 0 && !showArchive && <Badge className="ml-1 bg-amber-100 text-amber-700 text-xs">{archivedTasks.length}</Badge>}
+          </Button>
           {_canEdit && <Button onClick={() => { setFormData(initialFormData); setEditingTask(null); setShowModal(true); }}
             className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold text-xs sm:text-sm" data-testid="add-task-btn">
             <Plus className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Tapşırıq əlavə et</span>
@@ -239,6 +266,57 @@ export default function Tasks() {
               </SelectContent>
             </Select>
           </div>
+        </div>
+      )}
+
+      {/* Archive panel */}
+      {showArchive && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4" data-testid="task-archive-panel">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-amber-800 text-sm">Arxivlənmiş tapşırıqlar ({archivedTasks.length})</h3>
+            <Button variant="ghost" size="sm" onClick={() => setShowArchive(false)} className="h-6 text-amber-700">Bağla</Button>
+          </div>
+          {archivedTasks.length === 0 ? (
+            <p className="text-xs text-amber-700">Arxivdə tapşırıq yoxdur.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-amber-200">
+                    <th className="text-left px-2 py-1.5 text-amber-800">Tapşırıq</th>
+                    <th className="text-left px-2 py-1.5 text-amber-800">İcraçı</th>
+                    <th className="text-left px-2 py-1.5 text-amber-800">Yaradıcı</th>
+                    <th className="text-left px-2 py-1.5 text-amber-800">Arxiv tarixi</th>
+                    <th className="text-left px-2 py-1.5 text-amber-800">Arxivləyən</th>
+                    <th className="text-right px-2 py-1.5 text-amber-800">Əməliyyat</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {archivedTasks.map(t => (
+                    <tr key={t.archive_id} className="border-b border-amber-100 hover:bg-amber-100/50" data-testid={`archive-row-${t.archive_id}`}>
+                      <td className="px-2 py-1.5 font-medium text-slate-800">
+                        {t.task_code && <span className="font-mono text-[10px] text-slate-400 mr-1">{t.task_code}</span>}
+                        {t.task_name}
+                      </td>
+                      <td className="px-2 py-1.5 text-slate-600">{t.assignee || '-'}</td>
+                      <td className="px-2 py-1.5 text-slate-600">{t.created_by || '-'}</td>
+                      <td className="px-2 py-1.5 text-slate-600">{formatDate(t.archived_at)}</td>
+                      <td className="px-2 py-1.5 text-slate-600">{t.archived_by || '-'}</td>
+                      <td className="px-2 py-1.5 text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => restoreArchivedTask(t.archive_id)}
+                          className="h-6 text-xs text-emerald-700 hover:bg-emerald-50"
+                          data-testid={`restore-task-${t.archive_id}`}
+                        >Bərpa et</Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

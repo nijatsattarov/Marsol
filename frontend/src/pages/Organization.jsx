@@ -24,7 +24,9 @@ const EVENT_STATUSES = ['Planlaşdırılır', 'Aktiv', 'Tamamlandı', 'Ləğv ed
 const emptyEvent = {
   name: '', event_type: '', date: '', time: '', venue: '', location_link: '',
   participant_limit: 20, host_company_id: '', host_company_name: '',
-  status: 'Planlaşdırılır', notes: ''
+  status: 'Planlaşdırılır', notes: '',
+  venue_photos: [],          // array of {url, filename}
+  venue_video_links: [],     // array of strings (YouTube / Vimeo URLs)
 };
 
 function formatWhatsAppLink(phone, event, ownerName) {
@@ -610,6 +612,81 @@ export default function Organization() {
                 className="text-sm"
                 data-testid="event-location-link"
               />
+            </div>
+
+            {/* Venue photos — file upload only (no URL pasting) */}
+            <div className="border border-slate-200 rounded-md p-2 bg-slate-50">
+              <Label className="text-xs font-medium flex items-center gap-1 mb-1.5">Məkan şəkilləri (fayl)</Label>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={async (e) => {
+                  const files = Array.from(e.target.files || []);
+                  e.target.value = '';
+                  if (!files.length) return;
+                  const token = localStorage.getItem('token');
+                  const uploaded = [];
+                  for (const f of files) {
+                    try {
+                      const fd = new FormData();
+                      fd.append('file', f);
+                      const r = await axios.post(`${API}/upload`, fd, { headers: { Authorization: `Bearer ${token}` } });
+                      uploaded.push({ url: r.data.url, filename: r.data.filename });
+                    } catch (_err) { toast.error(`${f.name} yüklənmədi`); }
+                  }
+                  if (uploaded.length) {
+                    setForm(prev => ({ ...prev, venue_photos: [...(prev.venue_photos || []), ...uploaded] }));
+                    toast.success(`${uploaded.length} şəkil yükləndi`);
+                  }
+                }}
+                className="text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-[#3D4F6F] file:text-white"
+                data-testid="venue-photo-upload"
+              />
+              {(form.venue_photos || []).length > 0 && (
+                <div className="grid grid-cols-4 gap-1 mt-2">
+                  {form.venue_photos.map((p, i) => (
+                    <div key={i} className="relative group">
+                      <img src={p.url} alt={p.filename || ''} className="w-full h-16 object-cover rounded border" />
+                      <button
+                        type="button"
+                        onClick={() => setForm(prev => ({ ...prev, venue_photos: prev.venue_photos.filter((_, idx) => idx !== i) }))}
+                        className="absolute top-0.5 right-0.5 bg-white/90 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] shadow"
+                        aria-label="Sil"
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Venue videos — links only (YouTube/Vimeo etc.) */}
+            <div className="border border-slate-200 rounded-md p-2 bg-slate-50">
+              <Label className="text-xs font-medium flex items-center gap-1 mb-1.5">Məkan videoları (link)</Label>
+              {(form.venue_video_links || []).map((v, i) => (
+                <div key={i} className="flex gap-1 mb-1">
+                  <Input
+                    value={v}
+                    onChange={(e) => setForm(prev => ({
+                      ...prev,
+                      venue_video_links: prev.venue_video_links.map((x, idx) => idx === i ? e.target.value : x)
+                    }))}
+                    placeholder="https://youtube.com/watch?v=..."
+                    className="text-xs h-7"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setForm(prev => ({ ...prev, venue_video_links: prev.venue_video_links.filter((_, idx) => idx !== i) }))}
+                    className="text-red-500 hover:text-red-700 px-1 text-xs"
+                  >×</button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setForm(prev => ({ ...prev, venue_video_links: [...(prev.venue_video_links || []), ''] }))}
+                className="text-xs text-[#3D4F6F] hover:underline mt-1"
+                data-testid="add-video-link-btn"
+              >+ Video linki əlavə et</button>
             </div>
             {form.event_type === 'Ofis ziyarəti' && (
               <div>

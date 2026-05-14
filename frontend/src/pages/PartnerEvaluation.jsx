@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { Loader2, Trophy, RefreshCw, Edit3 } from 'lucide-react';
+import { Loader2, Trophy, RefreshCw, Edit3, Search, ArrowUpDown } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Toaster, toast } from 'sonner';
 
@@ -20,6 +21,39 @@ export default function PartnerEvaluation() {
   const [bonus, setBonus] = useState(0);
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [tierFilter, setTierFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('total');     // 'name' | 'tier' | 'payment' | 'event' | 'other_projects' | 'meetings' | 'manual' | 'total'
+  const [sortDir, setSortDir] = useState('desc');    // 'asc' | 'desc'
+
+  // Compute the displayed list — filter then sort.
+  const displayed = (() => {
+    const term = search.trim().toLowerCase();
+    let list = items.filter(i => {
+      if (tierFilter !== 'all' && i.tier !== tierFilter) return false;
+      if (!term) return true;
+      return (i.brand_name || '').toLowerCase().includes(term)
+          || (i.display_id || '').toLowerCase().includes(term);
+    });
+    const get = (it) => {
+      switch (sortBy) {
+        case 'name': return (it.brand_name || '').toLowerCase();
+        case 'tier': return ({ Platinum: 4, 'Qızıl': 3, 'Gümüş': 2, Standart: 1 }[it.tier] || 0);
+        case 'payment': return it.scores?.payment || 0;
+        case 'event': return it.scores?.event || 0;
+        case 'other_projects': return it.scores?.other_projects || 0;
+        case 'meetings': return it.scores?.meetings || 0;
+        case 'manual': return it.scores?.manual || 0;
+        default: return it.total || 0;
+      }
+    };
+    list = [...list].sort((a, b) => {
+      const av = get(a); const bv = get(b);
+      if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortDir === 'asc' ? av - bv : bv - av;
+    });
+    return list;
+  })();
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -51,6 +85,58 @@ export default function PartnerEvaluation() {
         <Button variant="outline" size="sm" onClick={fetch} disabled={loading}><RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> Yenilə</Button>
       </div>
 
+      {/* Search + filter bar */}
+      <div className="bg-white rounded-xl border border-slate-100 p-3 mb-3 flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-slate-400" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Şirkət adı və ya ID üzrə axtarış..."
+            className="pl-8 h-9 text-sm"
+            data-testid="eval-search-input"
+          />
+        </div>
+        <div className="w-36">
+          <Select value={tierFilter} onValueChange={setTierFilter}>
+            <SelectTrigger className="h-9 text-xs" data-testid="eval-tier-filter"><SelectValue placeholder="Səviyyə" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Bütün səviyyələr</SelectItem>
+              <SelectItem value="Platinum">Platinum</SelectItem>
+              <SelectItem value="Qızıl">Qızıl</SelectItem>
+              <SelectItem value="Gümüş">Gümüş</SelectItem>
+              <SelectItem value="Standart">Standart</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-40">
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="h-9 text-xs" data-testid="eval-sort-by"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Ad (A-Z)</SelectItem>
+              <SelectItem value="tier">Səviyyə</SelectItem>
+              <SelectItem value="payment">Ödəniş balı</SelectItem>
+              <SelectItem value="event">Tədbir balı</SelectItem>
+              <SelectItem value="other_projects">Layihə balı</SelectItem>
+              <SelectItem value="meetings">Görüş balı</SelectItem>
+              <SelectItem value="manual">Əlavə bal</SelectItem>
+              <SelectItem value="total">Cəm bal</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+          className="h-9 text-xs"
+          data-testid="eval-sort-dir"
+          title={sortDir === 'asc' ? 'Azdan çoxa' : 'Çoxdan aza'}
+        >
+          <ArrowUpDown className="w-3.5 h-3.5 mr-1" />{sortDir === 'asc' ? 'Azdan çoxa' : 'Çoxdan aza'}
+        </Button>
+        <span className="text-[11px] text-slate-500 ml-auto">{displayed.length} / {items.length}</span>
+      </div>
+
       {loading ? <Loader2 className="w-8 h-8 animate-spin text-[#3D4F6F] mx-auto mt-12" /> : (
         <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
           <table className="w-full text-sm">
@@ -69,9 +155,9 @@ export default function PartnerEvaluation() {
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 ? (
-                <tr><td colSpan={10} className="text-center py-12 text-slate-400 text-sm">Aktiv üzv şirkət yoxdur</td></tr>
-              ) : items.map((it) => (
+              {displayed.length === 0 ? (
+                <tr><td colSpan={10} className="text-center py-12 text-slate-400 text-sm">{items.length === 0 ? 'Aktiv üzv şirkət yoxdur' : 'Filtrə uyğun nəticə yoxdur'}</td></tr>
+              ) : displayed.map((it) => (
                 <tr key={it.company_id} className="border-b border-slate-50 hover:bg-slate-50/40" data-testid={`eval-row-${it.company_id}`}>
                   <td className="text-center font-mono text-xs text-slate-500" data-testid={`eval-id-${it.company_id}`}>{it.display_id || '-'}</td>
                   <td className="px-3 py-2 font-medium text-[#3D4F6F]">{it.brand_name}</td>

@@ -429,7 +429,7 @@ async def login(user_data: UserLogin):
     # Block inactive / suspended users from logging in
     user_status = (user.get("status") or "Aktiv").strip()
     if user_status and user_status.lower() not in ("aktiv", "active"):
-        raise HTTPException(status_code=403, detail="Hesabınız deaktiv edilib. Tənzimləmələrlə əlaqə saxlayın.")
+        raise HTTPException(status_code=403, detail="Sizin hesab deaktiv edilmişdir")
     
     access_token = create_access_token({"sub": user["id"]})
     user_dict = {"id": user["id"], "email": user["email"], "name": user["name"], "role": user["role"]}
