@@ -9,6 +9,7 @@ import { Label } from '../../components/ui/label';
 import { Badge } from '../../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../../context/PermissionContext';
+import { PhotoUploadField, SocialLinksField, PhotoUploadDisplay, SocialLinksDisplay } from '../../components/MediaFields';
 import * as XLSX from 'xlsx';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -52,6 +53,10 @@ function FieldInput({ field, value, onChange }) {
       );
     case 'photolinks':
       return <textarea value={value || ''} onChange={e => onChange(e.target.value)} className="w-full min-h-[60px] p-2 text-xs font-mono border rounded-lg resize-none" placeholder="https://...&#10;https://..." />;
+    case 'photoupload':
+      return <PhotoUploadField value={value} onChange={onChange} multiple={true} />;
+    case 'sociallinks':
+      return <SocialLinksField value={value} onChange={onChange} />;
     case 'url':
     case 'phone':
     case 'text':
@@ -62,6 +67,8 @@ function FieldInput({ field, value, onChange }) {
 
 function renderCellValue(field, value) {
   if (value === null || value === undefined || value === '') return <span className="text-slate-300">—</span>;
+  if (field.type === 'photoupload') return <PhotoUploadDisplay value={value} />;
+  if (field.type === 'sociallinks') return <SocialLinksDisplay value={value} />;
   if (field.type === 'boolean') return value ? <Check className="w-4 h-4 text-green-500" /> : <X className="w-4 h-4 text-red-400" />;
   if (field.type === 'multiselect' && Array.isArray(value)) return <div className="flex flex-wrap gap-1">{value.slice(0, 3).map(v => <Badge key={v} className="bg-slate-100 text-slate-600 text-[10px]">{v}</Badge>)}{value.length > 3 && <span className="text-[10px] text-slate-400">+{value.length - 3}</span>}</div>;
   if (field.type === 'url' && typeof value === 'string' && value.startsWith('http')) return <a href={value} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline inline-flex items-center gap-1 text-xs"><ExternalLink className="w-3 h-3" />Keçid</a>;
@@ -76,6 +83,17 @@ function normalizeForSubmit(form, fields) {
     let v = form[f.key];
     if (f.type === 'number' && v === '') v = null;
     if (f.type === 'multiselect' && !Array.isArray(v)) v = [];
+    if (f.type === 'photoupload') {
+      if (!Array.isArray(v)) {
+        v = typeof v === 'string' && v.trim()
+          ? v.split('\n').map(s => s.trim()).filter(Boolean)
+          : [];
+      }
+    }
+    if (f.type === 'sociallinks') {
+      if (!Array.isArray(v)) v = [];
+      v = v.filter(l => l && typeof l === 'object' && (l.url || '').trim());
+    }
     out[f.key] = v;
   }
   return out;
@@ -104,7 +122,9 @@ export default function VendorModule({ config }) {
   const emptyForm = useMemo(() => {
     const o = {};
     config.fields.forEach(f => {
-      o[f.key] = f.type === 'multiselect' ? [] : (f.type === 'boolean' ? null : '');
+      if (f.type === 'multiselect' || f.type === 'photoupload' || f.type === 'sociallinks') o[f.key] = [];
+      else if (f.type === 'boolean') o[f.key] = null;
+      else o[f.key] = '';
     });
     return o;
   }, [config.fields]);
@@ -261,7 +281,7 @@ export default function VendorModule({ config }) {
                 <p className="text-[10px] font-bold text-[#3D4F6F] uppercase tracking-wider mb-2">{group}</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {fields.map(f => (
-                    <div key={f.key} className={f.type === 'textarea' || f.type === 'photolinks' || f.type === 'multiselect' ? 'md:col-span-2' : ''}>
+                    <div key={f.key} className={f.type === 'textarea' || f.type === 'photolinks' || f.type === 'photoupload' || f.type === 'sociallinks' || f.type === 'multiselect' ? 'md:col-span-2' : ''}>
                       <Label className="text-xs">{f.label}{f.required ? ' *' : ''}</Label>
                       <FieldInput field={f} value={form[f.key]} onChange={v => setForm({ ...form, [f.key]: v })} />
                     </div>

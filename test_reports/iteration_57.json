@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 57 — Media upload + per-platform social links + Settings CRUD for social-platforms. Backend pytest 9/9 PASSED. Frontend Playwright smoke 100% — all required data-testids resolve and full venue flow renders correctly. Verified: GET /api/settings/social-platforms seeds 9 defaults (Facebook, Instagram, LinkedIn, Twitter / X, TikTok, YouTube, WhatsApp, Telegram, Website); POST creates with name+icon, duplicate name → 400, empty/whitespace name → 400; PUT updates name+icon; DELETE works (second DELETE → 404). Venue POST/PUT with photos as ARRAY of Cloudinary URLs persists & GET returns the array verbatim; social_links as ARRAY of {platform,url} objects persists round-trip identically; legacy multiline-string photos still load (backend returns as-is, frontend MediaFields normalizes). /api/upload accepts multipart PNG and returns Cloudinary url+public_id. Frontend: Settings sidebar exposes tab-social-platforms which renders SocialPlatformsPanel with 9 seeded sp-edit-* rows; creating a 10th via sp-name-input + sp-icon-input + sp-submit-btn increments to 10. Venues page → 'Yeni' opens modal containing photo-upload-field + photo-upload-input + social-links-field + social-add-btn; clicking social-add-btn injects social-platform-0 + social-url-0 + social-remove-0; Platform Select dropdown lists all 9 seeded platforms and Instagram selection persists into the row; 'Video / virtual tur linki' remains a plain text input (NOT photo upload).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Venue create modal (all org Dialogs)", "issues": ["Carryover: Radix Dialog 'Missing Description or aria-describedby={undefined}' console warning. Cosmetic only."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration57_media_upload_social_platforms.py",
+    "/app/test_reports/pytest/iteration_57_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Add aria-describedby / DialogDescription to vendor-create DialogContent to clear Radix a11y warning."
+  ],
+  "critical_code_review_comments": [
+    "PhotoUploadField correctly normalizes legacy multiline-string `value` into an array client-side — no data migration required for old org_* docs.",
+    "SocialLinksField gracefully handles 3 shapes: array of {platform,url}, array of plain strings (mapped to {platform:'',url:string}), and legacy newline-string. Robust.",
+    "Backend create_org_vendor / update_org_vendor blindly accept `data: dict` — no schema validation on photos/social_links shapes. Acceptable trade-off given dynamic per-module schemas, but any future XSS via stored URL must be sanitized on render (currently <img src> rendered with onError fallback only — fine for trusted Cloudinary URLs).",
+    "/api/settings/social-platforms PUT enforces no duplicate-name check (unlike POST) — renaming a platform to an existing name would succeed and create silent duplicates. Low-priority but inconsistent with POST.",
+    "PUT /api/settings/social-platforms/{id} requires at least one field via 400 if update dict empty — good.",
+    "Duplicate-name match is case-sensitive ({'name': name} exact). 'facebook' vs 'Facebook' would both insert. Minor.",
+    "PhotoUploadField uploads files sequentially in a for-loop (not parallel) — fine for typical 1-5 image uploads; consider Promise.all if users upload >10 at once.",
+    "DELETE /api/settings/social-platforms/{id} does NOT scrub the platform name from existing org_* `social_links` rows. A deleted platform name would persist as orphan text in vendor records (UI Select shows blank). Acceptable for MVP but document the behavior."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration57_media_upload_social_platforms.py (new, 9 tests across 3 classes)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (all 8 critical testids resolve, full create flow works)"},
+  "test_credentials": "Admin settings@marsol.az / marsol123 (login response field = access_token)",
+  "seed_data_creation": "Created and cleaned up TEST_-prefixed rows: TEST_SP_Mastodon, TEST_SP_Threads/Threads2, TEST_SP_Bluesky (social-platforms); TEST_Venue_Array1, TEST_Venue_Legacy1, TEST_Venue_Update1 (org_venues); TEST_SP_FE_Mastodon (frontend smoke, cleaned post-test via API). Verified residual = 0 TEST_ social-platforms / venues; 9 defaults preserved.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter57 covers media-upload + social-links + social-platforms CRUD. Other vendor modules (catering, decor, musicians, photovideo, transport, materials) ALL share VendorModule.jsx + configs.js — venue smoke covers them. PhotoUploadField & SocialLinksField are exported from /app/frontend/src/components/MediaFields.jsx. Backend vendor CRUD is generic-passthrough (any JSON-serializable shape persists). /api/upload returns Cloudinary {url, filename, stored_name, public_id, resource_type}. Tests in /app/backend/tests/test_iteration57_media_upload_social_platforms.py — runnable via `pytest -v --junitxml=...`.",
+  "rca of the issue": "N/A — feature spec fully implemented and verified end-to-end."
+}

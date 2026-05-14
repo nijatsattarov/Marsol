@@ -1918,6 +1918,74 @@ async def get_expenses(current_user: dict = Depends(get_current_user)):
     expenses = await db.expenses.find({}, {"_id": 0}).to_list(1000)
     return expenses
 
+
+# ---------- Settings: Social Media Platforms registry ----------
+DEFAULT_SOCIAL_PLATFORMS = [
+    {"name": "Facebook", "icon": "facebook"},
+    {"name": "Instagram", "icon": "instagram"},
+    {"name": "LinkedIn", "icon": "linkedin"},
+    {"name": "Twitter / X", "icon": "twitter"},
+    {"name": "TikTok", "icon": "tiktok"},
+    {"name": "YouTube", "icon": "youtube"},
+    {"name": "WhatsApp", "icon": "message-circle"},
+    {"name": "Telegram", "icon": "send"},
+    {"name": "Website", "icon": "globe"},
+]
+
+
+@api_router.get("/settings/social-platforms")
+async def list_social_platforms(current_user: dict = Depends(get_current_user)):
+    items = await db.social_platforms.find({}, {"_id": 0}).sort("name", 1).to_list(200)
+    if not items:
+        seeded = []
+        for d in DEFAULT_SOCIAL_PLATFORMS:
+            doc = {"id": str(uuid.uuid4()), "name": d["name"], "icon": d["icon"]}
+            await db.social_platforms.insert_one(doc)
+            doc.pop("_id", None)
+            seeded.append(doc)
+        return seeded
+    return items
+
+
+@api_router.post("/settings/social-platforms")
+async def create_social_platform(data: dict, current_user: dict = Depends(get_current_user)):
+    name = (data.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Ad boş ola bilməz")
+    icon = (data.get("icon") or "globe").strip().lower()[:32]
+    if await db.social_platforms.find_one({"name": name}):
+        raise HTTPException(status_code=400, detail="Bu ad artıq mövcuddur")
+    doc = {"id": str(uuid.uuid4()), "name": name, "icon": icon}
+    await db.social_platforms.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.put("/settings/social-platforms/{item_id}")
+async def update_social_platform(item_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    update: Dict[str, Any] = {}
+    if "name" in data:
+        n = (data.get("name") or "").strip()
+        if not n:
+            raise HTTPException(status_code=400, detail="Ad boş ola bilməz")
+        update["name"] = n
+    if "icon" in data:
+        update["icon"] = (data.get("icon") or "globe").strip().lower()[:32]
+    if not update:
+        raise HTTPException(status_code=400, detail="Yenilənəcək məlumat yoxdur")
+    result = await db.social_platforms.update_one({"id": item_id}, {"$set": update})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Tapılmadı")
+    return await db.social_platforms.find_one({"id": item_id}, {"_id": 0})
+
+
+@api_router.delete("/settings/social-platforms/{item_id}")
+async def delete_social_platform(item_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.social_platforms.delete_one({"id": item_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Tapılmadı")
+    return {"message": "Silindi"}
+
 @api_router.post("/finance/expenses")
 async def create_expense(expense_data: ExpenseCreate, current_user: dict = Depends(check_permission("finance", "write"))):
     expense_id = str(uuid.uuid4())

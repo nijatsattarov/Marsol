@@ -1,6 +1,6 @@
 // Field configurations for each organization sub-module
-// Field types: text, textarea, number, select, multiselect, boolean, url, phone, photolinks
-// photolinks = multiline text where each line is a URL
+// Field types: text, textarea, number, select, multiselect, boolean, url, phone,
+//   photoupload (multi-image upload to Cloudinary), sociallinks (per-platform URL pairs)
 
 const ratingLine = { key: 'overall_rating', label: 'Ümumi qiymətləndirmə (1-5)', type: 'number', min: 0, max: 5, step: 0.1, group: 'Rating' };
 
@@ -19,7 +19,7 @@ export const VENUE_CONFIG = {
     { key: 'contact_position', label: 'Vəzifəsi', type: 'text', group: 'Əlaqə' },
     { key: 'phone', label: 'Telefon', type: 'phone', group: 'Əlaqə' },
     { key: 'whatsapp', label: 'WhatsApp', type: 'phone', group: 'Əlaqə' },
-    { key: 'social_links', label: 'Sosial media (hər sətirdə bir link)', type: 'photolinks', group: 'Əlaqə' },
+    { key: 'social_links', label: 'Sosial media linkləri', type: 'sociallinks', group: 'Əlaqə' },
     { key: 'min_capacity', label: 'Min qonaq sayı', type: 'number', group: 'Tutum' },
     { key: 'max_capacity', label: 'Maks qonaq sayı', type: 'number', group: 'Tutum' },
     { key: 'hall_count', label: 'Zal sayı', type: 'number', group: 'Tutum' },
@@ -37,7 +37,7 @@ export const VENUE_CONFIG = {
     { key: 'price_min', label: 'Qiymət (min, AZN)', type: 'number', group: 'Şərtlər' },
     { key: 'price_max', label: 'Qiymət (maks, AZN)', type: 'number', group: 'Şərtlər' },
     { key: 'discount_available', label: 'Endirim imkanı', type: 'text', group: 'Şərtlər' },
-    { key: 'photos', label: 'Şəkil linkləri', type: 'photolinks', group: 'Media' },
+    { key: 'photos', label: 'Şəkillər', type: 'photoupload', group: 'Media' },
     { key: 'virtual_tour', label: 'Video / virtual tur linki', type: 'url', group: 'Media' },
     { key: 'notes', label: 'Qeyd', type: 'textarea', group: 'Digər' },
   ]
@@ -62,7 +62,7 @@ export const CATERING_CONFIG = {
     { key: 'phone', label: 'Telefon', type: 'phone', group: 'Əlaqə' },
     { key: 'tasting_done', label: 'Dadım testi edilib', type: 'boolean', group: 'Qiymətləndirmə' },
     { key: 'used_previously', label: 'Əvvəlki tədbirlərdə istifadə olunub', type: 'boolean', group: 'Qiymətləndirmə' },
-    { key: 'photos', label: 'Təqdimat şəkilləri (linklər)', type: 'photolinks', group: 'Media' },
+    { key: 'photos', label: 'Təqdimat şəkilləri', type: 'photoupload', group: 'Media' },
     { key: 'notes', label: 'Qeyd', type: 'textarea', group: 'Digər' },
   ]
 };
@@ -84,7 +84,7 @@ export const DECOR_CONFIG = {
     { key: 'phone', label: 'Telefon', type: 'phone', group: 'Əlaqə' },
     { key: 'quality_note', label: 'İş keyfiyyəti qeydi', type: 'textarea', group: 'Qiymətləndirmə' },
     { key: 'timely_delivery', label: 'Vaxtında təhvil performansı', type: 'select', options: ['Əla', 'Yaxşı', 'Orta', 'Zəif'], group: 'Qiymətləndirmə' },
-    { key: 'photos', label: 'Nümunə iş linkləri', type: 'photolinks', group: 'Media' },
+    { key: 'photos', label: 'Nümunə işlər (şəkillər)', type: 'photoupload', group: 'Media' },
     { key: 'notes', label: 'Qeyd', type: 'textarea', group: 'Digər' },
   ]
 };
@@ -105,7 +105,7 @@ export const MUSICIANS_CONFIG = {
     { key: 'technical_requirements', label: 'Texniki tələblər', type: 'textarea', group: 'Texniki' },
     { key: 'has_own_equipment', label: 'Öz avadanlığı var', type: 'boolean', group: 'Texniki' },
     { key: 'video_link', label: 'Video link', type: 'url', group: 'Media' },
-    { key: 'photos', label: 'Foto linkləri', type: 'photolinks', group: 'Media' },
+    { key: 'photos', label: 'Foto / şəkillər', type: 'photoupload', group: 'Media' },
     { key: 'contact_name', label: 'Əlaqə şəxsi', type: 'text', group: 'Əlaqə' },
     { key: 'phone', label: 'Telefon', type: 'phone', group: 'Əlaqə' },
     { key: 'discipline_score', label: 'Dəqiqlik / intizam balı (1-5)', type: 'number', min: 0, max: 5, step: 0.1, group: 'Qiymətləndirmə' },
@@ -166,7 +166,7 @@ export const MATERIALS_CONFIG = {
     { key: 'production_days', label: 'Hazırlanma müddəti (gün)', type: 'number', group: 'Şərtlər' },
     { key: 'design_required', label: 'Dizayn tələbi', type: 'boolean', group: 'Şərtlər' },
     { key: 'phone', label: 'Telefon', type: 'phone', group: 'Əlaqə' },
-    { key: 'samples', label: 'Nümunə linkləri', type: 'photolinks', group: 'Media' },
+    { key: 'samples', label: 'Nümunə şəkilləri', type: 'photoupload', group: 'Media' },
     { key: 'notes', label: 'Qeyd', type: 'textarea', group: 'Digər' },
   ]
 };

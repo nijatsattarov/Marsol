@@ -4,7 +4,7 @@ import {
   Settings as SettingsIcon, Package, FolderKanban, Users, Columns3,
   Plus, Pencil, Trash2, Loader2, Shield, Eye, EyeOff, UserCog, User,
   ChevronDown, Search, X, Building2, Layers, Briefcase, Activity, Building,
-  Calendar, Target, TrendingUp, Image as ImageIcon, Upload, ListChecks, List, MessageSquare
+  Calendar, Target, TrendingUp, Image as ImageIcon, Upload, ListChecks, List, MessageSquare, Globe
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -17,6 +17,7 @@ import { Toaster, toast } from 'sonner';
 import PackageServicesManager from '../components/PackageServicesManager';
 import ManageableListsPanel from '../components/ManageableListsPanel';
 import { DepreciableAssetsPanel, InventoryCategoriesPanel } from '../components/InventorySettingsPanels';
+import SocialPlatformsPanel from '../components/SocialPlatformsPanel';
 import SmsPanel from '../components/SmsPanel';
 import { usePermissions, canView } from '../context/PermissionContext';
 
@@ -542,6 +543,7 @@ export default function Settings() {
               { label: 'Maliyyə & İnventar', items: [
                 { value: 'depreciable-assets', icon: TrendingUp, label: 'Amortizasiya olunan aktivlər' },
                 { value: 'inventory-categories', icon: Package, label: 'İnventar kateqoriyaları' },
+                { value: 'social-platforms', icon: Globe, label: 'Sosial media platformları' },
               ]},
               { label: 'Klassifikasiya', items: [
                 { value: 'lists', icon: List, label: 'Siyahılar' },
@@ -909,6 +911,11 @@ export default function Settings() {
         {/* ========= INVENTORY CATEGORIES TAB ========= */}
         <TabsContent value="inventory-categories">
           <InventoryCategoriesPanel headers={headers} />
+        </TabsContent>
+
+        {/* ========= SOCIAL PLATFORMS TAB ========= */}
+        <TabsContent value="social-platforms">
+          <SocialPlatformsPanel headers={headers} />
         </TabsContent>
 
         {/* ========= MEETING TYPES TAB ========= */}
