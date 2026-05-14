@@ -15,7 +15,7 @@ import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
-import { jsPDF } from 'jspdf';
+import { createUnicodePdf } from '../lib/pdfHelpers';
 import autoTable from 'jspdf-autotable';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -155,19 +155,16 @@ export default function Meetings() {
 
   const exportToPdf = () => {
     if (filtered.length === 0) { toast.warning('İxrac etmək üçün görüş yoxdur'); return; }
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    // Title block — keep ASCII only since the default jsPDF Helvetica font
-    // doesn't ship the full Azerbaijani glyph set. Diacritics still render
-    // inside table cells via the embedded font fallback.
+    const doc = createUnicodePdf({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     doc.setFontSize(16);
-    doc.text('Gorusler hesabati', 14, 14);
+    doc.text('Görüşlər hesabatı', 14, 14);
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Tarix: ${formatDate(new Date().toISOString())}  |  Sayi: ${filtered.length}`, 14, 20);
+    doc.text(`Tarix: ${formatDate(new Date().toISOString())}  |  Sayı: ${filtered.length}`, 14, 20);
     autoTable(doc, {
       startY: 26,
       head: [[
-        'Tarix', 'Vaxt', 'Sirket', 'Sahə isçisi', 'Görus turu', 'Rejim', 'Yer', 'Status'
+        'Tarix', 'Vaxt', 'Şirkət', 'Sahə işçisi', 'Görüş növü', 'Rejim', 'Yer', 'Status'
       ]],
       body: filtered.map(m => [
         formatDate(m.date),
@@ -179,8 +176,8 @@ export default function Meetings() {
         m.location || '-',
         m.result || '-',
       ]),
-      styles: { fontSize: 8, cellPadding: 2, textColor: [61, 79, 111] },
-      headStyles: { fillColor: [61, 79, 111], textColor: 255, fontStyle: 'bold' },
+      styles: { font: 'Roboto', fontSize: 8, cellPadding: 2, textColor: [61, 79, 111] },
+      headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255, fontStyle: 'normal' },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
         0: { cellWidth: 22 }, 1: { cellWidth: 18 }, 2: { cellWidth: 45 },
@@ -196,15 +193,14 @@ export default function Meetings() {
   // field on its own row). Useful for printing or emailing one meeting's
   // summary as an attachment.
   const exportOneToPdf = (m) => {
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const doc = createUnicodePdf({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     doc.setFontSize(18);
-    doc.text('Gorus protokolu', 14, 18);
+    doc.text('Görüş protokolu', 14, 18);
     doc.setFontSize(10);
     doc.setTextColor(120);
-    doc.text(`ID: ${m.id || '-'}    |    Cap tarixi: ${formatDate(new Date().toISOString())}`, 14, 25);
+    doc.text(`ID: ${m.id || '-'}    |    Çap tarixi: ${formatDate(new Date().toISOString())}`, 14, 25);
     doc.setDrawColor(220);
     doc.line(14, 28, 196, 28);
-    // Body as a 2-column key/value table
     autoTable(doc, {
       startY: 32,
       head: [['Sahə', 'Dəyər']],
@@ -223,11 +219,10 @@ export default function Meetings() {
         ['Növbəti görüş', formatDate(m.next_meeting) || '-'],
         ['Nəticə', m.result || '-'],
       ],
-      styles: { fontSize: 10, cellPadding: 3, textColor: [61, 79, 111] },
-      headStyles: { fillColor: [61, 79, 111], textColor: 255, fontStyle: 'bold' },
-      columnStyles: { 0: { cellWidth: 55, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
+      styles: { font: 'Roboto', fontSize: 10, cellPadding: 3, textColor: [61, 79, 111] },
+      headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255, fontStyle: 'normal' },
+      columnStyles: { 0: { cellWidth: 55 }, 1: { cellWidth: 'auto' } },
     });
-    // Notes (free-form, full width)
     if (m.notes) {
       const y = doc.lastAutoTable.finalY + 8;
       doc.setFontSize(11);

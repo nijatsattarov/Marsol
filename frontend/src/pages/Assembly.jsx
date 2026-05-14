@@ -16,7 +16,7 @@ import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
-import { jsPDF } from 'jspdf';
+import { createUnicodePdf } from '../lib/pdfHelpers';
 import autoTable from 'jspdf-autotable';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -359,17 +359,16 @@ export default function Assembly() {
   // + its tasks/discussion topics/decisions in a nested layout. Each section
   // breaks naturally across pages (autoTable handles pagination).
   const exportAssemblyPdf = (a) => {
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    // Header (ASCII for jsPDF default font compatibility)
+    const doc = createUnicodePdf({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    // Header
     doc.setFontSize(18);
-    doc.text('Iclas protokolu', 14, 18);
+    doc.text('İclas protokolu', 14, 18);
     doc.setFontSize(11);
     doc.setTextColor(120);
-    doc.text(`Kod: ${a.assembly_code || a.id || '-'}    |    Cap tarixi: ${formatDate(new Date().toISOString())}`, 14, 25);
+    doc.text(`Kod: ${a.assembly_code || a.id || '-'}    |    Çap tarixi: ${formatDate(new Date().toISOString())}`, 14, 25);
     doc.setDrawColor(220);
     doc.line(14, 28, 196, 28);
 
-    // Top metadata 2-col table
     const persons = (() => {
       const set = new Set([
         ...(a.responsible_persons || []),
@@ -389,9 +388,9 @@ export default function Assembly() {
         ['Növbəti iclas', formatDate(a.next_assembly_date) || '-'],
         ['İştirakçılar', persons.length ? persons.join(', ') : '-'],
       ],
-      styles: { fontSize: 9, cellPadding: 2.5, textColor: [61, 79, 111] },
-      headStyles: { fillColor: [61, 79, 111], textColor: 255, fontStyle: 'bold' },
-      columnStyles: { 0: { cellWidth: 45, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
+      styles: { font: 'Roboto', fontSize: 9, cellPadding: 2.5, textColor: [61, 79, 111] },
+      headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255, fontStyle: 'normal' },
+      columnStyles: { 0: { cellWidth: 45 }, 1: { cellWidth: 'auto' } },
     });
 
     // Agendas (gündəlik) — each in its own table
@@ -412,8 +411,8 @@ export default function Assembly() {
           startY: yStart + 3,
           head: [['Tapşırıq', 'Məsul', 'İcraçı', 'Son tarix', 'Status']],
           body: tasks,
-          styles: { fontSize: 8, cellPadding: 2 },
-          headStyles: { fillColor: [154, 205, 50], textColor: [61, 79, 111] },
+          styles: { font: 'Roboto', fontSize: 8, cellPadding: 2 },
+          headStyles: { font: 'Roboto', fillColor: [154, 205, 50], textColor: [61, 79, 111] },
         });
       } else {
         doc.setFontSize(9);
@@ -422,7 +421,6 @@ export default function Assembly() {
       }
     });
 
-    // Ümumi tapşırıqlar
     if ((a.general_tasks || []).length) {
       const yStart = doc.lastAutoTable.finalY + 8;
       doc.setFontSize(12);
@@ -438,12 +436,11 @@ export default function Assembly() {
           t.deadline ? formatDate(t.deadline) : '-',
           t.status || '-',
         ]),
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [61, 79, 111], textColor: 255 },
+        styles: { font: 'Roboto', fontSize: 8, cellPadding: 2 },
+        headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255 },
       });
     }
 
-    // Müzakirə mövzuları + Qərarlar — text blocks
     const writeList = (label, items) => {
       const arr = (items || []).filter(Boolean);
       if (!arr.length) return;
