@@ -19,6 +19,10 @@ import { ScrollArea } from '../components/ui/scroll-area';
 import CustomFieldsView from '../components/CustomFieldsView';
 import ExcelColumnPicker from '../components/ExcelColumnPicker';
 import { usePermissions, canEdit } from '../context/PermissionContext';
+import { formatDate } from '../lib/dateUtils';
+import { createUnicodePdf } from '../lib/pdfHelpers';
+import autoTable from 'jspdf-autotable';
+import { FileDown } from 'lucide-react';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -57,6 +61,99 @@ const ProfileAvatar = ({ employee, size = 'md' }) => {
 };
 
 const getDisplayName = (emp) => emp.first_name && emp.last_name ? `${emp.first_name} ${emp.last_name}` : emp.full_name || '';
+
+// Per-employee PDF — A4 portrait with a structured one-pager of personal +
+// employment + contact info. Lets HR print or email a single employee's
+// dossier without exposing the whole list.
+const exportEmployeePdf = (emp) => {
+  const doc = createUnicodePdf({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const name = getDisplayName(emp) || 'İşçi';
+  doc.setFontSize(18);
+  doc.text('İşçi məlumat kartı', 14, 18);
+  doc.setFontSize(11);
+  doc.setTextColor(120);
+  doc.text(`ID: ${emp.employee_code || emp.id || '-'}    |    Çap tarixi: ${formatDate(new Date().toISOString())}`, 14, 25);
+  doc.setDrawColor(220);
+  doc.line(14, 28, 196, 28);
+
+  // --- Şəxsi məlumatlar ---
+  autoTable(doc, {
+    startY: 32,
+    head: [['Şəxsi məlumatlar', '']],
+    body: [
+      ['Ad Soyad', name],
+      ['Ad', emp.first_name || '-'],
+      ['Soyad', emp.last_name || '-'],
+      ['FİN', emp.fin || '-'],
+      ['Şəxsiyyət vəsiqəsi', emp.id_number || '-'],
+      ['Doğum tarixi', emp.birth_date ? formatDate(emp.birth_date) : '-'],
+      ['Cins', emp.gender || '-'],
+      ['Ailə vəziyyəti', emp.marital_status || '-'],
+      ['Vətəndaşlıq', emp.citizenship || '-'],
+    ],
+    styles: { font: 'Roboto', fontStyle: 'normal', fontSize: 9, cellPadding: 2.5, textColor: [61, 79, 111] },
+    headStyles: { font: 'Roboto', fontStyle: 'normal', fillColor: [61, 79, 111], textColor: 255 },
+    columnStyles: { 0: { cellWidth: 55 }, 1: { cellWidth: 'auto' } },
+  });
+
+  // --- Vəzifə məlumatları ---
+  autoTable(doc, {
+    startY: doc.lastAutoTable.finalY + 6,
+    head: [['Vəzifə məlumatları', '']],
+    body: [
+      ['Müəssisə', emp.company || '-'],
+      ['Şöbə', emp.department || '-'],
+      ['Vəzifə', emp.position || '-'],
+      ['İşə qəbul tarixi', emp.hire_date ? formatDate(emp.hire_date) : '-'],
+      ['Status', emp.status || '-'],
+      ['Maaş', emp.salary != null && emp.salary !== '' ? `${emp.salary} AZN` : '-'],
+      ['İş rejimi', emp.work_mode || '-'],
+    ],
+    styles: { font: 'Roboto', fontStyle: 'normal', fontSize: 9, cellPadding: 2.5, textColor: [61, 79, 111] },
+    headStyles: { font: 'Roboto', fontStyle: 'normal', fillColor: [154, 205, 50], textColor: [61, 79, 111] },
+    columnStyles: { 0: { cellWidth: 55 }, 1: { cellWidth: 'auto' } },
+  });
+
+  // --- Əlaqə ---
+  autoTable(doc, {
+    startY: doc.lastAutoTable.finalY + 6,
+    head: [['Əlaqə', '']],
+    body: [
+      ['Şəxsi telefon', emp.personal_phone || '-'],
+      ['İş telefonu', emp.work_phone || '-'],
+      ['Email', emp.email || '-'],
+      ['Şəxsi email', emp.personal_email || '-'],
+      ['Ünvan', emp.address || '-'],
+    ],
+    styles: { font: 'Roboto', fontStyle: 'normal', fontSize: 9, cellPadding: 2.5, textColor: [61, 79, 111] },
+    headStyles: { font: 'Roboto', fontStyle: 'normal', fillColor: [61, 79, 111], textColor: 255 },
+    columnStyles: { 0: { cellWidth: 55 }, 1: { cellWidth: 'auto' } },
+  });
+
+  // --- Təhsil/Notes (free-form) ---
+  if (emp.education || emp.notes) {
+    let y = doc.lastAutoTable.finalY + 8;
+    if (emp.education) {
+      doc.setFontSize(11); doc.setTextColor(61, 79, 111);
+      doc.text('Təhsil', 14, y);
+      doc.setFontSize(10); doc.setTextColor(80);
+      const lines = doc.splitTextToSize(String(emp.education), 180);
+      doc.text(lines, 14, y + 5);
+      y += 5 + lines.length * 5 + 4;
+    }
+    if (emp.notes) {
+      doc.setFontSize(11); doc.setTextColor(61, 79, 111);
+      doc.text('Qeydlər', 14, y);
+      doc.setFontSize(10); doc.setTextColor(80);
+      const lines = doc.splitTextToSize(String(emp.notes), 180);
+      doc.text(lines, 14, y + 5);
+    }
+  }
+
+  const safe = (emp.employee_code || name).replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40);
+  doc.save(`isci_${safe}.pdf`);
+  toast.success('PDF yükləndi');
+};
 
 // Reusable single-document upload card with consistent UI
 const DocumentUploadCard = ({ label, value, onUpload, onClear, testId, accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx' }) => {
@@ -354,6 +451,7 @@ const EmployeeCard = ({ employee, onView, onEdit, onDelete }) => {
           <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="h-8 w-8 p-0"><MoreVertical className="w-4 h-4" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onView(employee)}><Eye className="w-4 h-4 mr-2" />Ətraflı</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => exportEmployeePdf(employee)} data-testid={`pdf-emp-${employee.id}`}><FileDown className="w-4 h-4 mr-2" />PDF</DropdownMenuItem>
             <DropdownMenuItem onClick={() => onEdit(employee)}><Pencil className="w-4 h-4 mr-2" />Redaktə</DropdownMenuItem>
             <DropdownMenuItem onClick={() => onDelete(employee.id)} className="text-red-600"><Trash2 className="w-4 h-4 mr-2" />Sil</DropdownMenuItem>
           </DropdownMenuContent>
@@ -717,6 +815,7 @@ export default function HR() {
                     <DropdownMenuTrigger asChild><Button variant="ghost" size="sm"><ChevronDown className="w-4 h-4" /></Button></DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => setViewingEmployee(emp)}><Eye className="w-4 h-4 mr-2" />Ətraflı</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => exportEmployeePdf(emp)} data-testid={`pdf-emp-row-${emp.id}`}><FileDown className="w-4 h-4 mr-2" />PDF</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleEdit(emp)}><Pencil className="w-4 h-4 mr-2" />Redaktə</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleDelete(emp.id)} className="text-red-600"><Trash2 className="w-4 h-4 mr-2" />Sil</DropdownMenuItem>
                     </DropdownMenuContent>

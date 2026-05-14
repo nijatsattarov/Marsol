@@ -12,7 +12,12 @@ import { ROBOTO_REGULAR_B64 } from './pdfFont';
 export function createUnicodePdf(options = {}) {
   const doc = new jsPDF(options);
   doc.addFileToVFS('Roboto-Regular.ttf', ROBOTO_REGULAR_B64);
+  // Register the same TTF under both 'normal' and 'bold' styles. We don't ship
+  // a true bold weight, but doing this prevents jsPDF from falling back to
+  // Helvetica (and emitting garbage like "&T&a&p") whenever autoTable's
+  // default header style asks for the bold variant.
   doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
+  doc.addFont('Roboto-Regular.ttf', 'Roboto', 'bold');
   doc.setFont('Roboto');
   return doc;
 }

@@ -444,14 +444,21 @@ export default function Assembly() {
     const writeList = (label, items) => {
       const arr = (items || []).filter(Boolean);
       if (!arr.length) return;
-      const y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : 60;
+      let y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : 60;
+      // Page-break if we're too close to the bottom
+      if (y > 260) { doc.addPage(); y = 20; }
       doc.setFontSize(12); doc.setTextColor(61, 79, 111);
       doc.text(label, 14, y);
       doc.setFontSize(10); doc.setTextColor(80);
+      y += 6;
       arr.forEach((t, i) => {
         const lines = doc.splitTextToSize(`${i + 1}. ${t}`, 180);
-        doc.text(lines, 14, y + 6 + i * 6);
+        if (y + lines.length * 5 > 285) { doc.addPage(); y = 20; }
+        doc.text(lines, 14, y);
+        y += lines.length * 5 + 2;
       });
+      // Remember the new bottom so the next writeList doesn't overlap
+      doc.lastAutoTable = { finalY: y };
     };
     writeList('Müzakirə mövzuları', a.discussion_topics);
     writeList('Qərarlar', a.decisions);
