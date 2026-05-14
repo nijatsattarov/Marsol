@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
-import { Plus, Loader2, Search, Pencil, Trash2, Download, Star, Phone, MessageCircle, MapPin, ExternalLink, Check, X } from 'lucide-react';
+import { Plus, Loader2, Search, Pencil, Trash2, Download, Star, Phone, MessageCircle, MapPin, ExternalLink, Check, X, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -10,12 +10,48 @@ import { Badge } from '../../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../../context/PermissionContext';
 import { PhotoUploadField, SocialLinksField, PhotoUploadDisplay, SocialLinksDisplay } from '../../components/MediaFields';
+import ImageLightbox from '../../components/ImageLightbox';
 import * as XLSX from 'xlsx';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// Strip non-digit characters; allow leading +.
+function digitsOnly(s, allowPlus = true) {
+  if (s === null || s === undefined) return '';
+  const str = String(s);
+  if (allowPlus && str.startsWith('+')) {
+    return '+' + str.slice(1).replace(/\D/g, '');
+  }
+  return str.replace(/\D/g, '');
+}
+
+// Cache for managed lists fetched from settings.
+const _managedListCache = {};
+
+function useManagedList(listKey, headers) {
+  const [opts, setOpts] = useState(_managedListCache[listKey] || []);
+  useEffect(() => {
+    if (!listKey) return;
+    if (_managedListCache[listKey]) { setOpts(_managedListCache[listKey]); return; }
+    let alive = true;
+    axios.get(`${API}/settings/manageable-lists`, { headers })
+      .then(r => {
+        const item = (r.data || []).find(x => x.key === listKey);
+        const vals = item?.values || item?.defaults || [];
+        _managedListCache[listKey] = vals;
+        if (alive) setOpts(vals);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [listKey, headers]);
+  return opts;
+}
+
 function FieldInput({ field, value, onChange }) {
-  const common = { value: value ?? (field.type === 'boolean' ? false : (field.type === 'multiselect' ? [] : '')) };
+  const token = localStorage.getItem('token');
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
+  const managedOpts = useManagedList(field.type === 'managedselect' ? field.list_key : null, headers);
+
   switch (field.type) {
     case 'textarea':
       return <textarea value={value || ''} onChange={e => onChange(e.target.value)} className="w-full min-h-[50px] p-2 text-sm border rounded-lg resize-none" />;
@@ -33,6 +69,16 @@ function FieldInput({ field, value, onChange }) {
         <Select value={value || ''} onValueChange={onChange}>
           <SelectTrigger className="text-sm"><SelectValue placeholder="Seçin" /></SelectTrigger>
           <SelectContent>{(field.options || []).map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+        </Select>
+      );
+    case 'managedselect':
+      return (
+        <Select value={value || '__none__'} onValueChange={(v) => onChange(v === '__none__' ? '' : v)}>
+          <SelectTrigger className="text-sm" data-testid={`managed-${field.key}`}><SelectValue placeholder="Seçin" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">— Seçilməyib —</SelectItem>
+            {managedOpts.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+          </SelectContent>
         </Select>
       );
     case 'multiselect':
@@ -57,8 +103,38 @@ function FieldInput({ field, value, onChange }) {
       return <PhotoUploadField value={value} onChange={onChange} multiple={true} />;
     case 'sociallinks':
       return <SocialLinksField value={value} onChange={onChange} />;
+    case 'phone': {
+      // Default to +994 prefix. Strip non-digits; allow only leading +.
+      const raw = value || '';
+      const handlePhone = (e) => {
+        const v = e.target.value;
+        const cleaned = digitsOnly(v.startsWith('+') ? v : (raw.startsWith('+') ? '+' + v : v));
+        onChange(cleaned);
+      };
+      const handleBlur = () => {
+        if (raw && !raw.startsWith('+')) onChange('+994' + raw.replace(/^0+/, ''));
+      };
+      return (
+        <Input
+          inputMode="tel"
+          value={raw}
+          onChange={handlePhone}
+          onBlur={handleBlur}
+          placeholder="+994551234567"
+          className="text-sm font-mono"
+        />
+      );
+    }
+    case 'digits':
+      return (
+        <Input
+          inputMode="numeric"
+          value={value ?? ''}
+          onChange={(e) => onChange(digitsOnly(e.target.value, false))}
+          className="text-sm font-mono"
+        />
+      );
     case 'url':
-    case 'phone':
     case 'text':
     default:
       return <Input value={value ?? ''} onChange={e => onChange(e.target.value)} className="text-sm" type={field.type === 'url' ? 'url' : 'text'} />;
@@ -112,6 +188,16 @@ export default function VendorModule({ config }) {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
+  const [lightbox, setLightbox] = useState({ open: false, images: [] });
+
+  // Module identifiers that should NOT show the photo-view button.
+  const hidePhotoView = ['photovideo'].includes(config.module);
+
+  // Detect the photo field key (could be `photos` or `samples`) for current config.
+  const photoFieldKey = useMemo(() => {
+    const f = config.fields.find(x => x.type === 'photoupload');
+    return f?.key || null;
+  }, [config.fields]);
 
   const fetchData = useCallback(async () => {
     try { const r = await axios.get(`${API}/organization/${config.module}`, { headers }); setItems(r.data); }
@@ -257,10 +343,28 @@ export default function VendorModule({ config }) {
                       ) : <span className="text-[10px] text-slate-300">—</span>}
                     </td>
                     <td className="px-3 py-2.5 text-right">
-                      {_canEdit && <div className="flex justify-end gap-1">
-                        <button onClick={() => openEdit(i)} className="p-1.5 hover:bg-slate-100 rounded-lg"><Pencil className="w-3.5 h-3.5 text-slate-400" /></button>
-                        <button onClick={() => handleDelete(i.id)} className="p-1.5 hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
-                      </div>}
+                      <div className="flex justify-end gap-1 items-center">
+                        {!hidePhotoView && photoFieldKey && (() => {
+                          const imgs = i[photoFieldKey];
+                          const arr = Array.isArray(imgs) ? imgs : (typeof imgs === 'string' ? imgs.split('\n').filter(Boolean) : []);
+                          if (arr.length === 0) return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setLightbox({ open: true, images: arr })}
+                              className="p-1.5 hover:bg-blue-50 rounded-lg group"
+                              title={`${arr.length} şəklə bax`}
+                              data-testid={`view-images-${i.id}`}
+                            >
+                              <ImageIcon className="w-3.5 h-3.5 text-blue-500 group-hover:text-blue-700" />
+                            </button>
+                          );
+                        })()}
+                        {_canEdit && (<>
+                          <button onClick={() => openEdit(i)} className="p-1.5 hover:bg-slate-100 rounded-lg"><Pencil className="w-3.5 h-3.5 text-slate-400" /></button>
+                          <button onClick={() => handleDelete(i.id)} className="p-1.5 hover:bg-red-50 rounded-lg"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
+                        </>)}
+                      </div>
                     </td>
                   </tr>
                 ))

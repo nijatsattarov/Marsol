@@ -1404,10 +1404,11 @@ export default function Settings() {
                 <thead>
                   <tr className="bg-slate-50 border-b">
                     <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Ad</th>
-                    <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Email</th>
-                    <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F] hidden sm:table-cell">Şöbə</th>
+                    <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F] hidden md:table-cell">Email</th>
+                    <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F] hidden lg:table-cell">Şöbə</th>
+                    <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F] hidden lg:table-cell">Müəssisə</th>
                     <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Rol</th>
-                    <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F] hidden sm:table-cell">Status</th>
+                    <th className="text-left px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Status</th>
                     <th className="text-right px-4 py-3 text-sm font-semibold text-[#3D4F6F]">Əməliyyat</th>
                   </tr>
                 </thead>
@@ -1415,11 +1416,11 @@ export default function Settings() {
                   {users.map(usr => (
                     <tr key={usr.id} className="border-b border-slate-50 hover:bg-slate-50" data-testid={`user-row-${usr.id}`}>
                       <td className="px-4 py-3 text-sm font-medium">{usr.name}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{usr.email}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600 hidden sm:table-cell">{usr.department || '-'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600 hidden md:table-cell">{usr.marsol_company || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 hidden md:table-cell">{usr.email}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 hidden lg:table-cell">{usr.department || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 hidden lg:table-cell">{usr.marsol_company || '-'}</td>
                       <td className="px-4 py-3">{getRoleBadge(usr.role)}</td>
-                      <td className="px-4 py-3 hidden sm:table-cell">
+                      <td className="px-4 py-3">
                         <Badge className={usr.status === 'Aktiv' ? 'bg-green-100 text-green-700 text-xs' : 'bg-slate-100 text-slate-600 text-xs'}>{usr.status || 'Aktiv'}</Badge>
                       </td>
                       <td className="px-4 py-3 text-right">

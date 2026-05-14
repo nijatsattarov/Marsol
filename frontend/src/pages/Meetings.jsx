@@ -4,7 +4,7 @@ import {
   Plus, Search, Loader2, Calendar, Clock, MapPin, Users2,
   Pencil, Trash2, Video, Building2, Filter, Bell, X,
   Monitor, User, ChevronLeft, ChevronRight, List, CalendarDays,
-  FileDown
+  FileDown, Send, Inbox
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -16,6 +16,7 @@ import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
 import { createUnicodePdf } from '../lib/pdfHelpers';
+import MeetingRequestModal, { MeetingRequestInbox } from '../components/MeetingRequest';
 import autoTable from 'jspdf-autotable';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -46,6 +47,9 @@ export default function Meetings() {
 
   // Calendar view state
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'calendar'
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [showInboxModal, setShowInboxModal] = useState(false);
+  const [incomingCount, setIncomingCount] = useState(0);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() }; // month 0-indexed
@@ -57,18 +61,27 @@ export default function Meetings() {
   const _canEdit = canEdit(permissions, 'meetings');
   const headers = { Authorization: `Bearer ${token}` };
 
+  const [currentUserId, setCurrentUserId] = useState(null);
+
   const fetchData = useCallback(async () => {
     try {
-      const [mRes, eRes, oRes, uRes] = await Promise.all([
+      const [mRes, eRes, oRes, uRes, meRes, reqRes] = await Promise.all([
         axios.get(`${API}/meetings`, { headers }),
         axios.get(`${API}/employees`, { headers }),
         axios.get(`${API}/options/all`, { headers }),
         axios.get(`${API}/settings/users`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/auth/me`, { headers }).catch(() => ({ data: null })),
+        axios.get(`${API}/meeting-requests`, { headers }).catch(() => ({ data: [] })),
       ]);
       setMeetings(mRes.data);
       setEmployees(eRes.data);
       setOptions(oRes.data);
       setUsers(uRes.data || []);
+      const myId = meRes.data?.id || meRes.data?.user_id || null;
+      setCurrentUserId(myId);
+      // count pending requests addressed to me
+      const inc = (reqRes.data || []).filter(r => r.recipients?.some(x => x.id === myId && x.status === 'pending')).length;
+      setIncomingCount(inc);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, []);
@@ -329,6 +342,17 @@ export default function Meetings() {
           </div>
           <Button onClick={exportToPdf} variant="outline" size="sm" className="text-[#3D4F6F]" data-testid="meetings-export-pdf-btn">
             <FileDown className="w-4 h-4 mr-1" />PDF
+          </Button>
+          {_canEdit && <Button onClick={() => setShowRequestModal(true)} variant="outline" size="sm" className="text-[#3D4F6F]" data-testid="meeting-request-btn">
+            <Send className="w-4 h-4 mr-1" />Görüş istəyi
+          </Button>}
+          <Button onClick={() => setShowInboxModal(true)} variant="outline" size="sm" className="text-[#3D4F6F] relative" data-testid="meeting-inbox-btn">
+            <Inbox className="w-4 h-4 mr-1" />Təkliflər
+            {incomingCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                {incomingCount}
+              </span>
+            )}
           </Button>
           {_canEdit && <Button onClick={() => openModal()} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="add-meeting-btn">
             <Plus className="w-4 h-4 mr-1" />Yeni Görüş
@@ -709,6 +733,23 @@ export default function Meetings() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Meeting Request Modal — send request to internal users */}
+      <MeetingRequestModal
+        open={showRequestModal}
+        onClose={() => setShowRequestModal(false)}
+        currentUserId={currentUserId}
+        meetingTypes={options.meeting_types || []}
+        onSent={fetchData}
+      />
+
+      {/* Meeting Request Inbox — accept/reject incoming requests */}
+      <MeetingRequestInbox
+        open={showInboxModal}
+        onClose={() => setShowInboxModal(false)}
+        currentUserId={currentUserId}
+        onAccepted={fetchData}
+      />
     </div>
   );
 }

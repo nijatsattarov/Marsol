@@ -1,6 +1,7 @@
 // Field configurations for each organization sub-module
-// Field types: text, textarea, number, select, multiselect, boolean, url, phone,
-//   photoupload (multi-image upload to Cloudinary), sociallinks (per-platform URL pairs)
+// Field types: text, textarea, number, select, multiselect, boolean, url, phone, digits,
+//   photoupload (multi-image upload to Cloudinary), sociallinks (per-platform URL pairs),
+//   managedselect (options loaded from /api/settings/manageable-lists by `list_key`)
 
 const ratingLine = { key: 'overall_rating', label: 'Ümumi qiymətləndirmə (1-5)', type: 'number', min: 0, max: 5, step: 0.1, group: 'Rating' };
 
@@ -148,6 +149,7 @@ export const TRANSPORT_CONFIG = {
     { key: 'regions', label: 'Xidmət bölgələri', type: 'text', group: 'Şərtlər' },
     { key: 'contact_name', label: 'Əlaqə şəxsi', type: 'text', group: 'Əlaqə' },
     { key: 'phone', label: 'Telefon', type: 'phone', group: 'Əlaqə' },
+    { key: 'photos', label: 'Nəqliyyat şəkilləri', type: 'photoupload', group: 'Media' },
     { key: 'notes', label: 'Qeyd', type: 'textarea', group: 'Digər' },
   ]
 };

@@ -2361,6 +2361,173 @@ async def delete_meeting(meeting_id: str, current_user: dict = Depends(check_per
     return {"message": "Görüş silindi"}
 
 
+# ==================== MEETING REQUEST FLOW (internal user-to-user) ====================
+
+@api_router.post("/meeting-requests")
+async def create_meeting_request(data: dict, current_user: dict = Depends(check_permission("meetings", "write"))):
+    """Send a meeting request to one or more internal users.
+
+    Body: { date, time, meeting_type, meeting_mode, location, notes, recipient_ids: [user_id,...] }
+    Creates a `meeting_requests` document with status='pending' and a notification for each recipient.
+    """
+    recipient_ids = data.get("recipient_ids", [])
+    if not recipient_ids or not isinstance(recipient_ids, list):
+        raise HTTPException(status_code=400, detail="Ən az 1 iştirakçı seçilməlidir")
+    recipients = await db.users.find({"id": {"$in": recipient_ids}}, {"_id": 0, "password": 0}).to_list(100)
+    if not recipients:
+        raise HTTPException(status_code=400, detail="İştirakçılar tapılmadı")
+    req_id = str(uuid.uuid4())
+    sender_id = current_user.get("id") or current_user.get("user_id")
+    sender_name = current_user.get("name", "")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    request_doc = {
+        "id": req_id,
+        "sender_id": sender_id,
+        "sender_name": sender_name,
+        "recipients": [
+            {"id": r["id"], "name": r.get("name", ""), "email": r.get("email", ""), "status": "pending", "responded_at": None}
+            for r in recipients
+        ],
+        "date": (data.get("date") or "").strip(),
+        "time": (data.get("time") or "").strip(),
+        "meeting_type": (data.get("meeting_type") or "").strip(),
+        "meeting_mode": (data.get("meeting_mode") or "Offline").strip(),
+        "location": (data.get("location") or "").strip(),
+        "notes": (data.get("notes") or "").strip(),
+        "status": "pending",  # pending | accepted | rejected | cancelled
+        "created_at": now_iso,
+    }
+    await db.meeting_requests.insert_one(request_doc)
+    request_doc.pop("_id", None)
+    # Notify each recipient
+    for r in recipients:
+        notif = {
+            "id": str(uuid.uuid4()),
+            "title": f"Görüş təklifi: {sender_name}",
+            "message": f"{sender_name} sizinlə görüş təklif etdi — {request_doc['date']} {request_doc['time']} · {request_doc['meeting_type'] or 'Görüş'}",
+            "type": "meeting_request",
+            "meeting_request_id": req_id,
+            "recipient_id": r["id"],
+            "is_read": False,
+            "created_at": now_iso,
+        }
+        await db.notifications.insert_one(notif)
+    return request_doc
+
+
+@api_router.get("/meeting-requests")
+async def list_meeting_requests(current_user: dict = Depends(check_permission("meetings", "read"))):
+    """Return requests sent BY or addressed TO the current user."""
+    uid = current_user.get("id") or current_user.get("user_id")
+    cursor = db.meeting_requests.find(
+        {"$or": [{"sender_id": uid}, {"recipients.id": uid}]},
+        {"_id": 0},
+    ).sort("created_at", -1)
+    items = await cursor.to_list(500)
+    return items
+
+
+@api_router.post("/meeting-requests/{req_id}/respond")
+async def respond_to_meeting_request(req_id: str, data: dict, current_user: dict = Depends(check_permission("meetings", "write"))):
+    """Recipient accepts or rejects a meeting request.
+
+    Body: { action: 'accept' | 'reject' }
+    When ALL recipients accept → status='accepted' and meeting docs are inserted for sender + all recipients.
+    Any rejection → status='rejected', no meeting created.
+    """
+    action = (data.get("action") or "").lower()
+    if action not in ("accept", "reject"):
+        raise HTTPException(status_code=400, detail="action 'accept' və ya 'reject' olmalıdır")
+    req = await db.meeting_requests.find_one({"id": req_id}, {"_id": 0})
+    if not req:
+        raise HTTPException(status_code=404, detail="Görüş təklifi tapılmadı")
+    uid = current_user.get("id") or current_user.get("user_id")
+    # Find this recipient
+    found = False
+    for r in req["recipients"]:
+        if r["id"] == uid:
+            r["status"] = "accepted" if action == "accept" else "rejected"
+            r["responded_at"] = datetime.now(timezone.utc).isoformat()
+            found = True
+            break
+    if not found:
+        raise HTTPException(status_code=403, detail="Bu təklif sizin üçün deyil")
+    # Update overall status
+    statuses = [r["status"] for r in req["recipients"]]
+    if "rejected" in statuses:
+        req["status"] = "rejected"
+    elif all(s == "accepted" for s in statuses):
+        req["status"] = "accepted"
+    else:
+        req["status"] = "pending"
+    await db.meeting_requests.update_one({"id": req_id}, {"$set": {
+        "recipients": req["recipients"],
+        "status": req["status"],
+    }})
+    # Mark all related notifications as read for this user
+    await db.notifications.update_many(
+        {"meeting_request_id": req_id, "recipient_id": uid},
+        {"$set": {"is_read": True}},
+    )
+    # If now fully accepted → insert meetings for sender + all recipients
+    if req["status"] == "accepted":
+        sender = await db.users.find_one({"id": req["sender_id"]}, {"_id": 0, "password": 0})
+        participants = [
+            {"id": req["sender_id"], "name": req["sender_name"], "email": sender.get("email") if sender else ""},
+            *[{"id": r["id"], "name": r["name"], "email": r.get("email", "")} for r in req["recipients"]],
+        ]
+        names = ", ".join({p["name"] for p in participants if p["name"]})
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for p in participants:
+            meeting_doc = {
+                "id": str(uuid.uuid4()),
+                "employee": p["name"],
+                "meeting_setter": req["sender_name"],
+                "date": req.get("date", ""),
+                "time": req.get("time", ""),
+                "company": "",
+                "contact_person": "",
+                "project": "",
+                "meeting_type": req.get("meeting_type", ""),
+                "meeting_mode": req.get("meeting_mode", "Offline"),
+                "department": "",
+                "location": req.get("location", ""),
+                "result": "",
+                "next_meeting": "",
+                "notes": (req.get("notes", "") + (f"\nİştirakçılar: {names}" if names else "")).strip(),
+                "reminders": [],
+                "created_by": req["sender_name"],
+                "created_at": now_iso,
+                "meeting_request_id": req_id,
+                "is_internal": True,
+            }
+            await db.meetings.insert_one(meeting_doc)
+        # Notify sender that all accepted
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()),
+            "title": "Görüş təklifi qəbul edildi",
+            "message": f"{names} sizinlə görüşməyi qəbul etdi — {req['date']} {req['time']}",
+            "type": "meeting_request_accepted",
+            "meeting_request_id": req_id,
+            "recipient_id": req["sender_id"],
+            "is_read": False,
+            "created_at": now_iso,
+        })
+    elif req["status"] == "rejected":
+        rejecter = current_user.get("name", "")
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()),
+            "title": "Görüş təklifi rədd edildi",
+            "message": f"{rejecter} görüş təklifinizi rədd etdi — {req['date']} {req['time']}",
+            "type": "meeting_request_rejected",
+            "meeting_request_id": req_id,
+            "recipient_id": req["sender_id"],
+            "is_read": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    return req
+
+
 
 # ==================== PROJECT EVENTS (LAYİHƏLƏR/TƏDBİRLƏR) ====================
 
@@ -3516,6 +3683,7 @@ MANAGEABLE_LISTS = [
     {"key": "expense_types", "label": "Xərc növləri (ümumi)", "defaults": ["Əməliyyat", "Marketinq", "Layihə", "Texniki", "Satış", "Digər"], "group": "Maliyyə"},
     {"key": "event_types", "label": "Tədbir növləri", "defaults": ["Konfrans", "Seminar", "Təlim", "Sərgi", "Networking", "İclas"], "group": "Tədbirlər"},
     {"key": "invitation_response_statuses", "label": "Dəvət cavabları", "defaults": ["Gözləmədə", "Qatıldı", "Rədd etdi", "Cavab vermədi"], "group": "Tədbirlər"},
+    {"key": "cities", "label": "Şəhərlər", "defaults": ["Bakı", "Sumqayıt", "Gəncə", "Mingəçevir", "Şirvan", "Naxçıvan", "Lənkəran", "Şəki", "Quba", "Qəbələ", "Şamaxı", "Xaçmaz", "İsmayıllı", "Yevlax", "Ağdam"], "group": "Təşkilatçılıq"},
 ]
 MANAGEABLE_LIST_KEYS = [item["key"] for item in MANAGEABLE_LISTS]
 

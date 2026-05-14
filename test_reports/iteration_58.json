@@ -1,0 +1,48 @@
+{
+  "summary": "Iteration 58 — Backend pytest 7/7 PASSED (cities seed + meeting-request full lifecycle). Frontend Playwright smoke covered Settings users table, venues modal, transport modal, photovideo + ratings rows, and Meetings page request/inbox flow. CRITICAL FRONTEND BUG: Venues 'Yeni' modal does NOT render the Şəhər managed-select (data-testid='managed-city' count = 0). Root cause: `/app/frontend/src/pages/organization/configs.js` line 16 still defines venue `city` field as `type: 'text'` — main agent's claim that it was switched to `type: 'managedselect'` with `list_key: 'cities'` is NOT reflected in code. Everything else from the spec verified end-to-end.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/notifications", "issue": "Computed endpoint does NOT surface rows from db.notifications collection — meeting_request notifications are persisted in DB but invisible to the in-app notifications dropdown. Inbox uses /api/meeting-requests directly, so functional impact = 0, but unread badge for meeting-request notifs is not driven from /api/notifications."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "VendorModule venue create modal", "issue": "Şəhər field renders as plain text input instead of managedselect bound to cities list. data-testid='managed-city' count = 0. Spec requirement #2 not met.", "selector": "[data-testid='managed-city']", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "MeetingRequest modal — Tarix field", "issues": ["Uses native browser date input (mm/dd/yyyy) instead of shadcn Calendar component — consistent with rest of app but flagged per global UX standard."]},
+      {"screen": "VendorModule phone inputs", "issues": ["Phone fields render correctly with placeholder '+994551234567' and 'phone' type wires the digit-only + +994 blur handler in VendorModule.jsx, but inputs lack data-testid attributes (e.g. data-testid='field-phone'), making the digit-stripping/blur-prefix behavior hard to verify by automation."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration58_meeting_requests_cities.py",
+    "/app/test_reports/pytest/iteration_58_results.xml"
+  ],
+  "action_items": [
+    "FIX (HIGH): In /app/frontend/src/pages/organization/configs.js line 16, change venue city field from `{ key: 'city', label: 'Şəhər / Rayon', type: 'text', group: 'Əsas' }` to `{ key: 'city', label: 'Şəhər / Rayon', type: 'managedselect', list_key: 'cities', group: 'Əsas' }`. VendorModule already handles managedselect with data-testid='managed-city' and loads /settings/manageable-lists?key=cities — only the config flip is missing.",
+    "OPTIONAL: Add data-testid attributes to phone field <input> elements (e.g. data-testid={`field-${field.key}`}) in VendorModule.jsx FieldInput for testability.",
+    "OPTIONAL: Surface rows from db.notifications (filtered by recipient_id) in /api/notifications response so meeting-request notifs feed the global notification dropdown (currently only Inbox modal shows them)."
+  ],
+  "critical_code_review_comments": [
+    "configs.js venue 'city' field type='text' contradicts spec & main-agent claim. The same field is used across venues only (transport correctly omits city). Single-line fix.",
+    "VendorModule.jsx hidePhotoView only excludes 'photovideo'. Ratings module uses a separate OrgRatings.jsx page (not VendorModule) so the exclusion list is correct — no change needed.",
+    "Backend meeting-requests respond endpoint correctly recomputes overall status from per-recipient statuses and atomically inserts meetings for sender + all recipients when fully accepted. Idempotent if same recipient re-accepts (status overwritten in place).",
+    "respond() uses check_permission('meetings','write') — recipient must have meetings:write to accept/reject. Acceptable since all internal users get this by default; future granular roles should explicitly allow 'respond' even without 'write'.",
+    "create_meeting_request inserts notification docs but /api/notifications endpoint never reads them — dead branch unless a separate /api/notifications/feed endpoint exists. Confirmed dead-end for end-user visibility.",
+    "MeetingRequest sender_name is captured at creation time; if a sender renames themselves, old requests show stale name. Minor.",
+    "When recipients list is later edited (not currently supported), there is no validation that recipient_ids belong to active users. Current create_meeting_request loads recipients via find() with no status filter — inactive users CAN be selected as recipients. Low priority."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration58_meeting_requests_cities.py (new — 7 tests across 2 classes)"
+  ],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "85% (5/6 — managed-city missing on venues)"},
+  "test_credentials": "Admin settings@marsol.az / marsol123. Ephemeral TEST_recip_*/TEST_recip2_* users created+deleted per pytest module run.",
+  "seed_data_creation": "Pytest creates 2 TEST_ prefixed Aktiv users per run + multiple meeting_requests + 3 meetings (from full-accept test). All cleaned up via fixture teardown: users deleted by id, meetings deleted via DELETE /api/meetings/{id}, rejected request leaves no residual meetings. Verified post-run: residual TEST_ users = 0.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter58 verified backend meeting-requests + cities seed via /app/backend/tests/test_iteration58_meeting_requests_cities.py (re-runnable, idempotent, self-cleaning). Frontend gap = venue city still type='text' in configs.js — main agent must flip to managedselect+list_key='cities'. After fix, re-run only the venues smoke: open /organization/venues → click 'Yeni' → assert document.querySelector('[data-testid=\"managed-city\"]') is non-null and Select dropdown lists 15 cities (Bakı, Sumqayıt, Gəncə, ...). MeetingRequest modal participant list is rendered as a scrollable list — confirmed populated with all active users including settings@marsol.az itself (own row should be excluded — minor enhancement, not blocking).",
+  "rca of the issue": "managed-city missing: VendorModule.jsx::FieldInput correctly renders <Select data-testid=`managed-${field.key}`> only when field.type === 'managedselect' (line 74-83). The venue config in configs.js line 16 was never updated; field still has type:'text'. Fix is a single key swap + add list_key:'cities'. No backend / no VendorModule change required."
+}
