@@ -63,9 +63,10 @@ const ProfileAvatar = ({ employee, size = 'md' }) => {
 const getDisplayName = (emp) => emp.first_name && emp.last_name ? `${emp.first_name} ${emp.last_name}` : emp.full_name || '';
 
 // Per-employee PDF — A4 portrait with a structured one-pager of personal +
-// employment + contact info. Lets HR print or email a single employee's
-// dossier without exposing the whole list.
-const exportEmployeePdf = (emp) => {
+// employment + contact info, including the avatar/photo if available. Lets
+// HR print or email a single employee's dossier without exposing the whole
+// list.
+const exportEmployeePdf = async (emp) => {
   const doc = createUnicodePdf({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const name = getDisplayName(emp) || 'İşçi';
   doc.setFontSize(18);
@@ -75,6 +76,31 @@ const exportEmployeePdf = (emp) => {
   doc.text(`ID: ${emp.employee_code || emp.id || '-'}    |    Çap tarixi: ${formatDate(new Date().toISOString())}`, 14, 25);
   doc.setDrawColor(220);
   doc.line(14, 28, 196, 28);
+
+  // --- Photo (top-right) ---
+  if (emp.photo_url) {
+    try {
+      const url = emp.photo_url.startsWith('http')
+        ? emp.photo_url
+        : `${process.env.REACT_APP_BACKEND_URL}${emp.photo_url}`;
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const blob = await resp.blob();
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        const m = /^data:image\/(\w+);/.exec(String(dataUrl));
+        const fmt = (m ? m[1] : 'jpeg').toUpperCase();
+        // 30x30mm square photo at top-right
+        doc.addImage(dataUrl, fmt, 166, 4, 30, 30, undefined, 'FAST');
+      }
+    } catch (_e) {
+      // Silent fallback — PDF still renders fine without the photo.
+    }
+  }
 
   // --- Şəxsi məlumatlar ---
   autoTable(doc, {
