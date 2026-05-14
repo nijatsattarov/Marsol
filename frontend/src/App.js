@@ -7,6 +7,7 @@ import Companies from "./pages/Companies";
 import HR from "./pages/HR";
 import Attendance from "./pages/Attendance";
 import Finance from "./pages/Finance";
+import Inventory from "./pages/Inventory";
 import Barter from "./pages/Barter";
 import Sales from "./pages/Sales";
 import Meetings from "./pages/Meetings";
@@ -84,7 +85,7 @@ function App() {
             <Route path="hr" element={<HR />} />
             <Route path="attendance" element={<Attendance />} />
             <Route path="finance" element={<Finance />} />
-            <Route path="finance/inventory" element={<Finance />} />
+            <Route path="finance/inventory" element={<Inventory />} />
             <Route path="barter" element={<Barter />} />
             <Route path="sales" element={<Sales />} />
             <Route path="sales/company-database" element={<CompanyDatabase />} />

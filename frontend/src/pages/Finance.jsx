@@ -18,7 +18,6 @@ import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
-import InventoryTab from '../components/InventoryTab';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -32,8 +31,7 @@ const expenseCategories = [
 ];
 
 export default function Finance() {
-  const location = useLocation();
-  const [activeTab, setActiveTab] = useState(location.pathname.endsWith('/inventory') ? 'inventory' : 'overview');
+  const [activeTab, setActiveTab] = useState('overview');
   const [allCompanies, setAllCompanies] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [options, setOptions] = useState(null);
@@ -124,11 +122,6 @@ export default function Finance() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
-  // Sync tab with URL (sidebar deep-link to /finance/inventory)
-  useEffect(() => {
-    if (location.pathname.endsWith('/inventory')) setActiveTab('inventory');
-  }, [location.pathname]);
 
   // Load sales when a project is selected in finance view
   useEffect(() => {
@@ -462,7 +455,6 @@ export default function Finance() {
           <TabsTrigger value="incomes" data-testid="tab-incomes">Gəlirlər ({allCompanies.length})</TabsTrigger>
           <TabsTrigger value="expenses" data-testid="tab-expenses">Xərclər ({expenses.length})</TabsTrigger>
           <TabsTrigger value="projects" data-testid="tab-projects">Layihələr</TabsTrigger>
-          <TabsTrigger value="inventory" data-testid="tab-inventory">İnventar</TabsTrigger>
         </TabsList>
 
         {/* OVERVIEW TAB */}
@@ -937,11 +929,6 @@ export default function Finance() {
               </div>
             )}
           </div>
-        </TabsContent>
-
-        {/* ====== INVENTORY TAB ====== */}
-        <TabsContent value="inventory">
-          <InventoryTab responsiblePersons={responsiblePersons} departments={options?.departments || []} />
         </TabsContent>
       </Tabs>
 
