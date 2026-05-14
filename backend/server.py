@@ -1392,10 +1392,125 @@ async def delete_income(income_id: str, current_user: dict = Depends(check_permi
 
 
 # ---------- Inventar (Inventory) ----------
+def _safe_nonneg(v, default=0.0):
+    """Coerce to non-negative float (mənfi dəyər icazəsizdir)."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return float(default)
+    return max(f, 0.0)
+
+
+def _months_between(start_iso: str, end_dt: datetime) -> int:
+    """Return whole months between an ISO date string (YYYY-MM-DD or full ISO) and end_dt."""
+    if not start_iso:
+        return 0
+    s = str(start_iso).strip()
+    try:
+        if "T" in s:
+            start = datetime.fromisoformat(s.replace("Z", "+00:00")).replace(tzinfo=None)
+        else:
+            # Accept YYYY-MM-DD or DD/MM/YYYY
+            if "/" in s:
+                parts = s.split("/")
+                if len(parts) == 3:
+                    start = datetime(int(parts[2]), int(parts[1]), int(parts[0]))
+                else:
+                    return 0
+            else:
+                start = datetime.fromisoformat(s)
+    except Exception:
+        return 0
+    delta_months = (end_dt.year - start.year) * 12 + (end_dt.month - start.month)
+    if end_dt.day < start.day:
+        delta_months -= 1
+    return max(delta_months, 0)
+
+
+def _compute_inventory_valuation(item: dict) -> dict:
+    """Compute structured financial valuation for a single inventory item.
+
+    Returns a dict with: total_initial_value, annual_depreciation, monthly_depreciation,
+    months_used, accumulated_depreciation, book_value, market_value, operational_status,
+    market_above_book, suggestion.
+    """
+    qty = max(int(item.get("quantity") or 1), 1)
+    unit_value = _safe_nonneg(item.get("unit_value"))
+    # purchase_price defaults to qty*unit_value for backward compat
+    purchase_price = _safe_nonneg(item.get("purchase_price"), default=qty * unit_value)
+    delivery_cost = _safe_nonneg(item.get("delivery_cost"))
+    customs_cost = _safe_nonneg(item.get("customs_cost"))
+    installation_cost = _safe_nonneg(item.get("installation_cost"))
+    other_costs = _safe_nonneg(item.get("other_costs"))
+
+    total_initial_value = round(
+        purchase_price + delivery_cost + customs_cost + installation_cost + other_costs, 2
+    )
+
+    useful_life_years = _safe_nonneg(item.get("useful_life_years"))
+    annual_depr = 0.0
+    monthly_depr = 0.0
+    if useful_life_years > 0 and total_initial_value > 0:
+        annual_depr = round(total_initial_value / useful_life_years, 2)
+        monthly_depr = round(annual_depr / 12.0, 2)
+
+    months_used = _months_between(item.get("purchase_date") or "", datetime.now(timezone.utc).replace(tzinfo=None))
+    accumulated_depr = round(min(monthly_depr * months_used, total_initial_value), 2)
+    book_value = round(max(total_initial_value - accumulated_depr, 0.0), 2)
+
+    market_value = _safe_nonneg(item.get("market_value"))
+    is_operational = bool(item.get("is_operational", True))
+
+    # Determine operational status
+    fully_depreciated = total_initial_value > 0 and book_value <= 0
+    if fully_depreciated and is_operational:
+        operational_status = "Tam amortizasiya olunub, amma istifadədədir"
+    elif fully_depreciated and not is_operational:
+        operational_status = "Silinməyə namizəd"
+    elif not is_operational:
+        operational_status = "İstifadəyə yararsız"
+    else:
+        operational_status = "İstifadədədir"
+
+    market_above_book = market_value > book_value and market_value > 0
+
+    suggestion = None
+    if fully_depreciated and not is_operational and market_value <= 0:
+        suggestion = "Utilizasiya / silinmə tövsiyə olunur"
+    elif market_above_book:
+        suggestion = f"Bazar dəyəri ({market_value:.2f}) mühasibat qalıq dəyərindən ({book_value:.2f}) yüksəkdir — yenidən qiymətləndirmə nəzərə alına bilər"
+
+    return {
+        "purchase_price": purchase_price,
+        "delivery_cost": delivery_cost,
+        "customs_cost": customs_cost,
+        "installation_cost": installation_cost,
+        "other_costs": other_costs,
+        "total_initial_value": total_initial_value,
+        "useful_life_years": useful_life_years,
+        "annual_depreciation": annual_depr,
+        "monthly_depreciation": monthly_depr,
+        "months_used": months_used,
+        "accumulated_depreciation": accumulated_depr,
+        "book_value": book_value,
+        "market_value": market_value,
+        "is_operational": is_operational,
+        "operational_status": operational_status,
+        "market_above_book": market_above_book,
+        "suggestion": suggestion,
+    }
+
+
+def _enrich_inventory(item: dict) -> dict:
+    """Attach a `valuation` block to an inventory document for client consumption."""
+    item["valuation"] = _compute_inventory_valuation(item)
+    return item
+
+
 @api_router.get("/finance/inventory")
 async def list_inventory(current_user: dict = Depends(check_permission("finance", "read"))):
     items = await db.inventory.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
-    return items
+    return [_enrich_inventory(it) for it in items]
 
 
 @api_router.post("/finance/inventory")
@@ -1411,7 +1526,7 @@ async def create_inventory_item(data: dict, current_user: dict = Depends(check_p
         "asset_name": (data.get("asset_name") or "").strip(),
         "category": (data.get("category") or "").strip(),
         "inventory_code": (data.get("inventory_code") or "").strip(),
-        "quantity": int(data.get("quantity") or 1),
+        "quantity": max(int(data.get("quantity") or 1), 1),
         "condition": (data.get("condition") or "").strip(),
         "responsible_person": (data.get("responsible_person") or "").strip(),
         "location": (data.get("location") or "").strip(),
@@ -1419,7 +1534,16 @@ async def create_inventory_item(data: dict, current_user: dict = Depends(check_p
         "last_check_date": (data.get("last_check_date") or "").strip(),
         "status": (data.get("status") or "Aktiv").strip(),
         "note": (data.get("note") or "").strip(),
-        "unit_value": float(data.get("unit_value") or 0),
+        "unit_value": _safe_nonneg(data.get("unit_value")),
+        # NEW financial fields
+        "purchase_price": _safe_nonneg(data.get("purchase_price")),
+        "delivery_cost": _safe_nonneg(data.get("delivery_cost")),
+        "customs_cost": _safe_nonneg(data.get("customs_cost")),
+        "installation_cost": _safe_nonneg(data.get("installation_cost")),
+        "other_costs": _safe_nonneg(data.get("other_costs")),
+        "useful_life_years": _safe_nonneg(data.get("useful_life_years")),
+        "market_value": _safe_nonneg(data.get("market_value")),
+        "is_operational": bool(data.get("is_operational", True)),
         "created_at": now_iso,
         "created_by": current_user.get("name", ""),
         "updated_at": now_iso,
@@ -1428,7 +1552,7 @@ async def create_inventory_item(data: dict, current_user: dict = Depends(check_p
         raise HTTPException(status_code=400, detail="Əmlakın adı boş ola bilməz")
     await db.inventory.insert_one(item)
     item.pop("_id", None)
-    return item
+    return _enrich_inventory(item)
 
 
 @api_router.put("/finance/inventory/{item_id}")
@@ -1443,13 +1567,18 @@ async def update_inventory_item(item_id: str, data: dict, current_user: dict = D
         if k in data:
             update[k] = (str(data.get(k) or "")).strip()
     if "quantity" in data:
-        update["quantity"] = int(data.get("quantity") or 1)
-    if "unit_value" in data:
-        update["unit_value"] = float(data.get("unit_value") or 0)
+        update["quantity"] = max(int(data.get("quantity") or 1), 1)
+    # Non-negative numeric fields
+    for k in ("unit_value", "purchase_price", "delivery_cost", "customs_cost",
+              "installation_cost", "other_costs", "useful_life_years", "market_value"):
+        if k in data:
+            update[k] = _safe_nonneg(data.get(k))
+    if "is_operational" in data:
+        update["is_operational"] = bool(data.get("is_operational"))
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.inventory.update_one({"id": item_id}, {"$set": update})
     updated = await db.inventory.find_one({"id": item_id}, {"_id": 0})
-    return updated
+    return _enrich_inventory(updated)
 
 
 @api_router.delete("/finance/inventory/{item_id}")
@@ -1460,45 +1589,100 @@ async def delete_inventory_item(item_id: str, current_user: dict = Depends(check
     return {"message": "İnventar silindi"}
 
 
+@api_router.get("/finance/inventory/{item_id}/valuation")
+async def get_inventory_valuation(item_id: str, current_user: dict = Depends(check_permission("finance", "read"))):
+    """Return only the structured valuation object for a single inventory item."""
+    item = await db.inventory.find_one({"id": item_id}, {"_id": 0})
+    if not item:
+        raise HTTPException(status_code=404, detail="İnventar tapılmadı")
+    return _compute_inventory_valuation(item)
+
+
 @api_router.get("/finance/inventory/value-report")
 async def inventory_value_report(current_user: dict = Depends(check_permission("finance", "read"))):
-    """Aggregate inventory value by department, category, status — feeds the
-    'İnventar dəyər hesabatı' sub-tab."""
+    """Aggregate inventory financials: initial value, book value, market value, accumulated
+    depreciation — grouped by department, category and operational status."""
     items = await db.inventory.find({}, {"_id": 0}).to_list(5000)
     by_dept: Dict[str, Dict[str, Any]] = {}
     by_cat: Dict[str, Dict[str, Any]] = {}
-    by_status: Dict[str, int] = {}
-    grand_total_value = 0.0
-    grand_total_count = 0
+    by_op_status: Dict[str, int] = {}
+    grand_initial = 0.0
+    grand_book = 0.0
+    grand_market = 0.0
+    grand_accum_depr = 0.0
+    grand_qty = 0
+    fully_depreciated_count = 0
+    writeoff_candidates: List[Dict[str, Any]] = []
+    revaluation_candidates: List[Dict[str, Any]] = []
     for it in items:
+        v = _compute_inventory_valuation(it)
         qty = int(it.get("quantity") or 0)
-        unit = float(it.get("unit_value") or 0)
-        value = qty * unit
-        grand_total_value += value
-        grand_total_count += qty
+        grand_initial += v["total_initial_value"]
+        grand_book += v["book_value"]
+        grand_market += v["market_value"]
+        grand_accum_depr += v["accumulated_depreciation"]
+        grand_qty += qty
+        if v["total_initial_value"] > 0 and v["book_value"] <= 0:
+            fully_depreciated_count += 1
+        if v["operational_status"] == "Silinməyə namizəd":
+            writeoff_candidates.append({
+                "id": it.get("id"), "display_id": it.get("display_id"),
+                "asset_name": it.get("asset_name"), "department": it.get("department"),
+                "book_value": v["book_value"], "market_value": v["market_value"],
+            })
+        if v["market_above_book"]:
+            revaluation_candidates.append({
+                "id": it.get("id"), "display_id": it.get("display_id"),
+                "asset_name": it.get("asset_name"),
+                "book_value": v["book_value"], "market_value": v["market_value"],
+                "delta": round(v["market_value"] - v["book_value"], 2),
+            })
         d = it.get("department") or "(boş)"
         if d not in by_dept:
-            by_dept[d] = {"department": d, "items": 0, "quantity": 0, "value": 0.0}
+            by_dept[d] = {"department": d, "items": 0, "quantity": 0,
+                          "initial_value": 0.0, "book_value": 0.0, "market_value": 0.0,
+                          "accumulated_depreciation": 0.0}
         by_dept[d]["items"] += 1
         by_dept[d]["quantity"] += qty
-        by_dept[d]["value"] += value
+        by_dept[d]["initial_value"] += v["total_initial_value"]
+        by_dept[d]["book_value"] += v["book_value"]
+        by_dept[d]["market_value"] += v["market_value"]
+        by_dept[d]["accumulated_depreciation"] += v["accumulated_depreciation"]
         c = it.get("category") or "(boş)"
         if c not in by_cat:
-            by_cat[c] = {"category": c, "items": 0, "quantity": 0, "value": 0.0}
+            by_cat[c] = {"category": c, "items": 0, "quantity": 0,
+                         "initial_value": 0.0, "book_value": 0.0, "market_value": 0.0,
+                         "accumulated_depreciation": 0.0}
         by_cat[c]["items"] += 1
         by_cat[c]["quantity"] += qty
-        by_cat[c]["value"] += value
-        s = it.get("status") or "Aktiv"
-        by_status[s] = by_status.get(s, 0) + 1
+        by_cat[c]["initial_value"] += v["total_initial_value"]
+        by_cat[c]["book_value"] += v["book_value"]
+        by_cat[c]["market_value"] += v["market_value"]
+        by_cat[c]["accumulated_depreciation"] += v["accumulated_depreciation"]
+        op = v["operational_status"]
+        by_op_status[op] = by_op_status.get(op, 0) + 1
+
+    def _round_group(rows):
+        for r in rows:
+            for k in ("initial_value", "book_value", "market_value", "accumulated_depreciation"):
+                r[k] = round(r[k], 2)
+        return rows
+
     return {
         "totals": {
             "items": len(items),
-            "quantity": grand_total_count,
-            "value": round(grand_total_value, 2),
+            "quantity": grand_qty,
+            "initial_value": round(grand_initial, 2),
+            "book_value": round(grand_book, 2),
+            "market_value": round(grand_market, 2),
+            "accumulated_depreciation": round(grand_accum_depr, 2),
+            "fully_depreciated_count": fully_depreciated_count,
         },
-        "by_department": sorted(by_dept.values(), key=lambda x: x["value"], reverse=True),
-        "by_category": sorted(by_cat.values(), key=lambda x: x["value"], reverse=True),
-        "by_status": [{"status": k, "count": v} for k, v in by_status.items()],
+        "by_department": _round_group(sorted(by_dept.values(), key=lambda x: x["book_value"], reverse=True)),
+        "by_category": _round_group(sorted(by_cat.values(), key=lambda x: x["book_value"], reverse=True)),
+        "by_operational_status": [{"status": k, "count": v} for k, v in by_op_status.items()],
+        "writeoff_candidates": writeoff_candidates,
+        "revaluation_candidates": revaluation_candidates,
     }
 
 
