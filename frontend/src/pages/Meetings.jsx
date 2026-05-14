@@ -192,6 +192,57 @@ export default function Meetings() {
     toast.success('PDF yükləndi');
   };
 
+  // Single-meeting PDF — landscape A4 with a structured details sheet (every
+  // field on its own row). Useful for printing or emailing one meeting's
+  // summary as an attachment.
+  const exportOneToPdf = (m) => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    doc.setFontSize(18);
+    doc.text('Gorus protokolu', 14, 18);
+    doc.setFontSize(10);
+    doc.setTextColor(120);
+    doc.text(`ID: ${m.id || '-'}    |    Cap tarixi: ${formatDate(new Date().toISOString())}`, 14, 25);
+    doc.setDrawColor(220);
+    doc.line(14, 28, 196, 28);
+    // Body as a 2-column key/value table
+    autoTable(doc, {
+      startY: 32,
+      head: [['Sahə', 'Dəyər']],
+      body: [
+        ['Tarix', formatDate(m.date) || '-'],
+        ['Vaxt', m.time || '-'],
+        ['Şirkət', m.company || '-'],
+        ['Əlaqədar şəxs', m.contact_person || '-'],
+        ['Sahə işçisi', m.employee || '-'],
+        ['Görüşü təyin edən', m.meeting_setter || '-'],
+        ['Şöbə', m.department || '-'],
+        ['Görüş növü', m.meeting_type || '-'],
+        ['Rejim', m.meeting_mode || '-'],
+        ['Məkan', m.location || '-'],
+        ['Layihə', m.project || '-'],
+        ['Növbəti görüş', formatDate(m.next_meeting) || '-'],
+        ['Nəticə', m.result || '-'],
+      ],
+      styles: { fontSize: 10, cellPadding: 3, textColor: [61, 79, 111] },
+      headStyles: { fillColor: [61, 79, 111], textColor: 255, fontStyle: 'bold' },
+      columnStyles: { 0: { cellWidth: 55, fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
+    });
+    // Notes (free-form, full width)
+    if (m.notes) {
+      const y = doc.lastAutoTable.finalY + 8;
+      doc.setFontSize(11);
+      doc.setTextColor(61, 79, 111);
+      doc.text('Qeydlər', 14, y);
+      doc.setFontSize(10);
+      doc.setTextColor(80);
+      const split = doc.splitTextToSize(String(m.notes), 180);
+      doc.text(split, 14, y + 6);
+    }
+    const fileSafeCompany = (m.company || 'gorus').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40);
+    doc.save(`gorus_${fileSafeCompany}_${m.date || todayStr}.pdf`);
+    toast.success('PDF yükləndi');
+  };
+
   // Group meetings by date (uses already-filtered meetings)
   const meetingsByDate = filtered.reduce((acc, m) => {
     if (!m.date) return acc;
@@ -377,14 +428,19 @@ export default function Meetings() {
                       ) : <span className="text-xs text-slate-300">-</span>}
                     </td>
                     <td className="px-3 py-2.5 text-right">
-                      {_canEdit && <div className="flex justify-end gap-1">
-                        <button onClick={() => openModal(m)} className="p-1.5 hover:bg-slate-100 rounded-lg" data-testid={`edit-meeting-${m.id}`}>
-                          <Pencil className="w-3.5 h-3.5 text-slate-400" />
+                      <div className="flex justify-end gap-1">
+                        <button onClick={() => exportOneToPdf(m)} className="p-1.5 hover:bg-blue-50 rounded-lg" title="PDF" data-testid={`pdf-meeting-${m.id}`}>
+                          <FileDown className="w-3.5 h-3.5 text-blue-500" />
                         </button>
-                        <button onClick={() => handleDelete(m.id)} className="p-1.5 hover:bg-red-50 rounded-lg" data-testid={`delete-meeting-${m.id}`}>
-                          <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                        </button>
-                      </div>}
+                        {_canEdit && <>
+                          <button onClick={() => openModal(m)} className="p-1.5 hover:bg-slate-100 rounded-lg" data-testid={`edit-meeting-${m.id}`}>
+                            <Pencil className="w-3.5 h-3.5 text-slate-400" />
+                          </button>
+                          <button onClick={() => handleDelete(m.id)} className="p-1.5 hover:bg-red-50 rounded-lg" data-testid={`delete-meeting-${m.id}`}>
+                            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                          </button>
+                        </>}
+                      </div>
                     </td>
                   </tr>
                 ))
