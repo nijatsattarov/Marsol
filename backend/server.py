@@ -5951,7 +5951,12 @@ def _calc_partner_score_from_bulk(
     if ov_all.get("total_attended") is not None:
         accepted = max(accepted, int(ov_all.get("total_attended") or 0))
 
-    event_score = int(round((accepted / invited) * 30)) if invited > 0 else 0
+    # Event score is based on ABSOLUTE attendance count so companies that
+    # attend more events earn more points. Each attended event = 3 points,
+    # capped at 30. Previous ratio-based formula (attended/invited * 30)
+    # penalised companies that were invited many times — e.g. 1/1=30 vs
+    # 5/10=15. With this scheme 5 attendances always beats 1.
+    event_score = min(int(accepted) * 3, 30)
 
     other_score = min(int(other_count) * 3, 15)
     meeting_score = min(int(meeting_count), 10)
