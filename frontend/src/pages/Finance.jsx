@@ -17,6 +17,7 @@ import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
+import InventoryTab from '../components/InventoryTab';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -454,6 +455,7 @@ export default function Finance() {
           <TabsTrigger value="incomes" data-testid="tab-incomes">Gəlirlər ({allCompanies.length})</TabsTrigger>
           <TabsTrigger value="expenses" data-testid="tab-expenses">Xərclər ({expenses.length})</TabsTrigger>
           <TabsTrigger value="projects" data-testid="tab-projects">Layihələr</TabsTrigger>
+          <TabsTrigger value="inventory" data-testid="tab-inventory">İnventar</TabsTrigger>
         </TabsList>
 
         {/* OVERVIEW TAB */}
@@ -928,6 +930,11 @@ export default function Finance() {
               </div>
             )}
           </div>
+        </TabsContent>
+
+        {/* ====== INVENTORY TAB ====== */}
+        <TabsContent value="inventory">
+          <InventoryTab responsiblePersons={responsiblePersons} departments={options?.departments || []} />
         </TabsContent>
       </Tabs>
 
