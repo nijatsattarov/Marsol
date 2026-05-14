@@ -13,7 +13,7 @@ export const VENUE_CONFIG = {
   fields: [
     { key: 'name', label: 'Məkan adı', type: 'text', required: true, group: 'Əsas' },
     { key: 'category', label: 'Kateqoriya', type: 'select', options: ['Restoran', 'Otel', 'Konfrans zalı', 'Açıq məkan', 'Bağ evi', 'Klub', 'Digər'], group: 'Əsas' },
-    { key: 'city', label: 'Şəhər / Rayon', type: 'text', group: 'Əsas' },
+    { key: 'city', label: 'Şəhər / Rayon', type: 'managedselect', list_key: 'cities', group: 'Əsas' },
     { key: 'address', label: 'Ünvan', type: 'text', group: 'Əsas' },
     { key: 'location_link', label: 'Google Maps linki', type: 'url', group: 'Əsas' },
     { key: 'contact_name', label: 'Əlaqədar şəxs', type: 'text', group: 'Əlaqə' },
