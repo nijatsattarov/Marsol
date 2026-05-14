@@ -84,6 +84,7 @@ function App() {
             <Route path="hr" element={<HR />} />
             <Route path="attendance" element={<Attendance />} />
             <Route path="finance" element={<Finance />} />
+            <Route path="finance/inventory" element={<Finance />} />
             <Route path="barter" element={<Barter />} />
             <Route path="sales" element={<Sales />} />
             <Route path="sales/company-database" element={<CompanyDatabase />} />

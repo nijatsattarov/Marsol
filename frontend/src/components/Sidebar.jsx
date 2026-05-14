@@ -34,7 +34,8 @@ import {
   MessageCircle,
   Lightbulb,
   Send,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Package
 } from 'lucide-react';
 
 const salesSubItems = [
@@ -53,6 +54,7 @@ const hrSubItems = [
 
 const financeSubItems = [
   { path: '/finance', label: 'Mühasibat', icon: Wallet, module: 'finance' },
+  { path: '/finance/inventory', label: 'İnventar', icon: Package, module: 'finance' },
   { path: '/barter', label: 'Barter', icon: ArrowLeftRight, module: 'finance' },
 ];
 

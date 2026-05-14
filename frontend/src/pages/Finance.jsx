@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import {
   Search, Loader2, TrendingUp, TrendingDown, Filter,
@@ -31,7 +32,8 @@ const expenseCategories = [
 ];
 
 export default function Finance() {
-  const [activeTab, setActiveTab] = useState('overview');
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState(location.pathname.endsWith('/inventory') ? 'inventory' : 'overview');
   const [allCompanies, setAllCompanies] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [options, setOptions] = useState(null);
@@ -122,6 +124,11 @@ export default function Finance() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Sync tab with URL (sidebar deep-link to /finance/inventory)
+  useEffect(() => {
+    if (location.pathname.endsWith('/inventory')) setActiveTab('inventory');
+  }, [location.pathname]);
 
   // Load sales when a project is selected in finance view
   useEffect(() => {
