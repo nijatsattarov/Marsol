@@ -3684,6 +3684,7 @@ MANAGEABLE_LISTS = [
     {"key": "event_types", "label": "Tədbir növləri", "defaults": ["Konfrans", "Seminar", "Təlim", "Sərgi", "Networking", "İclas"], "group": "Tədbirlər"},
     {"key": "invitation_response_statuses", "label": "Dəvət cavabları", "defaults": ["Gözləmədə", "Qatıldı", "Rədd etdi", "Cavab vermədi"], "group": "Tədbirlər"},
     {"key": "cities", "label": "Şəhərlər", "defaults": ["Bakı", "Sumqayıt", "Gəncə", "Mingəçevir", "Şirvan", "Naxçıvan", "Lənkəran", "Şəki", "Quba", "Qəbələ", "Şamaxı", "Xaçmaz", "İsmayıllı", "Yevlax", "Ağdam"], "group": "Təşkilatçılıq"},
+    {"key": "layout_types", "label": "Düzülüş növləri", "defaults": ["Banket", "Teatr", "U-forma", "Klass", "Boardroom", "Kokteyl", "Yarımdairə", "Konfrans"], "group": "Təşkilatçılıq"},
 ]
 MANAGEABLE_LIST_KEYS = [item["key"] for item in MANAGEABLE_LISTS]
 
