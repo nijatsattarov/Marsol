@@ -17,6 +17,7 @@ import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
 import { DatePickerAz, TimeSelectAz } from '../components/DateTimePickerAz';
+import { validateRequired } from '../lib/validate';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -111,6 +112,12 @@ export default function Organization() {
 
   const handleEventSubmit = async (e) => {
     e.preventDefault();
+    if (!validateRequired([
+      [form.name, 'Fəaliyyət adı'],
+      [form.type, 'Növ'],
+      [form.date, 'Tarix'],
+      [form.participant_limit, 'İştirakçı limiti'],
+    ])) return;
     try {
       if (editing) {
         const updated = await axios.put(`${API}/events/${editing.id}`, form, { headers });

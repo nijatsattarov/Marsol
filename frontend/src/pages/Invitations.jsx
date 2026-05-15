@@ -9,6 +9,7 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../context/PermissionContext';
+import { validateRequired } from '../lib/validate';
 import * as XLSX from 'xlsx';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -43,6 +44,10 @@ export default function Invitations() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!validateRequired([
+      [form.event_id, 'Tədbir'],
+      [form.guest_name, 'Qonaq adı'],
+    ])) return;
     try {
       const payload = { ...form };
       if (!payload.event_name) { const ev = events.find(x => x.id === payload.event_id); if (ev) payload.event_name = ev.name; }

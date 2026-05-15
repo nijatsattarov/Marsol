@@ -16,6 +16,7 @@ import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { DatePickerAz, TimeSelectAz } from '../components/DateTimePickerAz';
+import { validateRequired } from '../lib/validate';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -106,6 +107,16 @@ export default function CompanyDatabase() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const rules = [
+      [form.company_name, 'Şirkət adı'],
+      [form.contact_name, 'Əlaqədar şəxs'],
+      [form.sale_type, 'Layihə növü'],
+    ];
+    if (editing && isSoldStatus && form.sale_type) {
+      rules.push([form.project_id, 'Hansı layihə?']);
+      if (form.sale_type === 'Üzvlük') rules.push([form.package, 'Paket']);
+    }
+    if (!validateRequired(rules)) return;
     try {
       if (editing) {
         await axios.put(`${API}/sales-leads/${editing.id}`, form, { headers });
@@ -121,6 +132,10 @@ export default function CompanyDatabase() {
 
   const handleMeetingSubmit = async (e) => {
     e.preventDefault();
+    if (!validateRequired([
+      [meetingForm.date, 'Tarix'],
+      [meetingForm.time, 'Saat'],
+    ])) return;
     try {
       await axios.post(`${API}/sales-leads/${meetingLead.id}/create-meeting`, meetingForm, { headers });
       toast.success('Görüş yaradıldı və Görüşlər moduluna əlavə edildi');

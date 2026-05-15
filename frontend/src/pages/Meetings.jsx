@@ -18,6 +18,7 @@ import { formatDate } from '../lib/dateUtils';
 import { createUnicodePdf } from '../lib/pdfHelpers';
 import MeetingRequestModal, { MeetingRequestInbox } from '../components/MeetingRequest';
 import { DatePickerAz, TimeSelectAz } from '../components/DateTimePickerAz';
+import { validateRequired } from '../lib/validate';
 import autoTable from 'jspdf-autotable';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -102,6 +103,11 @@ export default function Meetings() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!validateRequired([
+      [form.employee, 'Sahə işçisi'],
+      [form.date, 'Tarix'],
+      [form.time, 'Saat'],
+    ])) return;
     try {
       if (editing) {
         await axios.put(`${API}/meetings/${editing.id}`, form, { headers });

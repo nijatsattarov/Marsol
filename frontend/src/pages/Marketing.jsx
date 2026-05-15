@@ -52,7 +52,7 @@ export default function Marketing() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const handleCreate = async () => {
-    if (!form.audience_id || !form.subject || !form.html) { toast.error('Auditoriya, mövzu və məzmun tələb olunur'); return; }
+    if (!form.audience_id || !form.subject || !form.html || !form.reply_to) { toast.error('Məcburi sahə(lər) boşdur: Auditoriya, Reply-to, Mövzu, HTML məzmun'); return; }
     setCreating(true);
     try {
       await axios.post(`${API}/marketing/mailchimp/campaigns`, form, { headers });

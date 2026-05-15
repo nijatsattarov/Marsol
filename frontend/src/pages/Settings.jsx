@@ -18,6 +18,7 @@ import PackageServicesManager from '../components/PackageServicesManager';
 import ManageableListsPanel from '../components/ManageableListsPanel';
 import { DepreciableAssetsPanel, InventoryCategoriesPanel } from '../components/InventorySettingsPanels';
 import SocialPlatformsPanel from '../components/SocialPlatformsPanel';
+import { validateRequired } from '../lib/validate';
 import SmsPanel from '../components/SmsPanel';
 import { usePermissions, canView } from '../context/PermissionContext';
 
@@ -467,6 +468,11 @@ export default function Settings() {
 
   const handleUserSubmit = async (e) => {
     e.preventDefault();
+    if (!validateRequired([
+      [userForm.name, 'Ad'],
+      [userForm.email, 'Email'],
+      [userForm.role, 'Rol'],
+    ])) return;
     const payload = { ...userForm };
     if (!payload.password) delete payload.password;
     try {
@@ -474,7 +480,7 @@ export default function Settings() {
         await axios.put(`${API}/settings/users/${editingUser.id}`, payload, { headers });
         toast.success('İstifadəçi yeniləndi');
       } else {
-        if (!payload.password) { toast.error('Şifrə daxil edin'); return; }
+        if (!payload.password) { toast.error('Məcburi sahə(lər) boşdur: Şifrə'); return; }
         await axios.post(`${API}/settings/users`, payload, { headers });
         toast.success('İstifadəçi yaradıldı');
       }

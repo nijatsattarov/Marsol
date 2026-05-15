@@ -21,6 +21,7 @@ import ExcelColumnPicker from '../components/ExcelColumnPicker';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
 import { DatePickerAz, TimeSelectAz } from '../components/DateTimePickerAz';
+import { validateRequired } from '../lib/validate';
 import { createUnicodePdf } from '../lib/pdfHelpers';
 import autoTable from 'jspdf-autotable';
 import { FileDown } from 'lucide-react';
@@ -659,6 +660,14 @@ export default function HR() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!validateRequired([
+      [formData.first_name, 'Ad'],
+      [formData.last_name, 'Soyad'],
+      [formData.gender, 'Cins'],
+      [formData.personal_phone, 'Şəxsi telefon'],
+      [formData.department, 'Şöbə'],
+      [formData.position, 'Vəzifə'],
+    ])) return;
     // Build full_name for backward compat
     const submitData = { ...formData, full_name: `${formData.first_name} ${formData.last_name}`.trim() };
     try {

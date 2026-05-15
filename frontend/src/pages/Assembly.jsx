@@ -16,6 +16,7 @@ import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
+import { validateRequired } from '../lib/validate';
 import { createUnicodePdf } from '../lib/pdfHelpers';
 import autoTable from 'jspdf-autotable';
 
@@ -323,6 +324,9 @@ export default function Assembly() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!validateRequired([
+      [form.purpose, 'İclasın məqsədi'],
+    ])) return;
     const payload = {
       ...form,
       agendas: form.agendas.filter(a => a.title.trim()).map(a => ({

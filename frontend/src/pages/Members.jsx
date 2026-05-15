@@ -45,6 +45,7 @@ import { Toaster, toast } from 'sonner';
 import { ScrollArea } from '../components/ui/scroll-area';
 import ExcelColumnPicker from '../components/ExcelColumnPicker';
 import PackageServicesView from '../components/PackageServicesView';
+import { validateRequired } from '../lib/validate';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -205,6 +206,18 @@ export default function Members() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!validateRequired([
+      [formData.company_name, 'Şirkət adı'],
+      [formData.email, 'Email'],
+      [formData.sector, 'Sektor'],
+      [formData.package, 'Paket'],
+      [formData.size, 'Ölçü'],
+      [formData.curator, 'Kurator'],
+      [formData.director_name, 'Rəhbərin adı'],
+      [formData.director_phone, 'Əlaqə nömrəsi (rəhbər)'],
+      [formData.contact_person, 'Əlaqədar şəxs'],
+      [formData.contact_phone, 'Əlaqə nömrəsi (əlaqədar şəxs)'],
+    ])) return;
     try {
       if (editingMember) {
         await axios.put(`${API}/members/${editingMember.id}`, formData, { headers });

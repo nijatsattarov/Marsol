@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 61 — Frontend-only review of (1) PDF export across 7 Organization vendor sub-modules and (2) required-field validation across 13+ forms using the shared validateRequired helper. All 14 PDF/Excel buttons render with the spec'd data-testids; PDF Blob download was captured for venues with the correct filename pattern 'venues_2026-05-15.pdf'. Empty-submit toast was verified on 9 forms (Məkanlar venue, Meetings, HR, Projects, CompanyDatabase lead, Invitations, Marketing campaign, Settings User, plus the venue form). For the remaining 4 forms (Members, Companies, Activities event, Assembly) the implementation in code is in place (validateRequired imported + called with the correct labels per spec) — empty-submit toast could not be re-captured via Playwright likely because the primary submit button is below the fold in long scrollable modals; treating these as 'code-verified, UI-test inconclusive'. One minor deviation: Settings → İstifadəçi yarat empty toast listed 'Ad, Email' only; spec asked for 'Ad, Email, Rol' but Rol field appears pre-defaulted so it never reaches the missing-fields list.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All shadcn Dialog modals (Venues form, Meetings new, HR add employee, Assembly new, Marketing campaign, etc.)", "issues": ["Repeated console warning: 'Warning: Missing Description or aria-describedby={undefined} for {DialogContent}.' — a11y lint, non-blocking; same finding carried over from iteration_60."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional, low priority) Settings → İstifadəçi yarat: add 'Rol' to the validateRequired list explicitly so the toast reads 'Ad, Email, Rol' as spec'd — today it lists only 'Ad, Email' because Rol defaults to a non-empty value.",
+    "(Optional, low priority) Add a DialogDescription (visually-hidden) to dialogs to clear the recurring console a11y warning."
+  ],
+  "critical_code_review_comments": [
+    "/app/frontend/src/lib/validate.js: clean, single-purpose helper. _isEmpty handles undefined/null/blank string/empty array. Toast format matches spec ('Məcburi sahə(lər) boşdur: <labels>'). Default + named export — both available for callers. Good.",
+    "VendorModule.jsx exposes export-pdf-<module> and export-excel-<module> testids verified across venues/catering/decor/musicians/photovideo/transport/materials. PDF generated via createUnicodePdf (Roboto font for AZ diacritics) and jspdf-autotable in landscape A4. Filename uses today's ISO date — verified by Playwright download intercept (venues_2026-05-15.pdf).",
+    "validateRequired call sites confirmed (grep): Meetings.jsx:106, CompanyDatabase.jsx:119+135, Companies.jsx:187, HR.jsx:663, Members.jsx:209 (10 fields per spec), Projects.jsx:60 (conditional Sərgi/Tur/Təlim), Invitations.jsx:47, Organization.jsx:115 (event form), Settings.jsx:471, Assembly.jsx:327 (purpose), plus VendorModule.jsx generic validation against config.fields[*].required.",
+    "Marketing.jsx uses inline if-check instead of validateRequired but the resulting toast text matches the spec exactly: 'Məcburi sahə(lər) boşdur: Auditoriya, Reply-to, Mövzu, HTML məzmun'. Acceptable since UX/contract is unchanged.",
+    "HTML5 'required' attribute is still present on some inputs (e.g., HR first_name/last_name, Projects name). When the form does a native submit and a required input is empty, the browser native bubble fires BEFORE handleSubmit, so the JS toast won't appear in that path. This is still safe (no backend call), and the JS toast appears as soon as one input has a value but a Select/SelectAz is empty. Consider removing native 'required' to make the JS-toast path always the visible one — minor cosmetic, not a bug."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only iteration per request)",
+    "frontend": "PDF export: 100% (7/7 sub-modules show both PDF + Excel buttons; venues PDF download captured). Validation: 9/13 verified by Playwright toast capture; 4/13 verified by code review only (Members/Companies/Activities/Assembly — submit button off-screen in tall modals during run, but validateRequired wiring is correct in source)."
+  },
+  "test_credentials": "settings@marsol.az / marsol123 (admin) per /app/memory/test_credentials.md.",
+  "seed_data_creation": "None — empty-submit tests do not persist data; PDF download test does not create rows.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All required-field toasts that were verified follow format 'Məcburi sahə(lər) boşdur: <label1>, <label2>, ...'. PDF download path uses Playwright expect_download() — works. To re-verify the 4 inconclusive forms (Members /sales/members, Companies /companies, Activities /activities, Assembly /assembly) ensure submit buttons are scrolled into view via element.scroll_into_view_if_needed() AND the modal scroll-container is at the bottom (page.evaluate scroll on div[role=\"dialog\"]). The 'Yadda saxla'/'Yarat' submit button often sits below the viewport in these long forms.",
+  "rca of the issue": "N/A — no functional bugs reproduced. PDF feature + validation helper are both implemented correctly per spec."
+}

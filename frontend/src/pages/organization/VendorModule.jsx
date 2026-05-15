@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
-import { Plus, Loader2, Search, Pencil, Trash2, Download, Star, Phone, MessageCircle, MapPin, ExternalLink, Check, X, Image as ImageIcon, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { Plus, Loader2, Search, Pencil, Trash2, Download, FileDown, Star, Phone, MessageCircle, MapPin, ExternalLink, Check, X, Image as ImageIcon, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -11,6 +11,9 @@ import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../../context/PermissionContext';
 import { PhotoUploadField, SocialLinksField, PhotoUploadDisplay, SocialLinksDisplay } from '../../components/MediaFields';
 import ImageLightbox from '../../components/ImageLightbox';
+import { createUnicodePdf } from '../../lib/pdfHelpers';
+import { formatDate } from '../../lib/dateUtils';
+import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -303,6 +306,19 @@ export default function VendorModule({ config }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Validate required fields explicitly (covers Select/Popover/array types beyond native required)
+    const missing = config.fields.filter(f => {
+      if (!f.required) return false;
+      const v = form[f.key];
+      if (v === undefined || v === null) return true;
+      if (typeof v === 'string' && v.trim() === '') return true;
+      if (Array.isArray(v) && v.length === 0) return true;
+      return false;
+    });
+    if (missing.length) {
+      toast.error(`Məcburi sahə(lər) boşdur: ${missing.map(f => f.label).join(', ')}`);
+      return;
+    }
     const payload = normalizeForSubmit(form, config.fields);
     try {
       if (editing) { await axios.put(`${API}/organization/${config.module}/${editing.id}`, payload, { headers }); toast.success('Yeniləndi'); }
@@ -350,6 +366,40 @@ export default function VendorModule({ config }) {
     toast.success('Excel endirildi');
   };
 
+  const exportPdf = () => {
+    // Choose visible/list columns + ad-hoc additional important fields, max ~7 to fit landscape A4
+    const cols = config.fields
+      .filter(f => !['photoupload', 'photolinks', 'sociallinks', 'textarea'].includes(f.type))
+      .slice(0, 7);
+    const doc = createUnicodePdf({ orientation: 'landscape' });
+    doc.setFontSize(14);
+    doc.text(config.title, 14, 14);
+    doc.setFontSize(9);
+    doc.text(`Tarix: ${formatDate(new Date().toISOString())}  |  Qeyd: ${filtered.length}`, 14, 20);
+    const head = [[...cols.map(f => f.label), 'Reytinq']];
+    const body = filtered.map(i => [
+      ...cols.map(f => {
+        const v = i[f.key];
+        if (v == null || v === '') return '—';
+        if (f.type === 'contacts' && Array.isArray(v)) return v.map(c => `${c?.name || ''}${c?.phone ? ' (' + c.phone + ')' : ''}`).join(', ');
+        if (Array.isArray(v)) return v.join(', ');
+        if (typeof v === 'boolean') return v ? 'Bəli' : 'Xeyr';
+        return String(v);
+      }),
+      i.rating_avg != null ? `${i.rating_avg} (${i.rating_count})` : '—',
+    ]);
+    autoTable(doc, {
+      head,
+      body,
+      startY: 24,
+      styles: { font: 'Roboto', fontStyle: 'normal', fontSize: 8, cellPadding: 2 },
+      headStyles: { font: 'Roboto', fontStyle: 'normal', fillColor: [61, 79, 111], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+    });
+    doc.save(`${config.module}_${new Date().toISOString().split('T')[0]}.pdf`);
+    toast.success('PDF endirildi');
+  };
+
   // Group fields for form
   const groupedFields = useMemo(() => {
     const groups = {};
@@ -380,7 +430,8 @@ export default function VendorModule({ config }) {
           <p className="text-slate-500 text-sm mt-1">{config.subtitle} • {items.length} qeyd</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button onClick={exportExcel} variant="outline" className="text-[#3D4F6F]"><Download className="w-4 h-4 mr-1" />Excel</Button>
+          <Button onClick={exportExcel} variant="outline" className="text-[#3D4F6F]" data-testid={`export-excel-${config.module}`}><Download className="w-4 h-4 mr-1" />Excel</Button>
+          <Button onClick={exportPdf} variant="outline" className="text-rose-600 border-rose-200" data-testid={`export-pdf-${config.module}`}><FileDown className="w-4 h-4 mr-1" />PDF</Button>
           {_canEdit && <Button onClick={openCreate} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid={`add-${config.module}-btn`}><Plus className="w-4 h-4 mr-1" />Yeni</Button>}
         </div>
       </div>

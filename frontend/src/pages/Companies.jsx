@@ -20,6 +20,7 @@ import PackageServicesView from '../components/PackageServicesView';
 import ServiceUsageTab from '../components/ServiceUsageTab';
 import { COUNTRIES } from '../lib/countries';
 import { formatDate } from '../lib/dateUtils';
+import { validateRequired } from '../lib/validate';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import ExcelColumnPicker from '../components/ExcelColumnPicker';
@@ -181,6 +182,15 @@ export default function Companies() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Validate required fields (Şirkət forması)
+    const owner0 = formData.owners?.[0] || {};
+    if (!validateRequired([
+      [formData.brand_name, 'Brend adı'],
+      [formData.sector, 'Sektor'],
+      [formData.curator, 'Kurator'],
+      [owner0.first_name, 'Sahibkar adı'],
+      [owner0.last_name, 'Sahibkar soyadı'],
+    ])) return;
     // Flatten owner data for backward compatibility
     const payload = { ...formData };
     if (payload.owners?.[0]) {

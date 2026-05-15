@@ -10,6 +10,7 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../context/PermissionContext';
+import { validateRequired } from '../lib/validate';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const STATUSES = ['Planlaşdırılır', 'Aktiv', 'Tamamlandı'];
@@ -46,6 +47,17 @@ export default function Projects() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const rules = [
+      [form.name, 'Layihə adı'],
+      [form.type, 'Növ'],
+    ];
+    if (form.type === 'Sərgi') {
+      rules.push([form.price_per_sqm, 'kv/m qiyməti']);
+    }
+    if (['Tur', 'Təlim'].includes(form.type)) {
+      rules.push([form.total_price, 'Ümumi qiymət']);
+    }
+    if (!validateRequired(rules)) return;
     try {
       const payload = { ...form };
       ['price_per_sqm', 'total_price'].forEach(k => {
