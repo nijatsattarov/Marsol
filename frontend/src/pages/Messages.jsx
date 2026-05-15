@@ -174,25 +174,6 @@ export default function Messages() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {/* Groups section */}
-            {groups.length > 0 && (
-              <div className="border-b border-slate-100">
-                <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Users className="w-3 h-3" />Qruplar ({groups.length})</p>
-                {groups.map(g => (
-                  <div key={g.id} className="w-full text-left p-3 border-b border-slate-50 hover:bg-slate-50 transition-colors" data-testid={`group-${g.id}`}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: g.color || '#9ACD32' }}>
-                        <Users className="w-4 h-4 text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm text-[#3D4F6F] truncate">{g.name}</p>
-                        <p className="text-xs text-slate-500 truncate">{g.members?.length || 0} üzv {g.description ? `· ${g.description}` : ''}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
             {filteredConvs.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
                 <MessageCircle className="w-10 h-10 mx-auto mb-2 opacity-40" />
@@ -208,11 +189,11 @@ export default function Messages() {
                   data-testid={`conv-${conv.id}`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-[#3D4F6F] flex items-center justify-center flex-shrink-0">
-                      <span className="text-white text-sm font-semibold">{getOtherName(conv).charAt(0).toUpperCase()}</span>
+                    <div className={`w-9 h-9 rounded-full ${conv.is_group ? 'bg-[#9ACD32]' : 'bg-[#3D4F6F]'} flex items-center justify-center flex-shrink-0`}>
+                      {conv.is_group ? <Users className="w-4 h-4 text-white" /> : <span className="text-white text-sm font-semibold">{getOtherName(conv).charAt(0).toUpperCase()}</span>}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm text-[#3D4F6F] truncate">{getOtherName(conv)}</p>
+                      <p className="font-medium text-sm text-[#3D4F6F] truncate">{getOtherName(conv)}{conv.is_group && <span className="text-[10px] text-slate-400 ml-1">· {conv.participants?.length || 0}</span>}</p>
                       <p className="text-xs text-slate-500 truncate">{conv.last_message || 'Söhbət başladın...'}</p>
                     </div>
                   </div>
