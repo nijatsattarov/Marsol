@@ -81,11 +81,8 @@ export default function Tasks() {
 
   const fetchData = useCallback(async () => {
     try {
-      const params = new URLSearchParams();
-      if (filters.status !== 'all') params.append('status', filters.status);
-      if (filters.priority !== 'all') params.append('priority', filters.priority);
       const [tRes, eRes, oRes, aRes, uRes] = await Promise.all([
-        axios.get(`${API}/tasks?${params.toString()}`, { headers }),
+        axios.get(`${API}/tasks`, { headers }),
         axios.get(`${API}/employees`, { headers }),
         axios.get(`${API}/options/all`, { headers }),
         axios.get(`${API}/assemblies`, { headers }),
@@ -98,7 +95,7 @@ export default function Tasks() {
       setUsers(uRes.data || []);
     } catch (error) { console.error('Error:', error); }
     finally { setLoading(false); }
-  }, [filters]);
+  }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -131,6 +128,8 @@ export default function Tasks() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.assignee?.trim()) { toast.error('İcraçı əməkdaş məcburidir'); return; }
+    if (!formData.responsible_person?.trim()) { toast.error('Məsul şəxs məcburidir'); return; }
     try {
       if (editingTask) {
         const { data: updated } = await axios.put(`${API}/tasks/${editingTask.id}`, formData, { headers });
@@ -208,8 +207,14 @@ export default function Tasks() {
     setFormData({ ...formData, related_object_id: id, related_object: label });
   };
 
+  // Client-side filtering (instant — no backend round-trip)
+  const filteredTasks = tasks.filter(t => {
+    if (filters.status !== 'all' && t.status !== filters.status) return false;
+    if (filters.priority !== 'all' && t.priority !== filters.priority) return false;
+    return true;
+  });
   const tasksByStatus = statuses.reduce((acc, status) => {
-    acc[status] = tasks.filter(t => t.status === status);
+    acc[status] = filteredTasks.filter(t => t.status === status);
     return acc;
   }, {});
 

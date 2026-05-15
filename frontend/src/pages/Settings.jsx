@@ -1283,13 +1283,26 @@ export default function Settings() {
                       </thead>
                       <tbody>
                         {[
-                          ['members', 'Üzvlər'],
+                          ['dashboard', 'İdarə Paneli'],
                           ['companies', 'Şirkət Məlumatları'],
+                          ['hr', 'İnsan Resurları'],
                           ['sales', 'Satış (Şirkət Bazası)'],
-                          ['tasks', 'Tapşırıqlar'],
+                          ['members', 'Üzvlər'],
+                          ['obligations', 'Öhdəliklər'],
+                          ['finance', 'Maliyyə'],
+                          ['organization', 'Təşkilatçılıq'],
                           ['meetings', 'Görüşlər'],
                           ['assembly', 'İclaslar'],
+                          ['tasks', 'Tapşırıqlar'],
+                          ['marketing', 'Marketinq'],
                           ['projects', 'Layihələr'],
+                          ['reports', 'Hesabatlar'],
+                          ['messages', 'Mesajlar'],
+                          ['files', 'Fayllar'],
+                          ['notes', 'Qeydlər'],
+                          ['sms', 'SMS'],
+                          ['notifications', 'Bildirişlər'],
+                          ['settings', 'Tənzimləmələr'],
                         ].map(([key, label]) => (
                           <tr key={`scope-${key}`} className="border-b border-slate-100 hover:bg-slate-50/50">
                             <td className="px-3 py-2 text-xs text-slate-700 font-medium">{label}</td>

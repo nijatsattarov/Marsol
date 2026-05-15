@@ -11,7 +11,7 @@ import { formatDate } from '../lib/dateUtils';
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const NOTE_COLORS = ['#FFFFFF', '#FEF3C7', '#FED7AA', '#FECACA', '#DBEAFE', '#D1FAE5', '#E9D5FF', '#FBCFE8'];
 
-const emptyNote = { title: '', content: '', color: NOTE_COLORS[1], pinned: false, tags: [], shared_with_all: false };
+const emptyNote = { title: '', content: '', color: NOTE_COLORS[1], pinned: false, tags: [], shared_with_all: false, shared_with_users: [] };
 
 export default function Notes() {
   const token = localStorage.getItem('token');
@@ -19,6 +19,7 @@ export default function Notes() {
 
   const [notes, setNotes] = useState([]);
   const [tags, setTags] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [activeTag, setActiveTag] = useState('');
@@ -39,6 +40,8 @@ export default function Notes() {
       setNotes(res.data || []);
       const tagRes = await axios.get(`${API}/notes/tags`, { headers });
       setTags(tagRes.data || []);
+      const userRes = await axios.get(`${API}/settings/users`, { headers }).catch(() => ({ data: [] }));
+      setUsers((userRes.data || []).filter(u => (u.status || 'Aktiv') === 'Aktiv'));
     } catch {
       toast.error('Qeydləri yükləmək alınmadı');
     } finally {
@@ -50,7 +53,7 @@ export default function Notes() {
   useEffect(() => { fetchNotes(); }, [fetchNotes]);
 
   const openNew = () => { setEditing('new'); setForm({ ...emptyNote }); setTagInput(''); };
-  const openEdit = (n) => { setEditing(n); setForm({ ...n, tags: n.tags || [] }); setTagInput(''); };
+  const openEdit = (n) => { setEditing(n); setForm({ ...n, tags: n.tags || [], shared_with_users: n.shared_with_users || [] }); setTagInput(''); };
   const closeModal = () => { setEditing(null); setForm(emptyNote); setTagInput(''); };
 
   const submit = async () => {
@@ -224,11 +227,46 @@ export default function Notes() {
                   {form.pinned ? 'Sancılıb' : 'Sanc'}
                 </button>
                 <label className="flex items-center gap-1 text-xs text-slate-600 cursor-pointer">
-                  <input type="checkbox" checked={form.shared_with_all} onChange={(e) => setForm({ ...form, shared_with_all: e.target.checked })} className="accent-[#9ACD32]" data-testid="note-share-toggle" />
+                  <input type="checkbox" checked={form.shared_with_all} onChange={(e) => setForm({ ...form, shared_with_all: e.target.checked, shared_with_users: e.target.checked ? [] : form.shared_with_users })} className="accent-[#9ACD32]" data-testid="note-share-toggle" />
                   Hamı görsün
                 </label>
               </div>
             </div>
+
+            {/* Specific users selector — only visible when "Hamı görsün" is OFF */}
+            {!form.shared_with_all && (
+              <div className="border-t pt-3" data-testid="note-share-users-section">
+                <Label className="text-xs">Hansı istifadəçilər görsün (boş = yalnız siz)</Label>
+                <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg p-2 mt-1 space-y-0.5 bg-slate-50">
+                  {users.length === 0 ? (
+                    <p className="text-[10px] text-slate-400 text-center py-1">İstifadəçi yoxdur</p>
+                  ) : users.map(u => {
+                    const active = (form.shared_with_users || []).includes(u.id);
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => {
+                          const list = form.shared_with_users || [];
+                          setForm({
+                            ...form,
+                            shared_with_users: active ? list.filter(x => x !== u.id) : [...list, u.id],
+                          });
+                        }}
+                        className={`w-full text-left flex items-center justify-between gap-2 px-2 py-1 rounded text-[11px] ${active ? 'bg-emerald-100 border border-emerald-300' : 'bg-white hover:bg-slate-100 border border-transparent'}`}
+                        data-testid={`note-user-${u.id}`}
+                      >
+                        <span className="font-medium text-[#3D4F6F]">{u.name}</span>
+                        {active && <span className="text-emerald-700 text-[10px]">✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                {(form.shared_with_users || []).length > 0 && (
+                  <p className="text-[10px] text-slate-500 mt-1">{form.shared_with_users.length} istifadəçi seçildi</p>
+                )}
+              </div>
+            )}
 
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={closeModal} data-testid="note-cancel">Ləğv</Button>

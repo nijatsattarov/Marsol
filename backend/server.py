@@ -4813,27 +4813,61 @@ async def get_conversations(current_user: dict = Depends(get_current_user)):
 
 @api_router.post("/messages/conversations")
 async def create_conversation(data: dict, current_user: dict = Depends(get_current_user)):
+    """Create a 1-1 or group conversation.
+
+    Body: { participant_id?: str, participant_ids?: [str], name?: str }
+    - participant_id (legacy): single user → 1-1 chat (reuses existing if any)
+    - participant_ids: array of users → group chat (always creates a new doc; group `name` recommended)
+    """
     conv_id = str(uuid.uuid4())
-    participant_id = data.get("participant_id")
-    # Check if conversation already exists
-    existing = await db.conversations.find_one({
-        "participants": {"$all": [current_user["id"], participant_id]}
-    })
-    if existing:
-        existing.pop("_id", None)
-        return existing
-    
-    participant = await db.users.find_one({"id": participant_id}, {"_id": 0, "password": 0})
-    if not participant:
-        raise HTTPException(status_code=404, detail="İstifadəçi tapılmadı")
-    
+    me = current_user["id"]
+    raw_ids = data.get("participant_ids")
+    if isinstance(raw_ids, list) and len(raw_ids) > 0:
+        # Group / multi-participant flow
+        unique = [pid for pid in dict.fromkeys(raw_ids) if pid and pid != me]
+        if not unique:
+            raise HTTPException(status_code=400, detail="Ən az 1 iştirakçı seçilməlidir")
+        participants = [me] + unique
+        is_group = len(participants) > 2 or bool(data.get("name"))
+        # For 1-1, reuse existing conversation
+        if not is_group:
+            existing = await db.conversations.find_one({
+                "participants": {"$all": participants, "$size": 2},
+                "is_group": {"$ne": True},
+            })
+            if existing:
+                existing.pop("_id", None)
+                return existing
+    else:
+        # Legacy single-recipient path
+        participant_id = data.get("participant_id")
+        if not participant_id:
+            raise HTTPException(status_code=400, detail="participant_id və ya participant_ids tələb olunur")
+        participants = [me, participant_id]
+        is_group = False
+        existing = await db.conversations.find_one({"participants": {"$all": participants, "$size": 2}, "is_group": {"$ne": True}})
+        if existing:
+            existing.pop("_id", None)
+            return existing
+
+    # Build participant_names map
+    user_docs = await db.users.find({"id": {"$in": participants}}, {"_id": 0, "id": 1, "name": 1}).to_list(50)
+    names_map = {u["id"]: u.get("name", "") for u in user_docs}
+    # Sanity: must have at least the current user resolved
+    if me not in names_map:
+        names_map[me] = current_user.get("name", "")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
     conv_doc = {
         "id": conv_id,
-        "participants": [current_user["id"], participant_id],
-        "participant_names": {current_user["id"]: current_user["name"], participant_id: participant["name"]},
+        "participants": participants,
+        "participant_names": names_map,
+        "is_group": is_group,
+        "name": (data.get("name") or "").strip() if is_group else "",
+        "created_by": me,
         "last_message": "",
-        "last_message_at": datetime.now(timezone.utc).isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "last_message_at": now_iso,
+        "created_at": now_iso,
     }
     await db.conversations.insert_one(conv_doc)
     conv_doc.pop("_id", None)
@@ -4849,21 +4883,31 @@ async def get_messages(conversation_id: str, current_user: dict = Depends(get_cu
 @api_router.post("/messages/{conversation_id}")
 async def send_message(conversation_id: str, data: dict, current_user: dict = Depends(get_current_user)):
     msg_id = str(uuid.uuid4())
+    # Validate participant
+    conv = await db.conversations.find_one({"id": conversation_id, "participants": current_user["id"]}, {"_id": 0})
+    if not conv:
+        raise HTTPException(status_code=404, detail="Söhbət tapılmadı")
+    text = (data.get("text") or "").strip()
+    attachment = data.get("attachment")  # { url, name, mime_type, bytes, resource_type }
+    if not text and not attachment:
+        raise HTTPException(status_code=400, detail="Mesaj və ya fayl tələb olunur")
     msg_doc = {
         "id": msg_id,
         "conversation_id": conversation_id,
         "sender_id": current_user["id"],
         "sender_name": current_user["name"],
-        "text": data.get("text", ""),
+        "text": text,
+        "attachment": attachment if isinstance(attachment, dict) else None,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.messages.insert_one(msg_doc)
     msg_doc.pop("_id", None)
-    
-    # Update conversation last message
+
+    # Update conversation preview
+    preview = text or (attachment.get("name") if isinstance(attachment, dict) else "📎 Fayl")
     await db.conversations.update_one(
         {"id": conversation_id},
-        {"$set": {"last_message": data.get("text", ""), "last_message_at": msg_doc["created_at"]}}
+        {"$set": {"last_message": preview[:120], "last_message_at": msg_doc["created_at"]}}
     )
     return msg_doc
 
@@ -7515,6 +7559,23 @@ async def create_file(data: dict, current_user: dict = Depends(check_permission(
     }
     await db.files.insert_one(doc.copy())
     return doc
+
+
+@api_router.put("/files/{file_id}")
+async def update_file_metadata(file_id: str, data: dict, current_user: dict = Depends(check_permission("files", "write"))):
+    """Update description, name or tags for a file. Cloudinary asset itself is untouched."""
+    update: Dict[str, Any] = {}
+    for k in ("description", "name"):
+        if k in data:
+            update[k] = (str(data.get(k) or "")).strip()
+    if "tags" in data and isinstance(data["tags"], list):
+        update["tags"] = data["tags"]
+    if not update:
+        raise HTTPException(status_code=400, detail="Yenilənəcək məlumat yoxdur")
+    result = await db.files.update_one({"id": file_id}, {"$set": update})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Fayl tapılmadı")
+    return await db.files.find_one({"id": file_id}, {"_id": 0})
 
 
 @api_router.delete("/files/{file_id}")

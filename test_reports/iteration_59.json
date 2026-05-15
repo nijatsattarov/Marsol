@@ -1,0 +1,56 @@
+{
+  "summary": "Iteration 59 — Backend pytest 9/9 PASSED (group conversations, attachment messages, file PUT description). Frontend Playwright covered Settings Roles modal (all 20 modules visible), Tasks validation+filter, Notes share-users picker, Files edit-desc modal, Marketing DD/MM/YYYY, and Dashboard widgets. CRITICAL FRONTEND CRASH: /messages route throws Uncaught ReferenceError: 'groups is not defined' (Messages.jsx:178/180/181) — entire Messages page is BLANK and unusable, blocking spec items #16, #17 (group creation UI, attachment UI). Root cause: leftover `groups` array references from a previous refactor that switched to using conversations with is_group flag; the dead 'Qruplar' section block (lines 177-195) was never removed when the migration happened. Backend group conversation API works correctly end-to-end.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Messages page (/messages)",
+        "issue": "Uncaught ReferenceError: groups is not defined at Messages component render. Entire page crashes to blank/error boundary. data-testid='messages-page', 'new-group-btn', 'new-chat-btn' all missing because component never mounts. Reproduced cleanly after login as settings@marsol.az → navigate to /messages.",
+        "selector": "[data-testid='messages-page']",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Messages — group creation (#16) and file attachments (#17)",
+        "issue": "Cannot test 'Yeni qrup' flow or paperclip attach button because Messages page crashes on render. Backend POST /api/messages/conversations group payload + attachment messages verified via pytest, so server is healthy — failure is purely frontend ReferenceError.",
+        "affected_selectors": ["[data-testid='new-group-btn']", "[data-testid='group-name']", "[data-testid='group-members-list']", "[data-testid='create-group-btn']", "[data-testid='msg-attach-btn']", "[data-testid='msg-file-input']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration59_messages_files_groups.py",
+    "/app/test_reports/pytest/iteration_59_results.xml"
+  ],
+  "action_items": [
+    "FIX (CRITICAL): In /app/frontend/src/pages/Messages.jsx remove the dead 'Qruplar' section (lines 177-195) that references undefined `groups` array. Since conversations with is_group=true already flow through `filteredConvs`, simply delete that block. Alternatively, derive `const groups = conversations.filter(c => c.is_group)` and `const oneToOnes = conversations.filter(c => !c.is_group)` and render them in two separate sections — but the simplest fix is removing the leftover block. After fix, /messages page should render, 'Yeni qrup' button must be visible, and group creation (POST /api/messages/conversations with participant_ids+name) should attach the new group to the sidebar via its conv.is_group rendering (using `getOtherName` which already returns conv.name for is_group=true).",
+    "After fix, re-run only the Messages smoke: open /messages → click 'Yeni qrup' → fill name + select 1 user → click 'create-group-btn' → expect group to appear in sidebar with name. Also click a group/conv → click paperclip → ensure file picker opens; backend already accepts attachment-only messages."
+  ],
+  "critical_code_review_comments": [
+    "Messages.jsx has stale `groups` variable references in JSX with no corresponding state/derivation — undefined variable should have been caught by lint but isn't because JSX expressions evaluate lazily. Recommend enabling 'no-undef' in eslint config or adding a CI step.",
+    "send_message endpoint (server.py:4884) correctly accepts attachment-only payload and falls back to filename for conversation preview. Length-cap preview[:120] is applied — safe.",
+    "create_conversation (server.py:4814) is_group derivation `is_group = len(participants) > 2 or bool(data.get('name'))` is correct — a 2-person group with a name is still tagged as group, matching frontend expectation.",
+    "update_file_metadata strips whitespace via str(...).strip() but allows empty string descriptions (clearing a description sets it to '') — acceptable.",
+    "Notes share-users section correctly hides when shared_with_all=true; clearing shared_with_users when toggling ON also handled in onChange (Notes.jsx:230). Verified.",
+    "Files.jsx description rendering correctly uses data-testid='file-desc-{id}' and only appears when f.description is non-empty. Edit modal opens with prefilled value, save triggers PUT /api/files/{id} with {description}.",
+    "Settings Roles modal renders all 20 modules in expected Azerbaijani labels: İdarə Paneli, Şirkət Məlumatları, İnsan Resursları, Satış (Şirkət Bazası), Üzvlər, Öhdəliklər, Maliyyə, Təşkilatçılıq, Görüşlər, İclaslar, Tapşırıqlar, Marketinq, Layihələr, Hesabatlar, Mesajlar, Fayllar, Qeydlər, SMS, Tənzimləmələr, Bildirişlər — count=20 confirmed visually."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration59_messages_files_groups.py (new — 9 tests across 3 classes: TestConversations, TestMessages, TestFilesUpdate)"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9)",
+    "frontend": "70% — Settings Roles ✅, Tasks validation+filter ✅, Notes share-users ✅, Files edit-desc ✅, Marketing date format ✅, Dashboard admin widgets visible ✅; Messages page ❌ (blocking crash); Organization Tədbirlər tab — could not verify date format because tab had no rows visible (no seed data)."
+  },
+  "test_credentials": "settings@marsol.az / marsol123 (admin). Login returns access_token. /api/settings/users (not /api/users) lists users for picking group participants.",
+  "seed_data_creation": "Pytest creates TEST_Group_*, TEST_MsgConv_*, TEST_iter59.txt file + 2 text/attachment messages per run. Conversations/messages are NOT cleaned up (no DELETE endpoint exposed); file IS cleaned up via DELETE /api/files/{id} in fixture teardown. Residual TEST_ conversations accumulate harmlessly; main agent may want to add cleanup endpoint later.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent removes Messages.jsx dead `groups` block (lines 177-195), re-run only Messages smoke: login → /messages → expect 'messages-page' testid present → click 'new-group-btn' → fill 'group-name' + click 1 'group-member-{id}' → click 'create-group-btn' → expect new conv card appears in sidebar with name. Then click that conv → click 'msg-attach-btn' → file picker opens → upload tiny file → expect inline thumbnail/link rendered. Backend already verified via /app/backend/tests/test_iteration59_messages_files_groups.py (re-run with `pytest backend/tests/test_iteration59_messages_files_groups.py -v`). All other spec items already validated.",
+  "rca of the issue": "Messages.jsx ReferenceError 'groups is not defined': The component at some point used a separate `groups` state (likely from a `/api/groups` endpoint) that was later removed/refactored into using `conversations` with `is_group` flag. The fetch and useState for `groups` were deleted but the JSX rendering block at lines 177-195 was overlooked. React JSX expressions are evaluated lazily so this compiles fine but throws at runtime on first render. Mitigation: delete the block OR derive `const groups = conversations.filter(c => c.is_group)` at the top of the render. Recommend the latter to keep the visual separation between groups and 1-1 chats, and also filter out is_group items from `filteredConvs` to avoid double rendering."
+}

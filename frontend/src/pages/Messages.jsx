@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import {
-  Plus, Search, Loader2, Send, User, ArrowLeft, MessageCircle, Users, X
+  Plus, Search, Loader2, Send, User, ArrowLeft, MessageCircle, Users, X, Paperclip
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -23,7 +23,6 @@ export default function Messages() {
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [groupForm, setGroupForm] = useState({ name: '', description: '', members: [] });
   const [savingGroup, setSavingGroup] = useState(false);
-  const [groups, setGroups] = useState([]);
   const [selectedUser, setSelectedUser] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const messagesEndRef = useRef(null);
@@ -34,14 +33,12 @@ export default function Messages() {
 
   const fetchConversations = useCallback(async () => {
     try {
-      const [convRes, usersRes, groupsRes] = await Promise.all([
+      const [convRes, usersRes] = await Promise.all([
         axios.get(`${API}/messages/conversations`, { headers }),
         axios.get(`${API}/settings/users`, { headers }),
-        axios.get(`${API}/message-groups`, { headers }).catch(() => ({ data: [] })),
       ]);
       setConversations(convRes.data);
-      setUsers(usersRes.data.filter(u => u.id !== currentUser.id));
-      setGroups(groupsRes.data || []);
+      setUsers(usersRes.data.filter(u => u.id !== currentUser.id && (u.status || 'Aktiv') === 'Aktiv'));
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, []); // eslint-disable-line
@@ -52,11 +49,15 @@ export default function Messages() {
     }
     setSavingGroup(true);
     try {
-      await axios.post(`${API}/message-groups`, groupForm, { headers });
+      const res = await axios.post(`${API}/messages/conversations`, {
+        participant_ids: groupForm.members,
+        name: groupForm.name,
+      }, { headers });
       toast.success('Qrup yaradıldı');
       setShowNewGroup(false);
       setGroupForm({ name: '', description: '', members: [] });
-      fetchConversations();
+      await fetchConversations();
+      openConversation(res.data);
     } catch (e) { toast.error(e?.response?.data?.detail || 'Xəta'); }
     finally { setSavingGroup(false); }
   };
@@ -76,15 +77,49 @@ export default function Messages() {
     fetchMessages(conv.id);
   };
 
+  const fileInputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+
   const sendMessage = async (e) => {
-    e.preventDefault();
-    if (!msgText.trim() || !activeConv) return;
+    if (e) e.preventDefault();
+    if (!activeConv) return;
+    if (!msgText.trim()) return;
     try {
       await axios.post(`${API}/messages/${activeConv.id}`, { text: msgText }, { headers });
       setMsgText('');
       fetchMessages(activeConv.id);
       fetchConversations();
     } catch { toast.error('Mesaj göndərilmədi'); }
+  };
+
+  const handleAttachment = async (files) => {
+    if (!activeConv || !files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const fd = new FormData();
+        fd.append('file', file);
+        const upRes = await axios.post(`${API}/upload`, fd, {
+          headers: { ...headers, 'Content-Type': 'multipart/form-data' },
+        });
+        const attachment = {
+          url: upRes.data?.url,
+          name: file.name,
+          mime_type: file.type,
+          bytes: file.size,
+          resource_type: upRes.data?.resource_type || 'auto',
+        };
+        await axios.post(`${API}/messages/${activeConv.id}`, { attachment }, { headers });
+      }
+      toast.success('Fayl göndərildi');
+      fetchMessages(activeConv.id);
+      fetchConversations();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Fayl göndərilmədi');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const startNewChat = async () => {
@@ -99,7 +134,9 @@ export default function Messages() {
   };
 
   const getOtherName = (conv) => {
-    if (!conv?.participant_names) return 'Naməlum';
+    if (!conv) return 'Naməlum';
+    if (conv.is_group) return conv.name || `Qrup (${conv.participants?.length || 0})`;
+    if (!conv.participant_names) return 'Naməlum';
     const otherId = conv.participants?.find(id => id !== currentUser.id);
     return conv.participant_names[otherId] || 'Naməlum';
   };
@@ -200,21 +237,66 @@ export default function Messages() {
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
                 {messages.length === 0 && <p className="text-center text-sm text-slate-400 py-10">Mesaj yoxdur. Söhbət başladın!</p>}
-                {messages.map(msg => (
-                  <div key={msg.id} className={`flex ${msg.sender_id === currentUser.id ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[75%] px-3 py-2 rounded-xl text-sm ${msg.sender_id === currentUser.id ? 'bg-[#3D4F6F] text-white rounded-br-sm' : 'bg-white text-slate-700 rounded-bl-sm shadow-sm'}`} data-testid={`msg-${msg.id}`}>
-                      <p>{msg.text}</p>
-                      <p className={`text-[10px] mt-1 ${msg.sender_id === currentUser.id ? 'text-white/60' : 'text-slate-400'}`}>
-                        {new Date(msg.created_at).toLocaleTimeString('az', { hour: '2-digit', minute: '2-digit' })}
-                      </p>
+                {messages.map(msg => {
+                  const mine = msg.sender_id === currentUser.id;
+                  const att = msg.attachment;
+                  const isImage = att && (att.mime_type || '').startsWith('image/');
+                  const isVideo = att && (att.mime_type || '').startsWith('video/');
+                  return (
+                    <div key={msg.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[75%] px-3 py-2 rounded-xl text-sm ${mine ? 'bg-[#3D4F6F] text-white rounded-br-sm' : 'bg-white text-slate-700 rounded-bl-sm shadow-sm'}`} data-testid={`msg-${msg.id}`}>
+                        {!mine && activeConv?.is_group && (
+                          <p className="text-[10px] font-semibold mb-1 opacity-70">{msg.sender_name}</p>
+                        )}
+                        {att && (
+                          <div className="mb-1" data-testid={`msg-attachment-${msg.id}`}>
+                            {isImage ? (
+                              <a href={att.url} target="_blank" rel="noreferrer">
+                                <img src={att.url} alt={att.name} className="max-w-full max-h-60 rounded-lg" />
+                              </a>
+                            ) : isVideo ? (
+                              <video controls src={att.url} className="max-w-full max-h-60 rounded-lg" />
+                            ) : (
+                              <a href={att.url} target="_blank" rel="noreferrer" className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs ${mine ? 'bg-white/15 hover:bg-white/25' : 'bg-slate-100 hover:bg-slate-200'}`}>
+                                <Paperclip className="w-3.5 h-3.5" />
+                                <span className="truncate max-w-[180px]">{att.name}</span>
+                              </a>
+                            )}
+                          </div>
+                        )}
+                        {msg.text && <p className="whitespace-pre-wrap break-words">{msg.text}</p>}
+                        <p className={`text-[10px] mt-1 ${mine ? 'text-white/60' : 'text-slate-400'}`}>
+                          {new Date(msg.created_at).toLocaleTimeString('az', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div ref={messagesEndRef} />
               </div>
-              <form onSubmit={sendMessage} className="p-3 border-t border-slate-100 flex gap-2">
+              <form onSubmit={sendMessage} className="p-3 border-t border-slate-100 flex gap-2 items-center">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                  multiple
+                  onChange={(e) => handleAttachment(e.target.files)}
+                  data-testid="msg-file-input"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  title="Fayl əlavə et"
+                  data-testid="msg-attach-btn"
+                >
+                  {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4 text-[#3D4F6F]" />}
+                </Button>
                 <Input value={msgText} onChange={(e) => setMsgText(e.target.value)} placeholder="Mesaj yazın..." className="text-sm flex-1" data-testid="msg-input" />
-                <Button type="submit" size="sm" className="bg-[#3D4F6F] hover:bg-[#2A364C] text-white" data-testid="msg-send-btn">
+                <Button type="submit" size="sm" className="bg-[#3D4F6F] hover:bg-[#2A364C] text-white" disabled={!msgText.trim()} data-testid="msg-send-btn">
                   <Send className="w-4 h-4" />
                 </Button>
               </form>

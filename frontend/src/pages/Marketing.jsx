@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Toaster, toast } from 'sonner';
+import { formatDate } from '../lib/dateUtils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -145,7 +146,7 @@ export default function Marketing() {
                   <tr key={c.id} className="border-b border-slate-50 hover:bg-slate-50/40" data-testid={`campaign-row-${c.id}`}>
                     <td className="px-3 py-2"><p className="font-medium text-[#3D4F6F]">{c.subject}</p><p className="text-[10px] text-slate-400">{c.title}</p></td>
                     <td className="px-3 py-2 text-xs text-slate-600">{c.list_name || c.list_id}</td>
-                    <td className="px-3 py-2 text-xs text-slate-500">{c.send_time ? new Date(c.send_time).toLocaleDateString('az-AZ') : '—'}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500">{c.send_time ? formatDate(c.send_time) : '—'}</td>
                     <td className="px-3 py-2"><Badge className={c.status === 'sent' ? 'bg-green-100 text-green-700 text-[10px]' : 'bg-slate-100 text-slate-600 text-[10px]'}>{c.status}</Badge></td>
                     <td className="px-3 py-2 text-right font-medium">{c.emails_sent || '—'}</td>
                     <td className="px-3 py-2 text-right">

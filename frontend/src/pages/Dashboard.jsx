@@ -194,41 +194,50 @@ export default function Dashboard() {
         <p className="text-slate-500 mt-1 text-sm sm:text-base">Marsol Group-un ümumi icmalı</p>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards — filtered by per-user module access */}
       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-        <StatCard
-          title="Şirkətlər"
-          value={stats.companies?.total || 0}
-          subtitle="Aktiv şirkət"
-          icon={Building2}
-          color="#3D4F6F"
-        />
-        <StatCard
-          title="Əməkdaşlar"
-          value={stats.employees?.total || 0}
-          subtitle="Ümumi əməkdaş"
-          icon={Users}
-          color="#9ACD32"
-        />
-        <StatCard
-          title="Tapşırıqlar"
-          value={stats.tasks?.total || 0}
-          subtitle={`${stats.tasks?.pending || 0} gözləyir`}
-          icon={ClipboardList}
-          color="#64748B"
-        />
-        <StatCard
-          title="Görüşlər"
-          value={stats.meetings?.total || 0}
-          subtitle={`${stats.meetings?.upcoming || 0} qarşıdan`}
-          icon={CreditCard}
-          color="#3D4F6F"
-        />
+        {canView(permissions, 'companies') && (
+          <StatCard
+            title="Şirkətlər"
+            value={stats.companies?.total || 0}
+            subtitle="Aktiv şirkət"
+            icon={Building2}
+            color="#3D4F6F"
+          />
+        )}
+        {canView(permissions, 'hr') && (
+          <StatCard
+            title="Əməkdaşlar"
+            value={stats.employees?.total || 0}
+            subtitle="Ümumi əməkdaş"
+            icon={Users}
+            color="#9ACD32"
+          />
+        )}
+        {canView(permissions, 'tasks') && (
+          <StatCard
+            title="Tapşırıqlar"
+            value={stats.tasks?.total || 0}
+            subtitle={`${stats.tasks?.pending || 0} gözləyir`}
+            icon={ClipboardList}
+            color="#64748B"
+          />
+        )}
+        {canView(permissions, 'meetings') && (
+          <StatCard
+            title="Görüşlər"
+            value={stats.meetings?.total || 0}
+            subtitle={`${stats.meetings?.upcoming || 0} qarşıdan`}
+            icon={CreditCard}
+            color="#3D4F6F"
+          />
+        )}
       </div>
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
         {/* Companies by Package - List + Pie */}
+        {canView(permissions, 'companies') && (
         <ChartCard title="Şirkətlər üzrə paketlər">
           {companiesBreakdown.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 items-center">
@@ -278,8 +287,10 @@ export default function Dashboard() {
             </div>
           )}
         </ChartCard>
+        )}
 
         {/* Sectors - Bar Chart */}
+        {canView(permissions, 'companies') && (
         <ChartCard title="Sektorlar üzrə bölgü">
           {sectorsBreakdown.length > 0 ? (
             <div className="w-full overflow-x-auto">
@@ -308,14 +319,16 @@ export default function Dashboard() {
             </div>
           )}
         </ChartCard>
+        )}
       </div>
 
       {/* Charts Row 2 */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
         {/* Service Usage Widget */}
-        <ServiceUsageWidget />
+        {canView(permissions, 'companies') && <ServiceUsageWidget />}
 
         {/* Events Stats */}
+        {canView(permissions, 'organization') && (
         <ChartCard title="Fəaliyyət statistikası">
           <div className="space-y-3">
             <div className="flex justify-between items-center p-3 rounded-xl" style={{ backgroundColor: '#3D4F6F0A' }}>
@@ -339,8 +352,10 @@ export default function Dashboard() {
             )}
           </div>
         </ChartCard>
+        )}
 
         {/* Invitation Stats */}
+        {canView(permissions, 'obligations') && (
         <ChartCard title="Dəvət statistikası">
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
@@ -376,8 +391,10 @@ export default function Dashboard() {
             )}
           </div>
         </ChartCard>
+        )}
 
         {/* Tasks Summary */}
+        {canView(permissions, 'tasks') && (
         <ChartCard title="Tapşırıqlar icmalı">
           <div className="space-y-4">
             <div className="flex justify-between items-center p-3 rounded-xl bg-amber-50">
@@ -403,6 +420,7 @@ export default function Dashboard() {
             </div>
           </div>
         </ChartCard>
+        )}
 
         {/* Payments / finance widgets removed per request */}
       </div>

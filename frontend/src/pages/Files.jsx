@@ -10,8 +10,9 @@ import {
 import { toast } from 'sonner';
 import {
   Upload, FileText, FileImage, FileVideo, File as FileIcon,
-  Trash2, Download, Search, Loader2, ExternalLink, X,
+  Trash2, Download, Search, Loader2, ExternalLink, X, Pencil,
 } from 'lucide-react';
+import { formatDate, formatDateTime } from '../lib/dateUtils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -54,6 +55,8 @@ export default function Files() {
   const [meta, setMeta] = useState({ name: '', description: '', tags: '' });
   const [pickedFile, setPickedFile] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [editingFile, setEditingFile] = useState(null);
+  const [editDesc, setEditDesc] = useState('');
   const fileInputRef = useRef(null);
 
   const headers = { Authorization: `Bearer ${localStorage.getItem('token')}` };
@@ -127,6 +130,23 @@ export default function Files() {
     }
   };
 
+  const handleEditDescription = (file) => {
+    setEditingFile(file);
+    setEditDesc(file.description || '');
+  };
+
+  const saveDescription = async () => {
+    if (!editingFile) return;
+    try {
+      await axios.put(`${API}/files/${editingFile.id}`, { description: editDesc }, { headers });
+      toast.success('Təsvir yeniləndi');
+      setEditingFile(null);
+      fetchFiles();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Xəta');
+    }
+  };
+
   const filtered = files.filter(f => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
@@ -192,6 +212,11 @@ export default function Files() {
                 <div className="p-2.5">
                   <p className="text-xs font-semibold text-[#3D4F6F] truncate" title={f.name}>{f.name}</p>
                   <p className="text-[10px] text-slate-500 mt-0.5">{fmtBytes(f.bytes)} • {f.uploaded_by_name}</p>
+                  {f.description && (
+                    <p className="text-[11px] text-slate-600 mt-1 italic line-clamp-2" title={f.description} data-testid={`file-desc-${f.id}`}>
+                      {f.description}
+                    </p>
+                  )}
                   {f.tags?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {f.tags.slice(0, 2).map((t, i) => <Badge key={i} className="bg-slate-100 text-slate-600 text-[9px] px-1.5 py-0">{t}</Badge>)}
@@ -204,6 +229,9 @@ export default function Files() {
                     <a href={buildDownloadUrl(f.url)} download={f.name} className="flex-1 text-[10px] text-center py-1 bg-slate-100 hover:bg-slate-200 rounded text-[#3D4F6F]" data-testid={`file-download-${f.id}`}>
                       <Download className="w-3 h-3 inline mr-1" />Endir
                     </a>
+                    <button onClick={() => handleEditDescription(f)} className="px-1.5 py-1 bg-blue-50 hover:bg-blue-100 rounded text-blue-600" title="Təsvir" data-testid={`file-edit-${f.id}`}>
+                      <Pencil className="w-3 h-3" />
+                    </button>
                     <button onClick={() => handleDelete(f)} className="px-1.5 py-1 bg-red-50 hover:bg-red-100 rounded text-red-500" data-testid={`file-delete-${f.id}`}>
                       <Trash2 className="w-3 h-3" />
                     </button>
@@ -250,6 +278,34 @@ export default function Files() {
         </DialogContent>
       </Dialog>
 
+      {/* Edit description modal */}
+      <Dialog open={!!editingFile} onOpenChange={(o) => !o && setEditingFile(null)}>
+        <DialogContent className="max-w-md" data-testid="edit-desc-modal">
+          <DialogHeader>
+            <DialogTitle style={{ color: '#3D4F6F' }}>Fayl təsvirini redaktə et</DialogTitle>
+          </DialogHeader>
+          {editingFile && (
+            <div className="text-xs text-slate-500 bg-slate-50 rounded p-2 mb-2">
+              <span className="font-medium text-[#3D4F6F]">{editingFile.name}</span>
+            </div>
+          )}
+          <div>
+            <Label className="text-xs">Qısa təsvir</Label>
+            <textarea
+              value={editDesc}
+              onChange={(e) => setEditDesc(e.target.value)}
+              className="w-full min-h-[80px] p-2 text-sm border rounded-lg resize-none"
+              placeholder="Bu fayl haqqında qısa məlumat..."
+              data-testid="edit-desc-input"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingFile(null)}>Ləğv et</Button>
+            <Button onClick={saveDescription} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="edit-desc-save">Yadda saxla</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Preview modal */}
       <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto" data-testid="preview-modal">
@@ -281,7 +337,7 @@ export default function Files() {
                   {(preview.tags || []).map((t, i) => <Badge key={i} className="bg-slate-100 text-slate-700 text-[10px]">{t}</Badge>)}
                 </div>
                 <div className="text-xs text-slate-400 pt-2 border-t">
-                  Yüklənib: {preview.uploaded_by_name} · {new Date(preview.uploaded_at).toLocaleString('az-AZ')}
+                  Yüklənib: {preview.uploaded_by_name} · {formatDateTime(preview.uploaded_at)}
                 </div>
               </div>
             </>
