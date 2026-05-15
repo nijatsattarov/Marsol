@@ -20,6 +20,7 @@ import CustomFieldsView from '../components/CustomFieldsView';
 import ExcelColumnPicker from '../components/ExcelColumnPicker';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
+import { DatePickerAz, TimeSelectAz } from '../components/DateTimePickerAz';
 import { createUnicodePdf } from '../lib/pdfHelpers';
 import autoTable from 'jspdf-autotable';
 import { FileDown } from 'lucide-react';
@@ -1089,8 +1090,8 @@ export default function HR() {
                     {(formData.reminders || []).map((rem, ri) => (
                       <div key={ri} className="flex items-center gap-2 bg-white rounded-lg p-2">
                         <span className="text-xs font-bold text-amber-700 w-5">{ri+1}.</span>
-                        <Input type="date" value={rem.date} onChange={(e) => updateReminder(ri, 'date', e.target.value)} className="text-sm flex-1" />
-                        <Input type="time" value={rem.time} onChange={(e) => updateReminder(ri, 'time', e.target.value)} className="text-sm w-28" />
+                        <div className="flex-1"><DatePickerAz value={rem.date} onChange={(v) => updateReminder(ri, 'date', v)} /></div>
+                        <TimeSelectAz value={rem.time} onChange={(v) => updateReminder(ri, 'time', v)} className="w-28" />
                         <Input value={rem.note} onChange={(e) => updateReminder(ri, 'note', e.target.value)} placeholder="Qeyd" className="text-sm flex-1" />
                         <Button type="button" variant="ghost" size="sm" onClick={() => removeReminder(ri)} className="h-8 w-8 p-0"><X className="w-3.5 h-3.5 text-red-500" /></Button>
                       </div>

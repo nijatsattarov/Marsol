@@ -16,6 +16,7 @@ import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
+import { DatePickerAz, TimeSelectAz } from '../components/DateTimePickerAz';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -587,11 +588,11 @@ export default function Organization() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Tarix *</Label>
-                <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required className="text-sm" data-testid="event-date-input" />
+                <DatePickerAz value={form.date} onChange={(v) => setForm({ ...form, date: v })} required testId="event-date-input" />
               </div>
               <div>
                 <Label className="text-xs">Saat</Label>
-                <Input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} className="text-sm" />
+                <TimeSelectAz value={form.time} onChange={(v) => setForm({ ...form, time: v })} testId="event-time-input" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">

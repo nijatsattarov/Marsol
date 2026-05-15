@@ -17,6 +17,7 @@ import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
 import { createUnicodePdf } from '../lib/pdfHelpers';
 import MeetingRequestModal, { MeetingRequestInbox } from '../components/MeetingRequest';
+import { DatePickerAz, TimeSelectAz } from '../components/DateTimePickerAz';
 import autoTable from 'jspdf-autotable';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -388,8 +389,8 @@ export default function Meetings() {
               {employeeNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} className="w-[140px] text-sm h-9" data-testid="filter-date-from" />
-          <Input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} className="w-[140px] text-sm h-9" data-testid="filter-date-to" />
+          <div className="w-[150px]"><DatePickerAz value={filterDateFrom} onChange={setFilterDateFrom} placeholder="Tarix (başlanğıc)" testId="filter-date-from" /></div>
+          <div className="w-[150px]"><DatePickerAz value={filterDateTo} onChange={setFilterDateTo} placeholder="Tarix (son)" testId="filter-date-to" /></div>
         </div>
       </div>
 
@@ -670,13 +671,13 @@ export default function Meetings() {
               </div>
               <div>
                 <Label className="text-xs">Tarix *</Label>
-                <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required className="text-sm" data-testid="meeting-date-input" />
+                <DatePickerAz value={form.date} onChange={(v) => setForm({ ...form, date: v })} required testId="meeting-date-input" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Saat *</Label>
-                <Input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} required className="text-sm" />
+                <TimeSelectAz value={form.time} onChange={(v) => setForm({ ...form, time: v })} required testId="meeting-time-input" />
               </div>
               <div>
                 <Label className="text-xs">Şirkət</Label>
@@ -700,7 +701,7 @@ export default function Meetings() {
               </div>
               <div>
                 <Label className="text-xs">Növbəti görüş</Label>
-                <Input type="date" value={form.next_meeting} onChange={(e) => setForm({ ...form, next_meeting: e.target.value })} className="text-sm" />
+                <DatePickerAz value={form.next_meeting} onChange={(v) => setForm({ ...form, next_meeting: v })} testId="meeting-next-input" />
               </div>
             </div>
             <div>
@@ -718,8 +719,8 @@ export default function Meetings() {
               </div>
               {form.reminders.map((rem, idx) => (
                 <div key={idx} className="flex items-center gap-2 mb-2 bg-amber-50/50 p-2 rounded-lg border border-amber-100" data-testid={`reminder-${idx}`}>
-                  <Input type="date" value={rem.date} onChange={(e) => updateReminder(idx, 'date', e.target.value)} className="text-xs h-7 flex-1" />
-                  <Input type="time" value={rem.time} onChange={(e) => updateReminder(idx, 'time', e.target.value)} className="text-xs h-7 w-24" />
+                  <DatePickerAz value={rem.date} onChange={(v) => updateReminder(idx, 'date', v)} size="sm" className="flex-1" />
+                  <TimeSelectAz value={rem.time} onChange={(v) => updateReminder(idx, 'time', v)} size="sm" className="w-28" />
                   <Input placeholder="Qeyd" value={rem.note} onChange={(e) => updateReminder(idx, 'note', e.target.value)} className="text-xs h-7 flex-1" />
                   <button type="button" onClick={() => removeReminder(idx)} className="p-1 hover:bg-red-100 rounded"><X className="w-3 h-3 text-red-500" /></button>
                 </div>

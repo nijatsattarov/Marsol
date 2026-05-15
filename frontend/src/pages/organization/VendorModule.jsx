@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
-import { Plus, Loader2, Search, Pencil, Trash2, Download, Star, Phone, MessageCircle, MapPin, ExternalLink, Check, X, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Loader2, Search, Pencil, Trash2, Download, Star, Phone, MessageCircle, MapPin, ExternalLink, Check, X, Image as ImageIcon, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -50,7 +50,10 @@ function useManagedList(listKey, headers) {
 function FieldInput({ field, value, onChange }) {
   const token = localStorage.getItem('token');
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
-  const managedOpts = useManagedList(field.type === 'managedselect' ? field.list_key : null, headers);
+  const managedOpts = useManagedList(
+    (field.type === 'managedselect' || field.type === 'managedmultiselect') ? field.list_key : null,
+    headers
+  );
 
   switch (field.type) {
     case 'textarea':
@@ -81,6 +84,74 @@ function FieldInput({ field, value, onChange }) {
           </SelectContent>
         </Select>
       );
+    case 'managedmultiselect':
+      return (
+        <div className="flex flex-wrap gap-1.5" data-testid={`managedmulti-${field.key}`}>
+          {managedOpts.length === 0 && <span className="text-[10px] text-slate-400">Siyahı boşdur (Tənzimləmələrdən əlavə edin)</span>}
+          {managedOpts.map(o => {
+            const active = Array.isArray(value) && value.includes(o);
+            return (
+              <button key={o} type="button" onClick={() => {
+                const arr = Array.isArray(value) ? value : [];
+                onChange(active ? arr.filter(x => x !== o) : [...arr, o]);
+              }} className={`px-2.5 py-1 rounded-full text-[11px] font-medium border ${active ? 'bg-[#9ACD32] text-[#3D4F6F] border-[#9ACD32]' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                {o}
+              </button>
+            );
+          })}
+        </div>
+      );
+    case 'contacts': {
+      const arr = Array.isArray(value) ? value : [];
+      const updateRow = (idx, key, val) => {
+        const next = arr.map((r, i) => i === idx ? { ...r, [key]: val } : r);
+        onChange(next);
+      };
+      const addRow = () => onChange([...arr, { name: '', phone: '' }]);
+      const removeRow = (idx) => onChange(arr.filter((_, i) => i !== idx));
+      return (
+        <div className="space-y-2" data-testid={`contacts-${field.key}`}>
+          {arr.length === 0 && <p className="text-[10px] text-slate-400 italic">Əlaqədar şəxs əlavə etməyiniz tövsiyə olunur</p>}
+          {arr.map((row, idx) => (
+            <div key={idx} className="flex items-center gap-2 bg-slate-50/50 p-2 rounded-lg border border-slate-100">
+              <Input
+                value={row?.name || ''}
+                onChange={(e) => updateRow(idx, 'name', e.target.value)}
+                placeholder="Ad Soyad"
+                className="text-xs flex-1"
+              />
+              <Input
+                inputMode="tel"
+                value={row?.phone || ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const cleaned = digitsOnly(v.startsWith('+') ? v : ((row?.phone || '').startsWith('+') ? '+' + v : v));
+                  updateRow(idx, 'phone', cleaned);
+                }}
+                onBlur={() => {
+                  const p = row?.phone || '';
+                  if (p && !p.startsWith('+')) updateRow(idx, 'phone', '+994' + p.replace(/^0+/, ''));
+                }}
+                placeholder="+994551234567"
+                className="text-xs w-44 font-mono"
+              />
+              <Input
+                value={row?.role || ''}
+                onChange={(e) => updateRow(idx, 'role', e.target.value)}
+                placeholder="Vəzifə (opsional)"
+                className="text-xs w-40"
+              />
+              <button type="button" onClick={() => removeRow(idx)} className="p-1 hover:bg-red-50 rounded">
+                <X className="w-3.5 h-3.5 text-red-500" />
+              </button>
+            </div>
+          ))}
+          <button type="button" onClick={addRow} className="text-xs text-[#3D4F6F] hover:text-[#9ACD32] font-medium flex items-center gap-1">
+            <Plus className="w-3 h-3" />Əlaqə əlavə et
+          </button>
+        </div>
+      );
+    }
     case 'multiselect':
       return (
         <div className="flex flex-wrap gap-1.5">
@@ -147,6 +218,12 @@ function renderCellValue(field, value) {
   if (field.type === 'sociallinks') return <SocialLinksDisplay value={value} />;
   if (field.type === 'boolean') return value ? <Check className="w-4 h-4 text-green-500" /> : <X className="w-4 h-4 text-red-400" />;
   if (field.type === 'multiselect' && Array.isArray(value)) return <div className="flex flex-wrap gap-1">{value.slice(0, 3).map(v => <Badge key={v} className="bg-slate-100 text-slate-600 text-[10px]">{v}</Badge>)}{value.length > 3 && <span className="text-[10px] text-slate-400">+{value.length - 3}</span>}</div>;
+  if (field.type === 'managedmultiselect' && Array.isArray(value)) return <div className="flex flex-wrap gap-1">{value.slice(0, 3).map(v => <Badge key={v} className="bg-slate-100 text-slate-600 text-[10px]">{v}</Badge>)}{value.length > 3 && <span className="text-[10px] text-slate-400">+{value.length - 3}</span>}</div>;
+  if (field.type === 'contacts' && Array.isArray(value)) {
+    if (value.length === 0) return <span className="text-slate-300">—</span>;
+    const first = value[0];
+    return <div className="text-xs"><span className="font-medium text-slate-700">{first?.name || '—'}</span>{first?.phone && <span className="text-slate-500 ml-1">({first.phone})</span>}{value.length > 1 && <span className="text-[10px] text-slate-400 ml-1">+{value.length - 1}</span>}</div>;
+  }
   if (field.type === 'url' && typeof value === 'string' && value.startsWith('http')) return <a href={value} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline inline-flex items-center gap-1 text-xs"><ExternalLink className="w-3 h-3" />Keçid</a>;
   if (field.type === 'number' && typeof value === 'number') return <span className="font-medium">{value.toLocaleString('az-AZ')}</span>;
   if (typeof value === 'string' && value.length > 40) return <span title={value}>{value.slice(0, 38)}...</span>;
@@ -159,6 +236,11 @@ function normalizeForSubmit(form, fields) {
     let v = form[f.key];
     if (f.type === 'number' && v === '') v = null;
     if (f.type === 'multiselect' && !Array.isArray(v)) v = [];
+    if (f.type === 'managedmultiselect' && !Array.isArray(v)) v = [];
+    if (f.type === 'contacts') {
+      if (!Array.isArray(v)) v = [];
+      v = v.filter(r => r && typeof r === 'object' && ((r.name || '').trim() || (r.phone || '').trim()));
+    }
     if (f.type === 'photoupload') {
       if (!Array.isArray(v)) {
         v = typeof v === 'string' && v.trim()
@@ -189,6 +271,7 @@ export default function VendorModule({ config }) {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
   const [lightbox, setLightbox] = useState({ open: false, images: [] });
+  const [detailItem, setDetailItem] = useState(null);
 
   // Module identifiers that should NOT show the photo-view button.
   const hidePhotoView = ['photovideo'].includes(config.module);
@@ -208,7 +291,7 @@ export default function VendorModule({ config }) {
   const emptyForm = useMemo(() => {
     const o = {};
     config.fields.forEach(f => {
-      if (f.type === 'multiselect' || f.type === 'photoupload' || f.type === 'sociallinks') o[f.key] = [];
+      if (f.type === 'multiselect' || f.type === 'managedmultiselect' || f.type === 'photoupload' || f.type === 'sociallinks' || f.type === 'contacts') o[f.key] = [];
       else if (f.type === 'boolean') o[f.key] = null;
       else o[f.key] = '';
     });
@@ -281,7 +364,7 @@ export default function VendorModule({ config }) {
   // Determine primary display fields for table
   const listFields = useMemo(() => {
     const list = config.fields.filter(f =>
-      ['name', 'category', 'city', 'price', 'price_per_person', 'price_min', 'phone', 'contact_name', 'service_category', 'service_type', 'service_types', 'supplier', 'capacity'].includes(f.key)
+      ['name', 'category', 'city', 'price', 'price_per_person', 'price_min', 'phone', 'contacts', 'contact_name', 'service_category', 'service_type', 'service_types', 'supplier', 'capacity'].includes(f.key)
     ).slice(0, 6);
     return list;
   }, [config.fields]);
@@ -344,6 +427,15 @@ export default function VendorModule({ config }) {
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex justify-end gap-1 items-center">
+                        <button
+                          type="button"
+                          onClick={() => setDetailItem(i)}
+                          className="p-1.5 hover:bg-emerald-50 rounded-lg group"
+                          title="Ətraflı bax"
+                          data-testid={`view-detail-${i.id}`}
+                        >
+                          <Eye className="w-3.5 h-3.5 text-emerald-600 group-hover:text-emerald-800" />
+                        </button>
                         {!hidePhotoView && photoFieldKey && (() => {
                           const imgs = i[photoFieldKey];
                           const arr = Array.isArray(imgs) ? imgs : (typeof imgs === 'string' ? imgs.split('\n').filter(Boolean) : []);
@@ -385,7 +477,7 @@ export default function VendorModule({ config }) {
                 <p className="text-[10px] font-bold text-[#3D4F6F] uppercase tracking-wider mb-2">{group}</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {fields.map(f => (
-                    <div key={f.key} className={f.type === 'textarea' || f.type === 'photolinks' || f.type === 'photoupload' || f.type === 'sociallinks' || f.type === 'multiselect' ? 'md:col-span-2' : ''}>
+                    <div key={f.key} className={['textarea','photolinks','photoupload','sociallinks','multiselect','managedmultiselect','contacts'].includes(f.type) ? 'md:col-span-2' : ''}>
                       <Label className="text-xs">{f.label}{f.required ? ' *' : ''}</Label>
                       <FieldInput field={f} value={form[f.key]} onChange={v => setForm({ ...form, [f.key]: v })} />
                     </div>
@@ -400,6 +492,101 @@ export default function VendorModule({ config }) {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Detail view modal */}
+      <Dialog open={!!detailItem} onOpenChange={(o) => !o && setDetailItem(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-[#3D4F6F] flex items-center gap-2">
+              <Eye className="w-5 h-5 text-emerald-600" />
+              {detailItem?.[ (config.fields.find(f => f.key === 'name') || {}).key ] || 'Ətraflı baxış'}
+            </DialogTitle>
+          </DialogHeader>
+          {detailItem && (
+            <div className="space-y-4">
+              {/* Gallery */}
+              {photoFieldKey && (() => {
+                const imgs = detailItem[photoFieldKey];
+                const arr = Array.isArray(imgs) ? imgs : (typeof imgs === 'string' ? imgs.split('\n').filter(Boolean) : []);
+                if (arr.length === 0) return null;
+                return (
+                  <div className="bg-slate-50/50 rounded-lg p-3 border border-slate-100">
+                    <p className="text-[10px] font-bold text-[#3D4F6F] uppercase tracking-wider mb-2">Foto qalereyası ({arr.length})</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                      {arr.map((url, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setLightbox({ open: true, images: arr, startIndex: idx })}
+                          className="aspect-square overflow-hidden rounded-lg border border-slate-200 hover:border-emerald-400 transition-colors"
+                          data-testid={`detail-img-${idx}`}
+                        >
+                          <img src={url} alt="" className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* Fields grouped */}
+              {Object.entries(groupedFields).map(([group, fields]) => (
+                <div key={group} className="bg-slate-50/50 rounded-lg p-3 border border-slate-100">
+                  <p className="text-[10px] font-bold text-[#3D4F6F] uppercase tracking-wider mb-2">{group}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {fields.filter(f => f.type !== 'photoupload').map(f => (
+                      <div key={f.key} className={['textarea','sociallinks','multiselect','managedmultiselect','contacts'].includes(f.type) ? 'md:col-span-2' : ''}>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider">{f.label}</p>
+                        <div className="text-sm text-slate-700 mt-0.5">
+                          {f.type === 'contacts' && Array.isArray(detailItem[f.key]) && detailItem[f.key].length > 0 ? (
+                            <div className="space-y-1">
+                              {detailItem[f.key].map((c, idx) => (
+                                <div key={idx} className="flex items-center gap-2 text-xs">
+                                  <span className="font-medium text-slate-700">{c?.name || '—'}</span>
+                                  {c?.phone && <a href={`tel:${c.phone}`} className="text-blue-500 hover:underline">{c.phone}</a>}
+                                  {c?.role && <span className="text-slate-400">· {c.role}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          ) : f.type === 'managedmultiselect' && Array.isArray(detailItem[f.key]) ? (
+                            <div className="flex flex-wrap gap-1">{(detailItem[f.key] || []).map(v => <Badge key={v} className="bg-slate-100 text-slate-600 text-[10px]">{v}</Badge>)}</div>
+                          ) : (
+                            renderCellValue(f, detailItem[f.key])
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {/* Rating */}
+              {detailItem.rating_avg != null && (
+                <div className="bg-amber-50 rounded-lg p-3 border border-amber-100 flex items-center gap-2">
+                  <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                  <span className="text-sm font-semibold text-[#3D4F6F]">Reytinq: {detailItem.rating_avg}</span>
+                  <span className="text-xs text-slate-400">({detailItem.rating_count} qiymət)</span>
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <Button type="button" variant="outline" onClick={() => setDetailItem(null)}>Bağla</Button>
+                {_canEdit && (
+                  <Button type="button" onClick={() => { openEdit(detailItem); setDetailItem(null); }} className="bg-[#3D4F6F] text-white">
+                    <Pencil className="w-4 h-4 mr-1" />Redaktə et
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {lightbox.open && (
+        <ImageLightbox
+          open={lightbox.open}
+          images={lightbox.images}
+          initialIndex={lightbox.startIndex || 0}
+          onClose={() => setLightbox({ open: false, images: [] })}
+        />
+      )}
     </div>
   );
 }

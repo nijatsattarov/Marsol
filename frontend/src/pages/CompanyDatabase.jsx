@@ -15,6 +15,7 @@ import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { usePermissions, canEdit } from '../context/PermissionContext';
+import { DatePickerAz, TimeSelectAz } from '../components/DateTimePickerAz';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -595,11 +596,11 @@ export default function CompanyDatabase() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Tarix *</Label>
-                <Input type="date" value={meetingForm.date} onChange={(e) => setMeetingForm({ ...meetingForm, date: e.target.value })} required className="text-sm" data-testid="meeting-date" />
+                <DatePickerAz value={meetingForm.date} onChange={(v) => setMeetingForm({ ...meetingForm, date: v })} required testId="meeting-date" />
               </div>
               <div>
                 <Label className="text-xs">Saat *</Label>
-                <Input type="time" value={meetingForm.time} onChange={(e) => setMeetingForm({ ...meetingForm, time: e.target.value })} required className="text-sm" />
+                <TimeSelectAz value={meetingForm.time} onChange={(v) => setMeetingForm({ ...meetingForm, time: v })} required testId="meeting-time" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">

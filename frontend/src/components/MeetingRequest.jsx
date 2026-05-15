@@ -7,6 +7,7 @@ import { Label } from './ui/label';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
+import { DatePickerAz, TimeSelectAz } from './DateTimePickerAz';
 import { toast } from 'sonner';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -104,11 +105,11 @@ export default function MeetingRequestModal({ open, onClose, currentUserId, meet
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Tarix *</Label>
-              <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} required data-testid="mr-date" />
+              <DatePickerAz value={form.date} onChange={(v) => setForm({ ...form, date: v })} required testId="mr-date" />
             </div>
             <div>
               <Label className="text-xs">Saat *</Label>
-              <Input type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} required data-testid="mr-time" />
+              <TimeSelectAz value={form.time} onChange={(v) => setForm({ ...form, time: v })} required testId="mr-time" />
             </div>
             <div>
               <Label className="text-xs">Görüş növü</Label>
