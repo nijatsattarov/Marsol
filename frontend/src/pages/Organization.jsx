@@ -253,19 +253,67 @@ export default function Organization() {
     const cleaned = (phone || '').replace(/\D/g, '');
     if (!cleaned) { toast.error('Telefon nömrəsi yoxdur'); return; }
     try {
-      // Generate branded invitation card on backend → Cloudinary URL
+      // 1) Generate branded invitation card on backend (Cloudinary URL + wa.me link)
+      toast.info('Dəvətnamə hazırlanır...');
       const res = await axios.post(
         `${API}/invitations/${whatsAppTarget.inv.id}/generate-card`,
         { phone, guest_name: whatsAppTarget.company?.owner_name || whatsAppTarget.inv.company_name },
         { headers }
       );
-      if (res.data?.whatsapp_link) {
-        window.open(res.data.whatsapp_link, '_blank');
-        setShowWhatsAppModal(false);
-        toast.success('Dəvətnamə hazırlandı, WhatsApp açılır');
-      } else {
-        toast.error('WhatsApp linki yaradıla bilmədi');
+      const { url, whatsapp_link, filename } = res.data || {};
+      if (!url) { toast.error('Dəvətnamə yaradıla bilmədi'); return; }
+
+      // 2) Fetch the PNG as a Blob (so we can share it as a real bitmap)
+      let file = null;
+      try {
+        const imgResp = await fetch(url, { mode: 'cors' });
+        const blob = await imgResp.blob();
+        file = new File([blob], filename || 'invitation.png', { type: 'image/png' });
+      } catch (e) {
+        // fall through to fallback
       }
+
+      // 3) Web Share API: native share (mobile) — opens WhatsApp with image attached
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: selectedEvent.name,
+            text: decodeURIComponent((whatsapp_link.split('?text=')[1] || '').replace(/\+/g, ' ')),
+          });
+          setShowWhatsAppModal(false);
+          toast.success('Dəvətnamə şəkli paylaşıldı');
+          return;
+        } catch (e) {
+          // user cancelled, fall through to fallback
+          if (e?.name === 'AbortError') return;
+        }
+      }
+
+      // 4) Desktop fallback: download PNG file + open WhatsApp Web
+      if (file) {
+        const objUrl = URL.createObjectURL(file);
+        const a = document.createElement('a');
+        a.href = objUrl;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(objUrl), 5000);
+      }
+      // Also try to copy the image to clipboard (Chrome/Edge support)
+      try {
+        if (file && navigator.clipboard && window.ClipboardItem) {
+          await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': file })]);
+          toast.success('Şəkil endirildi və yaddaşa kopyalandı. WhatsApp-da Ctrl+V ilə yapışdırın.');
+        } else {
+          toast.success('Şəkil endirildi. WhatsApp-da şəkli əlavə edin (sürükləyib qoyun və ya skrepka düyməsindən seçin).');
+        }
+      } catch (e) {
+        toast.success('Şəkil endirildi. WhatsApp-da şəkli əlavə edin.');
+      }
+      window.open(whatsapp_link, '_blank');
+      setShowWhatsAppModal(false);
     } catch (err) {
       console.error(err);
       toast.error(err?.response?.data?.detail || 'Dəvətnamə yaradıla bilmədi');

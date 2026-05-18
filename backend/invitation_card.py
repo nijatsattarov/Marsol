@@ -84,8 +84,15 @@ def render_invitation_png(
     event_date: str,    # display string, eg "23/06/2026"
     event_time: Optional[str],
     event_location: Optional[str],
+    body_template: Optional[str] = None,  # multi-line template with {placeholders}
 ) -> bytes:
-    """Render the personalised invitation PNG and return raw bytes."""
+    """Render the personalised invitation PNG and return raw bytes.
+
+    If `body_template` is provided, it's used as the message body — newlines
+    split into rows, and `"{event_name}"` segments are auto-bolded in
+    bold-italic navy. Supported placeholders: {guest_name}, {event_name},
+    {event_date}, {event_time}, {event_location}.
+    """
     if not TEMPLATE_PATH.exists():
         raise FileNotFoundError(f"Template not found at {TEMPLATE_PATH}")
 
@@ -101,38 +108,64 @@ def render_invitation_png(
         img_w=img_w, max_width=int(img_w * 0.85),
     )
 
-    # --- 2. Body block (3 lines, italic, ink) --------------------------------
-    italic_font = _font(FONT_ITALIC, 78)
-    bold_ital_font = _font(FONT_BOLDITAL, 78)
+    # --- 2. Body block (multi-line italic, ink, with {event_name} bolded) ----
+    italic_font = _font(FONT_ITALIC, 72)
+    bold_ital_font = _font(FONT_BOLDITAL, 72)
 
     safe_guest = (guest_name or "Qonağımız").strip()
-    line1 = f"Hörmətli {safe_guest},"
-    line2 = "sizi region partnyorları ilə baş tutacaq"
-    # Highlight the event title in line 3 by drawing it in bold-italic
-    line3_prefix = '"'
-    line3_event = (event_name or "Tədbirin adı")
-    line3_suffix = '" görüşünə dəvət edirik.'
+    if body_template:
+        body = body_template
+    else:
+        body = (
+            "Hörmətli {guest_name},\n"
+            "sizi region partnyorları ilə baş tutacaq\n"
+            '"{event_name}" görüşünə dəvət edirik.'
+        )
+    # Substitute placeholders
+    body = (
+        body
+        .replace("{guest_name}", safe_guest)
+        .replace("{event_date}", event_date or "")
+        .replace("{event_time}", event_time or "")
+        .replace("{event_location}", event_location or "")
+    )
+    event_token = event_name or "Tədbir"
 
     y = BODY_BLOCK_Y
-    y = _draw_centered(draw, line1, y, italic_font, INK, img_w) + 20
-    y = _draw_centered(draw, line2, y, italic_font, INK, img_w, max_width=int(img_w * 0.85)) + 20
-
-    # Render line3 with the event title bolded inline (and word-wrapped if needed)
-    full_line3 = f'{line3_prefix}{line3_event}{line3_suffix}'
-    bb = draw.textbbox((0, 0), full_line3, font=italic_font)
-    if (bb[2] - bb[0]) <= int(img_w * 0.88):
-        # fits on one line: measure each part to layout
-        w1 = draw.textbbox((0, 0), line3_prefix, font=italic_font)[2]
-        w2 = draw.textbbox((0, 0), line3_event, font=bold_ital_font)[2]
-        w3 = draw.textbbox((0, 0), line3_suffix, font=italic_font)[2]
-        total_w = w1 + w2 + w3
-        x = (img_w - total_w) // 2
-        draw.text((x, y), line3_prefix, fill=INK, font=italic_font)
-        draw.text((x + w1, y), line3_event, fill=NAVY, font=bold_ital_font)
-        draw.text((x + w1 + w2, y), line3_suffix, fill=INK, font=italic_font)
-    else:
-        # fallback: render the whole line in italic, auto-shrink to fit
-        _draw_centered(draw, full_line3, y, italic_font, INK, img_w, max_width=int(img_w * 0.85))
+    for raw_line in body.split("\n"):
+        line = raw_line.strip()
+        if not line:
+            y += 30
+            continue
+        # Split by {event_name} marker so we can bold-italic that segment
+        if "{event_name}" in line:
+            parts = line.split("{event_name}")
+            # auto-shrink if total width too large
+            font_r = italic_font
+            font_b = bold_ital_font
+            def _total(pf_r, pf_b):
+                tot = 0
+                for i, p in enumerate(parts):
+                    if i > 0:
+                        tot += draw.textbbox((0, 0), event_token, font=pf_b)[2]
+                    tot += draw.textbbox((0, 0), p, font=pf_r)[2]
+                return tot
+            tw = _total(font_r, font_b)
+            max_w = int(img_w * 0.88)
+            while tw > max_w and font_r.size > 40:
+                font_r = _font(FONT_ITALIC, font_r.size - 4)
+                font_b = _font(FONT_BOLDITAL, font_b.size - 4)
+                tw = _total(font_r, font_b)
+            x = (img_w - tw) // 2
+            for i, p in enumerate(parts):
+                if i > 0:
+                    draw.text((x, y), event_token, fill=NAVY, font=font_b)
+                    x += draw.textbbox((0, 0), event_token, font=font_b)[2]
+                draw.text((x, y), p, fill=INK, font=font_r)
+                x += draw.textbbox((0, 0), p, font=font_r)[2]
+            y += font_r.size + 26
+        else:
+            y = _draw_centered(draw, line, y, italic_font, INK, img_w, max_width=int(img_w * 0.85)) + 18
 
     # --- 3. Date + time (bottom right area, bold) ----------------------------
     datetime_text = event_date or ""

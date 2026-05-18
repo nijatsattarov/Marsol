@@ -18,6 +18,7 @@ import PackageServicesManager from '../components/PackageServicesManager';
 import ManageableListsPanel from '../components/ManageableListsPanel';
 import { DepreciableAssetsPanel, InventoryCategoriesPanel } from '../components/InventorySettingsPanels';
 import SocialPlatformsPanel from '../components/SocialPlatformsPanel';
+import InvitationTemplatesPanel from '../components/InvitationTemplatesPanel';
 import { validateRequired } from '../lib/validate';
 import SmsPanel from '../components/SmsPanel';
 import { usePermissions, canView } from '../context/PermissionContext';
@@ -545,6 +546,7 @@ export default function Settings() {
                 { value: 'sale-types', icon: TrendingUp, label: 'Satış növləri' },
                 { value: 'lead-sources', icon: Target, label: 'Lead mənbələri' },
                 { value: 'meeting-types', icon: Calendar, label: 'Görüş növləri' },
+                { value: 'invitation-templates', icon: MessageSquare, label: 'Dəvətnamə şablonları' },
               ]},
               { label: 'Maliyyə & İnventar', items: [
                 { value: 'depreciable-assets', icon: TrendingUp, label: 'Amortizasiya olunan aktivlər' },
@@ -922,6 +924,15 @@ export default function Settings() {
         {/* ========= SOCIAL PLATFORMS TAB ========= */}
         <TabsContent value="social-platforms">
           <SocialPlatformsPanel headers={headers} />
+        </TabsContent>
+
+        {/* ========= INVITATION TEMPLATES TAB ========= */}
+        <TabsContent value="invitation-templates">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-6">
+            <h2 className="text-lg font-semibold mb-1" style={{ color: '#3D4F6F' }}>Dəvətnamə Şablonları</h2>
+            <p className="text-xs text-slate-500 mb-4">Fəaliyyət növünə uyğun olaraq WhatsApp dəvətnamə şəklində yazılacaq mətni fərdiləşdirin.</p>
+            <InvitationTemplatesPanel />
+          </div>
         </TabsContent>
 
         {/* ========= MEETING TYPES TAB ========= */}

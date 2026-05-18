@@ -29,6 +29,57 @@ import asyncio  # noqa: E402
 from cloudinary_service import upload_file as _cl_upload, delete_asset as _cl_delete  # noqa: E402
 from invitation_card import render_invitation_png  # noqa: E402
 
+# Default invitation message templates per event type. Each template supports
+# placeholders {guest_name}, {event_name}, {event_date}, {event_time},
+# {event_location}. Newlines split into separate lines on the rendered card.
+DEFAULT_INVITATION_TEMPLATES = {
+    "Breakfast": (
+        "Hörmətli {guest_name},\n"
+        "sizi {event_date} tarixində baş tutacaq\n"
+        '"{event_name}" işgüzar səhər yeməyinə dəvət edirik.'
+    ),
+    "B2B görüş": (
+        "Hörmətli {guest_name},\n"
+        "sizi region partnyorları ilə baş tutacaq\n"
+        '"{event_name}" B2B görüşünə dəvət edirik.'
+    ),
+    "Sosial fəaliyyət": (
+        "Hörmətli {guest_name},\n"
+        "sizi keçiriləcək\n"
+        '"{event_name}" sosial fəaliyyətinə dəvət edirik.'
+    ),
+    "Mafia": (
+        "Hörmətli {guest_name},\n"
+        "sizi keçiriləcək\n"
+        '"{event_name}" Mafia oyununa dəvət edirik.'
+    ),
+    "Təlim": (
+        "Hörmətli {guest_name},\n"
+        "sizi keçiriləcək\n"
+        '"{event_name}" təliminə dəvət edirik.'
+    ),
+    "Ofis ziyarəti": (
+        "Hörmətli {guest_name},\n"
+        "sizi keçiriləcək\n"
+        '"{event_name}" ofis ziyarətinə dəvət edirik.'
+    ),
+    "default": (
+        "Hörmətli {guest_name},\n"
+        "sizi keçiriləcək\n"
+        '"{event_name}" tədbirinə dəvət edirik.'
+    ),
+}
+
+
+async def _get_invitation_template(event_type: str) -> str:
+    """Look up template from db.invitation_templates falling back to defaults."""
+    doc = None
+    if event_type:
+        doc = await db.invitation_templates.find_one({"event_type": event_type}, {"_id": 0})
+    if doc and doc.get("body"):
+        return doc["body"]
+    return DEFAULT_INVITATION_TEMPLATES.get(event_type) or DEFAULT_INVITATION_TEMPLATES["default"]
+
 # SMS service (LSIM Quick SMS)
 import sms_service  # noqa: E402
 
@@ -2769,6 +2820,9 @@ async def generate_invitation_card(inv_id: str, current_user: dict = Depends(che
     event_time = event.get("time", "")
     event_location = event.get("venue") or event.get("location") or ""
 
+    # Look up message template for the event_type
+    template_body = await _get_invitation_template(event.get("event_type") or "")
+
     try:
         png_bytes = render_invitation_png(
             guest_name=inv.get("guest_name", "") or "Qonağımız",
@@ -2776,6 +2830,7 @@ async def generate_invitation_card(inv_id: str, current_user: dict = Depends(che
             event_date=event_date,
             event_time=event_time,
             event_location=event_location,
+            body_template=template_body,
         )
     except FileNotFoundError as e:
         raise HTTPException(status_code=500, detail=f"Dəvətnamə şablonu tapılmadı: {e}")
@@ -2805,8 +2860,6 @@ async def generate_invitation_card(inv_id: str, current_user: dict = Depends(che
         msg_lines.append(f"Tarix: {event_date} {event_time}".strip())
     if event_location:
         msg_lines.append(f"Ünvan: {event_location}")
-    msg_lines.append("")
-    msg_lines.append(f"Dəvətnamə: {url}")
     import urllib.parse as _up
     text = _up.quote("\n".join(msg_lines))
     whatsapp_link = f"https://wa.me/{digits}?text={text}" if digits else f"https://wa.me/?text={text}"
@@ -5264,6 +5317,8 @@ async def generate_company_invitation_card(
     event_time = event.get("time", "")
     event_location = event.get("venue") or event.get("location_link") or ""
 
+    template_body = await _get_invitation_template(event.get("event_type") or "")
+
     try:
         png_bytes = render_invitation_png(
             guest_name=guest_name,
@@ -5271,6 +5326,7 @@ async def generate_company_invitation_card(
             event_date=event_date,
             event_time=event_time,
             event_location=event_location,
+            body_template=template_body,
         )
     except Exception as e:
         logger.exception("Invitation render failed: %s", e)
@@ -5296,8 +5352,6 @@ async def generate_company_invitation_card(
         msg_lines.append(f"Tarix: {event_date} {event_time}".strip())
     if event_location:
         msg_lines.append(f"Ünvan: {event_location}")
-    msg_lines.append("")
-    msg_lines.append(f"Dəvətnamə: {url}")
     import urllib.parse as _up
     text = _up.quote("\n".join(msg_lines))
     whatsapp_link = f"https://wa.me/{digits}?text={text}" if digits else f"https://wa.me/?text={text}"
@@ -5311,6 +5365,72 @@ async def generate_company_invitation_card(
         }}
     )
     return {"url": url, "public_id": public_id, "whatsapp_link": whatsapp_link, "filename": filename}
+
+
+# ==================== INVITATION TEMPLATES ====================
+
+@api_router.get("/invitation-templates")
+async def list_invitation_templates(current_user: dict = Depends(get_current_user)):
+    """Return all event-type templates merged with defaults so the UI can show
+    every supported event type even if it has not been customised yet."""
+    saved = {d["event_type"]: d for d in await db.invitation_templates.find({}, {"_id": 0}).to_list(200)}
+    # Pull event_types from the manageable list 'event_types' for completeness
+    event_types = list(DEFAULT_INVITATION_TEMPLATES.keys())
+    et_list_doc = await db.setting_lists.find_one({"key": "event_types"}, {"_id": 0})
+    if et_list_doc and et_list_doc.get("values"):
+        for v in et_list_doc["values"]:
+            if v not in event_types:
+                event_types.append(v)
+    out = []
+    for et in event_types:
+        if et == "default":
+            continue
+        s = saved.get(et)
+        out.append({
+            "event_type": et,
+            "body": (s or {}).get("body") or DEFAULT_INVITATION_TEMPLATES.get(et) or DEFAULT_INVITATION_TEMPLATES["default"],
+            "is_default": s is None,
+            "updated_at": (s or {}).get("updated_at"),
+            "updated_by": (s or {}).get("updated_by"),
+        })
+    # Always expose the catch-all 'default' template at the end so admins can edit it
+    s = saved.get("default")
+    out.append({
+        "event_type": "default",
+        "body": (s or {}).get("body") or DEFAULT_INVITATION_TEMPLATES["default"],
+        "is_default": s is None,
+        "updated_at": (s or {}).get("updated_at"),
+        "updated_by": (s or {}).get("updated_by"),
+    })
+    return out
+
+
+@api_router.put("/invitation-templates/{event_type}")
+async def update_invitation_template(event_type: str, data: dict, current_user: dict = Depends(get_current_user)):
+    _admin_only(current_user)
+    body = (data.get("body") or "").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="Şablon mətni boş ola bilməz")
+    doc = {
+        "event_type": event_type,
+        "body": body,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": current_user.get("name", ""),
+    }
+    await db.invitation_templates.update_one(
+        {"event_type": event_type},
+        {"$set": doc},
+        upsert=True,
+    )
+    return doc
+
+
+@api_router.delete("/invitation-templates/{event_type}")
+async def reset_invitation_template(event_type: str, current_user: dict = Depends(get_current_user)):
+    """Reset to default (delete the customised override)."""
+    _admin_only(current_user)
+    await db.invitation_templates.delete_one({"event_type": event_type})
+    return {"event_type": event_type, "body": DEFAULT_INVITATION_TEMPLATES.get(event_type) or DEFAULT_INVITATION_TEMPLATES["default"], "is_default": True}
 
 
 # ==================== OBLIGATIONS (ÖHDƏLİKLƏR) ====================
