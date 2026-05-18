@@ -136,7 +136,7 @@ export const SidebarProvider = ({ children }) => {
   );
 };
 
-const MenuLink = ({ item, collapsed, mobileOpen, onClick }) => {
+const MenuLink = ({ item, collapsed, mobileOpen, onClick, unreadCount }) => {
   return (
     <NavLink
       to={item.path}
@@ -157,8 +157,27 @@ const MenuLink = ({ item, collapsed, mobileOpen, onClick }) => {
       `}
       data-testid={`menu-${item.path.split('/').filter(Boolean).join('-')}`}
     >
-      <item.icon className={`w-[18px] h-[18px] flex-shrink-0 ${collapsed && !mobileOpen ? 'lg:mr-0' : 'mr-3'}`} />
-      {(!collapsed || mobileOpen) && <span>{item.label}</span>}
+      <div className="relative">
+        <item.icon className={`w-[18px] h-[18px] flex-shrink-0 ${collapsed && !mobileOpen ? 'lg:mr-0' : 'mr-3'}`} />
+        {unreadCount > 0 && (
+          <span
+            className="absolute -top-1.5 -right-1 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center"
+            data-testid={`unread-badge-${item.path.replace('/', '')}`}
+          >
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        )}
+      </div>
+      {(!collapsed || mobileOpen) && (
+        <span className="flex items-center gap-1">
+          {item.label}
+          {unreadCount > 0 && !collapsed && (
+            <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none ml-1">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </span>
+      )}
     </NavLink>
   );
 };
@@ -255,6 +274,27 @@ export const Sidebar = () => {
     ? (logoUrl.startsWith('http') ? logoUrl : `${process.env.REACT_APP_BACKEND_URL}${logoUrl}`)
     : "https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png";
   const applyInvert = !logoUrl;  // only apply invert filter when using the default logo
+
+  // Sidebar unread messages badge — poll every 30s and refresh on user events.
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    let stopped = false;
+    const load = async () => {
+      try {
+        const r = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/messages/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!stopped) setUnreadMessages(r.data?.total || 0);
+      } catch (_) { /* silent */ }
+    };
+    load();
+    const id = setInterval(load, 30000);
+    const onChange = () => load();
+    window.addEventListener('messages-unread-changed', onChange);
+    return () => { stopped = true; clearInterval(id); window.removeEventListener('messages-unread-changed', onChange); };
+  }, []);
 
   const isVisible = (item) => {
     if (!item.module) return true;
@@ -375,6 +415,7 @@ export const Sidebar = () => {
                 collapsed={collapsed} 
                 mobileOpen={mobileOpen} 
                 onClick={handleNavClick} 
+                unreadCount={item.path === '/messages' ? unreadMessages : 0}
               />
             )
           )}

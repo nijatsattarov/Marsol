@@ -120,6 +120,10 @@ export default function Settings() {
   const [forumDescription, setForumDescription] = useState('Zəhmət olmasa şirkət məlumatlarını doldurun');
   const [branding, setBranding] = useState({ sidebar_logo_url: '', main_logo_url: '' });
   const [brandingUploading, setBrandingUploading] = useState({ sidebar: false, main: false });
+  const isAdmin = (() => {
+    try { return (JSON.parse(localStorage.getItem('user') || '{}').role || '').toLowerCase() === 'admin'; }
+    catch { return false; }
+  })();
 
   // Forms
   const [packageForm, setPackageForm] = useState({ name: '', description: '', price: 0, invitation_count: 0 });
@@ -1108,6 +1112,32 @@ export default function Settings() {
                 </div>
               ))}
             </div>
+
+            {/* Admin-only: reset all notifications system-wide */}
+            {isAdmin && (
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <h3 className="text-sm font-semibold text-red-600 mb-1">Təhlükəli zona</h3>
+                <p className="text-xs text-slate-500 mb-3">
+                  Bütün istifadəçilər üçün saxlanılmış bildirişləri (yeni/oxunmuş, e-poçt göndərmə tarixçəsi daxil olmaqla) tamamilə təmizləyir.
+                </p>
+                <Button
+                  variant="outline"
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                  data-testid="reset-all-notifications-btn"
+                  onClick={async () => {
+                    if (!window.confirm('Bütün istifadəçilər üzrə bütün bildirişlər siliniəcək. Davam etmək istəyirsiniz?')) return;
+                    try {
+                      const r = await axios.post(`${API}/notifications/admin-reset-all`, {}, { headers });
+                      toast.success(`Sıfırlandı: ${r.data?.deleted_notifications || 0} bildiriş silindi`);
+                    } catch (e) {
+                      toast.error(e?.response?.data?.detail || 'Xəta baş verdi');
+                    }
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />Bütün bildirişləri sıfırla (Admin)
+                </Button>
+              </div>
+            )}
           </div>
         </TabsContent>
 
@@ -1296,6 +1326,7 @@ export default function Settings() {
                           <th className="text-left px-3 py-2 text-xs font-semibold text-[#3D4F6F]">Modul</th>
                           <th className="text-center px-3 py-2 text-xs font-semibold text-[#3D4F6F]">Hamısı</th>
                           <th className="text-center px-3 py-2 text-xs font-semibold text-amber-600">Yalnız özününki</th>
+                          <th className="text-center px-3 py-2 text-xs font-semibold text-emerald-700">Şöbə üçün</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1323,7 +1354,7 @@ export default function Settings() {
                         ].map(([key, label]) => (
                           <tr key={`scope-${key}`} className="border-b border-slate-100 hover:bg-slate-50/50">
                             <td className="px-3 py-2 text-xs text-slate-700 font-medium">{label}</td>
-                            {['all', 'own'].map(sc => (
+                            {['all', 'own', 'department'].map(sc => (
                               <td key={sc} className="text-center px-3 py-2">
                                 <input
                                   type="radio"

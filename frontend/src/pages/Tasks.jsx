@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { 
-  Plus, Loader2, Calendar, Clock, User, CheckCircle2, Circle,
-  MoreVertical, Pencil, Trash2, AlertCircle, Flag, Filter, Link2
+  Plus, Loader2, Calendar, Clock, User, CheckCircle2, Circle, CheckSquare, Square,
+  MoreVertical, Pencil, Trash2, AlertCircle, Flag, Filter, Link2, X
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -15,6 +15,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
+import { DatePickerAz } from '../components/DateTimePickerAz';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -69,10 +70,12 @@ export default function Tasks() {
     task_name: '', department: '', assignee: '', responsible_person: '',
     priority: 'Orta', start_date: new Date().toISOString().split('T')[0],
     end_date: '', related_object_type: '', related_object_id: '', related_object: '',
-    phase: '', status: 'Gözləyir', notes: ''
+    phase: '', status: 'Gözləyir', notes: '', subtasks: []
   };
 
   const [formData, setFormData] = useState(initialFormData);
+  // Scope filter: 'all' | 'mine' | 'team'
+  const [scopeFilter, setScopeFilter] = useState('all');
 
   const token = localStorage.getItem('token');
   const { permissions } = usePermissions();
@@ -207,10 +210,27 @@ export default function Tasks() {
     setFormData({ ...formData, related_object_id: id, related_object: label });
   };
 
+  // Compute team-mates (same department as current user) for the dept-head 'team' filter
+  const currentUserDept = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('user') || '{}').department || ''; } catch { return ''; }
+  }, []);
+  const teamNames = useMemo(() => new Set(
+    users.filter(u => (u.department || '') === currentUserDept && u.name).map(u => u.name)
+  ), [users, currentUserDept]);
+
+  const isOwnTask = (t) =>
+    !!currentUserName && (t.assignee === currentUserName || t.responsible_person === currentUserName);
+
   // Client-side filtering (instant — no backend round-trip)
   const filteredTasks = tasks.filter(t => {
     if (filters.status !== 'all' && t.status !== filters.status) return false;
     if (filters.priority !== 'all' && t.priority !== filters.priority) return false;
+    if (scopeFilter === 'mine' && !isOwnTask(t)) return false;
+    if (scopeFilter === 'team') {
+      // Show team members' tasks (others in my dept, excluding me)
+      if (!teamNames.has(t.assignee) && !teamNames.has(t.responsible_person)) return false;
+      if (isOwnTask(t)) return false;
+    }
     return true;
   });
   const tasksByStatus = statuses.reduce((acc, status) => {
@@ -229,9 +249,27 @@ export default function Tasks() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Tapşırıqlar</h1>
-          <p className="text-slate-500 text-sm mt-1">Cəmi {tasks.length} tapşırıq</p>
+          <p className="text-slate-500 text-sm mt-1">Cəmi {filteredTasks.length} tapşırıq{scopeFilter !== 'all' && <span className="text-[#9ACD32] font-semibold ml-1">({scopeFilter === 'mine' ? 'Mənim' : 'Əməkdaşlarımın'})</span>}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {/* Scope tabs */}
+          <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden bg-white" data-testid="task-scope-tabs">
+            {[
+              { value: 'all', label: 'Hamısı' },
+              { value: 'mine', label: 'Mənim tapşırıqlarım' },
+              ...(currentUserDept && teamNames.size > 1 ? [{ value: 'team', label: 'Əməkdaşlarımın' }] : []),
+            ].map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setScopeFilter(opt.value)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${scopeFilter === opt.value ? 'bg-[#9ACD32] text-[#3D4F6F]' : 'text-slate-600 hover:bg-slate-50'}`}
+                data-testid={`scope-${opt.value}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}
             className={activeFilterCount > 0 ? 'border-[#9ACD32] bg-[#9ACD32]/10' : ''} data-testid="filter-btn">
             <Filter className="w-4 h-4 mr-1" />Filtr
@@ -339,11 +377,22 @@ export default function Tasks() {
             <div className="space-y-3">
               {tasksByStatus[status]?.length === 0 ? (
                 <p className="text-center text-slate-400 text-sm py-4">Tapşırıq yoxdur</p>
-              ) : tasksByStatus[status].map(task => (
-                <div key={task.id} className="bg-white rounded-lg p-3 shadow-sm border border-slate-100" data-testid={`task-card-${task.id}`}>
+              ) : tasksByStatus[status].map(task => {
+                const own = isOwnTask(task);
+                const subs = Array.isArray(task.subtasks) ? task.subtasks : [];
+                const doneCount = subs.filter(s => s?.done).length;
+                return (
+                <div
+                  key={task.id}
+                  className={`rounded-lg p-3 shadow-sm border ${own ? 'bg-gradient-to-br from-[#FDFFEB] to-[#F4FBD7] border-[#9ACD32] ring-1 ring-[#9ACD32]/30' : 'bg-white border-slate-100'}`}
+                  data-testid={`task-card-${task.id}`}
+                >
                   <div className="flex items-start justify-between mb-1.5">
                     <div className="flex-1 min-w-0">
-                      {task.task_code && <span className="text-[10px] text-slate-400 font-mono">{task.task_code}</span>}
+                      <div className="flex items-center gap-1">
+                        {task.task_code && <span className="text-[10px] text-slate-400 font-mono">{task.task_code}</span>}
+                        {own && <Badge className="bg-[#9ACD32] text-[#3D4F6F] text-[9px] px-1.5 py-0">SİZ</Badge>}
+                      </div>
                       <h4 className="font-medium text-sm text-slate-800 line-clamp-2">{task.task_name}</h4>
                     </div>
                     {_canEdit && <DropdownMenu>
@@ -378,6 +427,9 @@ export default function Tasks() {
                     {task.responsible_person && (
                       <p className="text-[10px] text-slate-400 pl-4">Məsul: {task.responsible_person}</p>
                     )}
+                    {task.created_by && (
+                      <p className="text-[10px] text-slate-400 pl-4">Yaradan: <span className="text-[#3D4F6F] font-medium">{task.created_by}</span></p>
+                    )}
                     {task.created_at && (
                       <div className="flex items-center gap-1.5 text-[11px] text-slate-500" data-testid={`task-created-${task.id}`}>
                         <Clock className="w-3 h-3 shrink-0 text-slate-400" />
@@ -408,8 +460,41 @@ export default function Tasks() {
                       </Badge>
                     )}
                   </div>
+                  {/* Subtasks checklist */}
+                  {subs.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-slate-100" data-testid={`subtasks-${task.id}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Mərhələlər</span>
+                        <span className="text-[10px] font-bold text-[#3D4F6F]">{doneCount}/{subs.length}</span>
+                      </div>
+                      <div className="h-1 rounded-full bg-slate-100 overflow-hidden mb-2">
+                        <div className="h-full bg-[#9ACD32] transition-all" style={{ width: `${subs.length ? (doneCount / subs.length) * 100 : 0}%` }} />
+                      </div>
+                      <ul className="space-y-0.5">
+                        {subs.slice(0, 4).map((s, i) => (
+                          <li key={i} className="flex items-start gap-1.5 text-[11px]">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const next = subs.map((x, idx) => idx === i ? { ...x, done: !x.done } : x);
+                                setTasks(prev => prev.map(t => t.id === task.id ? { ...t, subtasks: next } : t));
+                                try { await axios.put(`${API}/tasks/${task.id}`, { subtasks: next }, { headers }); }
+                                catch { toast.error('Mərhələ yenilənmədi'); }
+                              }}
+                              className="shrink-0 mt-0.5"
+                              data-testid={`subtask-toggle-${task.id}-${i}`}
+                            >
+                              {s.done ? <CheckSquare className="w-3 h-3 text-emerald-600" /> : <Square className="w-3 h-3 text-slate-400" />}
+                            </button>
+                            <span className={s.done ? 'line-through text-slate-400' : 'text-slate-700'}>{s.title}</span>
+                          </li>
+                        ))}
+                        {subs.length > 4 && <li className="text-[10px] text-slate-400 pl-4">+{subs.length - 4} daha</li>}
+                      </ul>
+                    </div>
+                  )}
                 </div>
-              ))}
+              );})}
             </div>
           </div>
         ))}
@@ -461,12 +546,59 @@ export default function Tasks() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Başlama tarixi</Label>
-                <Input type="date" value={formData.start_date} onChange={(e) => setFormData({...formData, start_date: e.target.value})} className="text-sm" data-testid="task-start-date" />
+                <DatePickerAz value={formData.start_date} onChange={(v) => setFormData({...formData, start_date: v})} testId="task-start-date" />
               </div>
               <div>
                 <Label className="text-xs">Bitmə tarixi</Label>
-                <Input type="date" value={formData.end_date} onChange={(e) => setFormData({...formData, end_date: e.target.value})} className="text-sm" data-testid="task-end-date" />
+                <DatePickerAz value={formData.end_date} onChange={(v) => setFormData({...formData, end_date: v})} testId="task-end-date" />
               </div>
+            </div>
+
+            {/* Subtasks / checklist */}
+            <div className="border border-slate-200 rounded-lg p-2.5 bg-slate-50/50">
+              <Label className="text-xs flex items-center gap-1 mb-1.5"><CheckSquare className="w-3 h-3" />Mərhələlər (alt başlıqlar / checklist)</Label>
+              <div className="space-y-1.5 mb-2" data-testid="subtasks-list">
+                {(formData.subtasks || []).map((st, i) => (
+                  <div key={i} className="flex items-center gap-2 bg-white border border-slate-100 rounded px-2 py-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = formData.subtasks.map((x, idx) => idx === i ? { ...x, done: !x.done } : x);
+                        setFormData({ ...formData, subtasks: next });
+                      }}
+                    >
+                      {st.done ? <CheckSquare className="w-4 h-4 text-emerald-600" /> : <Square className="w-4 h-4 text-slate-400" />}
+                    </button>
+                    <Input
+                      value={st.title || ''}
+                      onChange={(e) => {
+                        const next = formData.subtasks.map((x, idx) => idx === i ? { ...x, title: e.target.value } : x);
+                        setFormData({ ...formData, subtasks: next });
+                      }}
+                      placeholder="Mərhələ başlığı..."
+                      className={`text-xs flex-1 border-0 shadow-none p-0 h-6 ${st.done ? 'line-through text-slate-400' : ''}`}
+                      data-testid={`subtask-input-${i}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, subtasks: formData.subtasks.filter((_, idx) => idx !== i) })}
+                      className="p-1 hover:bg-red-50 rounded"
+                    >
+                      <X className="w-3 h-3 text-red-500" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setFormData({ ...formData, subtasks: [...(formData.subtasks || []), { title: '', done: false }] })}
+                className="h-7 text-xs w-full"
+                data-testid="add-subtask-btn"
+              >
+                <Plus className="w-3 h-3 mr-1" />Mərhələ əlavə et
+              </Button>
             </div>
 
             {/* Related Object */}

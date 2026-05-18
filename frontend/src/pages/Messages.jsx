@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import {
-  Plus, Search, Loader2, Send, User, ArrowLeft, MessageCircle, Users, X, Paperclip
+  Plus, Search, Loader2, Send, User, ArrowLeft, MessageCircle, Users, X, Paperclip, Settings as SettingsIcon, Trash2, Eye
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -25,11 +25,64 @@ export default function Messages() {
   const [savingGroup, setSavingGroup] = useState(false);
   const [selectedUser, setSelectedUser] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [groupSettings, setGroupSettings] = useState({ open: false, name: '', members: [] });
   const messagesEndRef = useRef(null);
 
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+
+  const openGroupSettings = (conv) => {
+    setGroupSettings({
+      open: true,
+      conv,
+      name: conv.name || '',
+      members: (conv.participants || []).filter(id => id !== conv.created_by),
+    });
+  };
+
+  const saveGroupSettings = async () => {
+    const conv = groupSettings.conv;
+    if (!conv) return;
+    try {
+      await axios.put(`${API}/messages/conversations/${conv.id}`, {
+        name: groupSettings.name,
+        participant_ids: groupSettings.members,
+      }, { headers });
+      toast.success('Qrup yeniləndi');
+      setGroupSettings({ open: false, name: '', members: [] });
+      await fetchConversations();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Xəta');
+    }
+  };
+
+  const deleteGroup = async () => {
+    const conv = groupSettings.conv;
+    if (!conv) return;
+    if (!window.confirm(`"${conv.name}" qrupunu silmək istədiyinizə əminsiniz? Bütün mesajlar silinəcək.`)) return;
+    try {
+      await axios.delete(`${API}/messages/conversations/${conv.id}`, { headers });
+      toast.success('Qrup silindi');
+      setGroupSettings({ open: false, name: '', members: [] });
+      setActiveConv(null);
+      await fetchConversations();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Xəta');
+    }
+  };
+
+  const deleteMessage = async (msgId) => {
+    if (!activeConv) return;
+    if (!window.confirm('Bu mesajı silmək istəyirsinizmi?')) return;
+    try {
+      await axios.delete(`${API}/messages/${activeConv.id}/message/${msgId}`, { headers });
+      setMessages(prev => prev.filter(m => m.id !== msgId));
+      toast.success('Mesaj silindi');
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Mesaj silinmədi');
+    }
+  };
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -75,6 +128,9 @@ export default function Messages() {
   const openConversation = (conv) => {
     setActiveConv(conv);
     fetchMessages(conv.id);
+    axios.post(`${API}/messages/${conv.id}/mark-read`, {}, { headers }).catch(() => {});
+    // Refresh the global unread badge in the sidebar
+    window.dispatchEvent(new CustomEvent('messages-unread-changed'));
   };
 
   const fileInputRef = useRef(null);
@@ -211,10 +267,28 @@ export default function Messages() {
                 <Button variant="ghost" size="sm" className="sm:hidden" onClick={() => setActiveConv(null)}>
                   <ArrowLeft className="w-4 h-4" />
                 </Button>
-                <div className="w-8 h-8 rounded-full bg-[#3D4F6F] flex items-center justify-center">
-                  <span className="text-white text-sm font-semibold">{getOtherName(activeConv).charAt(0).toUpperCase()}</span>
+                <div className={`w-8 h-8 rounded-full ${activeConv.is_group ? 'bg-[#9ACD32]' : 'bg-[#3D4F6F]'} flex items-center justify-center`}>
+                  {activeConv.is_group ? <Users className="w-4 h-4 text-white" /> : <span className="text-white text-sm font-semibold">{getOtherName(activeConv).charAt(0).toUpperCase()}</span>}
                 </div>
-                <p className="font-semibold text-sm text-[#3D4F6F]">{getOtherName(activeConv)}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-[#3D4F6F] truncate">{getOtherName(activeConv)}</p>
+                  {activeConv.is_group && (
+                    <p className="text-[10px] text-slate-400 truncate">
+                      İştirakçılar ({activeConv.participants?.length || 0}): {(activeConv.participants || []).map(id => activeConv.participant_names?.[id] || '?').join(', ')}
+                    </p>
+                  )}
+                </div>
+                {activeConv.is_group && activeConv.created_by === currentUser.id && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => openGroupSettings(activeConv)}
+                    title="Qrupu redaktə et"
+                    data-testid="group-settings-btn"
+                  >
+                    <SettingsIcon className="w-4 h-4 text-slate-500" />
+                  </Button>
+                )}
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
                 {messages.length === 0 && <p className="text-center text-sm text-slate-400 py-10">Mesaj yoxdur. Söhbət başladın!</p>}
@@ -224,8 +298,20 @@ export default function Messages() {
                   const isImage = att && (att.mime_type || '').startsWith('image/');
                   const isVideo = att && (att.mime_type || '').startsWith('video/');
                   return (
-                    <div key={msg.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[75%] px-3 py-2 rounded-xl text-sm ${mine ? 'bg-[#3D4F6F] text-white rounded-br-sm' : 'bg-white text-slate-700 rounded-bl-sm shadow-sm'}`} data-testid={`msg-${msg.id}`}>
+                    <div key={msg.id} className={`flex group ${mine ? 'justify-end' : 'justify-start'}`}>
+                      <div className="flex items-center gap-1 max-w-[75%]">
+                        {mine && (
+                          <button
+                            type="button"
+                            onClick={() => deleteMessage(msg.id)}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 transition-opacity"
+                            title="Mesajı sil"
+                            data-testid={`msg-delete-${msg.id}`}
+                          >
+                            <Trash2 className="w-3 h-3 text-red-400" />
+                          </button>
+                        )}
+                        <div className={`px-3 py-2 rounded-xl text-sm ${mine ? 'bg-[#3D4F6F] text-white rounded-br-sm' : 'bg-white text-slate-700 rounded-bl-sm shadow-sm'}`} data-testid={`msg-${msg.id}`}>
                         {!mine && activeConv?.is_group && (
                           <p className="text-[10px] font-semibold mb-1 opacity-70">{msg.sender_name}</p>
                         )}
@@ -249,6 +335,7 @@ export default function Messages() {
                         <p className={`text-[10px] mt-1 ${mine ? 'text-white/60' : 'text-slate-400'}`}>
                           {new Date(msg.created_at).toLocaleTimeString('az', { hour: '2-digit', minute: '2-digit' })}
                         </p>
+                      </div>
                       </div>
                     </div>
                   );
@@ -358,6 +445,63 @@ export default function Messages() {
                 {savingGroup ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Users className="w-4 h-4 mr-1" />}
                 Yarat
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Group Settings Modal (rename + members + delete) */}
+      <Dialog open={groupSettings.open} onOpenChange={(o) => !o && setGroupSettings({ open: false, name: '', members: [] })}>
+        <DialogContent className="max-w-md" data-testid="group-settings-modal">
+          <DialogHeader>
+            <DialogTitle style={{ color: '#3D4F6F' }} className="flex items-center gap-2"><SettingsIcon className="w-5 h-5" />Qrup ayarları</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Qrup adı</Label>
+              <Input
+                value={groupSettings.name}
+                onChange={(e) => setGroupSettings(p => ({ ...p, name: e.target.value }))}
+                className="text-sm"
+                data-testid="group-settings-name"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">İştirakçılar ({groupSettings.members.length})</Label>
+              <p className="text-[10px] text-slate-500 mb-1">Yaradan həmişə qrupda qalır</p>
+              <div className="mt-1 max-h-[260px] overflow-y-auto border rounded-md p-2 space-y-1">
+                {users.map(u => (
+                  <label key={u.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-50 cursor-pointer text-sm">
+                    <input
+                      type="checkbox"
+                      checked={groupSettings.members.includes(u.id)}
+                      onChange={(e) => {
+                        setGroupSettings(p => ({
+                          ...p,
+                          members: e.target.checked ? [...p.members, u.id] : p.members.filter(m => m !== u.id),
+                        }));
+                      }}
+                      data-testid={`group-settings-member-${u.id}`}
+                    />
+                    <span>{u.name}</span>
+                    {u.department && <span className="text-[10px] text-slate-400">· {u.department}</span>}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-between gap-2 pt-2 border-t">
+              <Button
+                variant="outline"
+                onClick={deleteGroup}
+                className="text-red-600 border-red-200 hover:bg-red-50"
+                data-testid="group-delete-btn"
+              >
+                <Trash2 className="w-4 h-4 mr-1" />Qrupu sil
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setGroupSettings({ open: false, name: '', members: [] })}>Ləğv et</Button>
+                <Button onClick={saveGroupSettings} className="bg-[#3D4F6F] text-white" data-testid="group-settings-save">Yadda saxla</Button>
+              </div>
             </div>
           </div>
         </DialogContent>

@@ -35,6 +35,7 @@ export function DatePickerAz({ value, onChange, required, disabled, className, p
         <Calendar
           mode="single"
           selected={dateObj || undefined}
+          weekStartsOn={1}
           onSelect={(d) => {
             if (!d) { onChange(''); setOpen(false); return; }
             const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

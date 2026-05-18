@@ -17,6 +17,7 @@ import * as XLSX from 'xlsx';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
 import { validateRequired } from '../lib/validate';
+import { DatePickerAz } from '../components/DateTimePickerAz';
 import { createUnicodePdf } from '../lib/pdfHelpers';
 import autoTable from 'jspdf-autotable';
 
@@ -31,7 +32,8 @@ const emptyForm = {
   general_tasks: [emptyTask()],
   discussion_topics: [''],
   deadline: '', next_assembly_date: '',
-  decisions: ['']
+  decisions: [''],
+  attendees: []  // manually-selected attendees list
 };
 
 // Carry-over picker — lets the user copy unfinished agendas/tasks from past assemblies
@@ -121,13 +123,14 @@ function DatePopoverInput({ value, onChange, testId }) {
           data-testid={testId}
         >
           <CalendarIcon className="w-3 h-3 text-slate-400" />
-          <span className={value ? 'text-slate-700' : 'text-slate-400'}>{value || 'Tarix seç'}</span>
+          <span className={value ? 'text-slate-700' : 'text-slate-400'}>{value ? (() => { const [y,m,d] = value.split('-'); return `${d}/${m}/${y}`; })() : 'Tarix seç'}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
         <Calendar
           mode="single"
           selected={dateValue}
+          weekStartsOn={1}
           onSelect={(d) => {
             if (d) {
               const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -233,8 +236,8 @@ function TaskRow({ task, onUpdate, onRemove, canRemove, prefix, employeeNames })
           <PersonTags selected={task.responsible_persons} options={employeeNames} onChange={(v) => onUpdate('responsible_persons', v)} placeholder="Məsul seçin" testId={`${prefix}-resp`} />
         </div>
         <div>
-          <span className="text-[10px] text-slate-400">Əməkdaşlar</span>
-          <PersonTags selected={task.assignees} options={employeeNames} onChange={(v) => onUpdate('assignees', v)} placeholder="Əməkdaş seçin" testId={`${prefix}-assign`} />
+          <span className="text-[10px] text-slate-400">İcraçı</span>
+          <PersonTags selected={task.assignees} options={employeeNames} onChange={(v) => onUpdate('assignees', v)} placeholder="İcraçı seçin" testId={`${prefix}-assign`} />
         </div>
       </div>
     </div>
@@ -247,7 +250,7 @@ function DetailTaskRow({ t }) {
     <div className="flex flex-wrap items-center gap-2 text-xs py-1">
       <ListChecks className="w-3 h-3 text-amber-500 flex-shrink-0" />
       <span className="text-slate-700 font-medium">{t.title}</span>
-      {t.deadline && <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{t.deadline}</span>}
+      {t.deadline && <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{formatDate(t.deadline)}</span>}
       {(t.responsible_persons || []).map((p, i) => <Badge key={`r${i}`} className="bg-purple-50 text-purple-600 text-[10px]">{p}</Badge>)}
       {(t.assignees || []).map((p, i) => <Badge key={`a${i}`} className="bg-blue-50 text-blue-600 text-[10px]">{p}</Badge>)}
     </div>
@@ -399,10 +402,15 @@ export default function Assembly() {
 
     // Agendas (gündəlik) — each in its own table
     (a.agendas || []).forEach((ag, idx) => {
-      const yStart = doc.lastAutoTable.finalY + 8;
+      let yStart = doc.lastAutoTable.finalY + 8;
       doc.setFontSize(12);
       doc.setTextColor(61, 79, 111);
-      doc.text(`Gündəlik #${idx + 1}: ${ag.title || '-'}`, 14, yStart);
+      // Wrap long agenda titles across multiple lines to prevent overflow
+      const pageW = doc.internal.pageSize.getWidth();
+      const titleText = `Gündəlik #${idx + 1}: ${ag.title || '-'}`;
+      const wrapped = doc.splitTextToSize(titleText, pageW - 28);
+      doc.text(wrapped, 14, yStart);
+      yStart += (wrapped.length - 1) * 5;
       const tasks = (ag.tasks || []).map(t => [
         t.title || '-',
         (t.responsible_persons || []).join(', ') || '-',
@@ -415,8 +423,9 @@ export default function Assembly() {
           startY: yStart + 3,
           head: [['Tapşırıq', 'Məsul', 'İcraçı', 'Son tarix', 'Status']],
           body: tasks,
-          styles: { font: 'Roboto', fontSize: 8, cellPadding: 2 },
+          styles: { font: 'Roboto', fontSize: 8, cellPadding: 2, overflow: 'linebreak', cellWidth: 'wrap' },
           headStyles: { font: 'Roboto', fillColor: [154, 205, 50], textColor: [61, 79, 111] },
+          columnStyles: { 0: { cellWidth: 70 }, 1: { cellWidth: 40 }, 2: { cellWidth: 40 }, 3: { cellWidth: 22 }, 4: { cellWidth: 22 } },
         });
       } else {
         doc.setFontSize(9);
@@ -440,8 +449,9 @@ export default function Assembly() {
           t.deadline ? formatDate(t.deadline) : '-',
           t.status || '-',
         ]),
-        styles: { font: 'Roboto', fontSize: 8, cellPadding: 2 },
+        styles: { font: 'Roboto', fontSize: 8, cellPadding: 2, overflow: 'linebreak', cellWidth: 'wrap' },
         headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255 },
+        columnStyles: { 0: { cellWidth: 70 }, 1: { cellWidth: 40 }, 2: { cellWidth: 40 }, 3: { cellWidth: 22 }, 4: { cellWidth: 22 } },
       });
     }
 
@@ -646,7 +656,7 @@ export default function Assembly() {
                       </div>
                     </td>
                     <td className="px-3 py-2.5 text-xs text-slate-600">{a.deadline || '-'}</td>
-                    <td className="px-3 py-2.5 text-xs text-slate-600">{a.next_assembly_date || '-'}</td>
+                    <td className="px-3 py-2.5 text-xs text-slate-600">{a.next_assembly_date ? formatDate(a.next_assembly_date) : '-'}</td>
                     <td className="px-3 py-2.5 text-center">
                       <button onClick={() => setExpandedRow(expandedRow === a.id ? null : a.id)}
                         className={`p-1.5 rounded-lg transition-colors ${expandedRow === a.id ? 'bg-[#3D4F6F] text-white' : 'hover:bg-slate-100 text-slate-400'}`}
@@ -746,8 +756,21 @@ export default function Assembly() {
               </div>
               <div>
                 <Label className="text-xs">İclasın keçirildiyi tarix</Label>
-                <Input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} className="text-sm" data-testid="assembly-deadline" />
+                <DatePickerAz value={form.deadline} onChange={(v) => setForm({ ...form, deadline: v })} testId="assembly-deadline" />
               </div>
+            </div>
+
+            {/* Attendees — manual selection */}
+            <div>
+              <Label className="text-xs">İclas iştirakçıları</Label>
+              <PersonTags
+                selected={form.attendees || []}
+                options={employeeNames}
+                onChange={(v) => setForm({ ...form, attendees: v })}
+                placeholder="İştirakçı əməkdaş seçin"
+                testId="assembly-attendees"
+              />
+              <p className="text-[10px] text-slate-400 mt-1">İştirakçılar əl ilə seçilir. Tapşırıqlardakı icraçılar avtomatik PDF hesabatında əlavə olunur.</p>
             </div>
             <div>
               <Label className="text-xs">İclasın məqsədi *</Label>
@@ -756,15 +779,23 @@ export default function Assembly() {
 
             {/* Agendas with nested tasks */}
             <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
-              <div className="flex items-center justify-between mb-2">
-                <Label className="text-xs font-semibold text-[#3D4F6F] flex items-center gap-1"><Target className="w-3.5 h-3.5" />Gündəmlər və Tapşırıqlar</Label>
+              <div className="flex items-center justify-between mb-2 sticky top-0 bg-slate-50/95 backdrop-blur z-10 -mx-3 px-3 py-2 border-b border-slate-200">
+                <Label className="text-xs font-semibold text-[#3D4F6F] flex items-center gap-1"><Target className="w-3.5 h-3.5" />Gündəmlər və Tapşırıqlar ({form.agendas.length})</Label>
                 <div className="flex items-center gap-2">
                   <CarryOverPicker assemblies={assemblies} editingId={editing?.id} onCarry={(items) => {
                     if (!items.length) return;
                     setForm(p => ({ ...p, agendas: [...(p.agendas || []), ...items] }));
                     toast.success(`${items.length} gündəm köçürüldü`);
                   }} />
-                  <button type="button" onClick={addAgenda} className="text-[10px] text-[#9ACD32] hover:underline font-medium" data-testid="add-agenda-btn">+ Gündəm əlavə et</button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={addAgenda}
+                    className="h-7 text-[11px] bg-[#9ACD32] hover:bg-[#8BC125] text-[#3D4F6F] font-semibold shadow-sm"
+                    data-testid="add-agenda-btn"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />Yeni gündəm
+                  </Button>
                 </div>
               </div>
               {form.agendas.map((agenda, aIdx) => (
@@ -822,7 +853,7 @@ export default function Assembly() {
               testId="decision" />
             <div>
               <Label className="text-xs">Növbəti iclas tarixi</Label>
-              <Input type="date" value={form.next_assembly_date} onChange={(e) => setForm({ ...form, next_assembly_date: e.target.value })} className="text-sm" data-testid="assembly-next-date" />
+              <DatePickerAz value={form.next_assembly_date} onChange={(v) => setForm({ ...form, next_assembly_date: v })} testId="assembly-next-date" />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => {

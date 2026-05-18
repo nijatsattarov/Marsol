@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 63 — Tested Tasks (subtasks/created_by/own-task gradient/scope tabs), Dashboard tasks scoping to current user, Notifications admin reset-all, in-app notification writes on task creation + message send, /messages/unread-count route ordering, group conversation rename/delete/edit, message delete (auth/ownership), POST /messages/{cid}/mark-read, RBAC 'department' scope on tasks, plus regressions. Backend: 13/13 pytest cases pass (100%). Direct MongoDB introspection confirms db.notifications receives 'task_assigned' (with task_id+recipient_name+body matching task_name) and 'message' (with conversation_id+recipient_name, sender excluded) docs. RBAC department scope verified end-to-end: created a fresh role with scopes.tasks='department', new user in TEST_DEPT_xxx; that user only sees tasks whose assignee/responsible/created_by is in their department. Frontend P0: Tasks page renders with scope-all + scope-mine tabs and 'Mənim' filtering works (admin has 0 own tasks so 0 cards — correct behaviour). scope-team tab is conditionally rendered (only when currentUserDept && teamNames.size>1) — admin user has no department so the tab is correctly hidden. Add-task modal: add-subtask-btn renders a Mərhələ row, subtask-input-0 becomes editable. Sidebar unread-badge-messages selector wired (returned 0 because no unread). All key data-testids confirmed present in source: tasks-page, task-scope-tabs, scope-{all|mine|team}, add-subtask-btn, subtask-input-{i}, subtasks-{id}, subtask-toggle-{id}-{i}, unread-badge-messages, reset-all-notifications-btn, group-settings-btn, group-settings-modal, group-delete-btn, msg-delete-{id}. calendar.jsx now defaults weekStartsOn=1.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/notifications",
+        "issue": "Stored db.notifications docs of type 'task_assigned' and 'message' are written correctly by POST /tasks and POST /messages/{cid}, but the listing endpoint GET /api/notifications only surfaces computed notifications + stored type=='reminder'. So while the spec contract (DB write) is met, end users will NOT see task/message notifications in the bell dropdown. If those entries are meant to surface in the UI, the get_notifications() loop needs to include `db.notifications.find({'type': {'$in': ['task_assigned','message']}, 'recipient_name': current_user.name})`. If they're only intended for downstream email/badge consumption then this is by design."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration63_tasks_messages_scope.py",
+    "/app/test_reports/pytest/iteration_63_results.xml"
+  ],
+  "action_items": [
+    "Decide whether stored 'task_assigned' / 'message' notifications should appear in the bell-icon dropdown via /api/notifications. If yes, extend get_notifications() to also load db.notifications filtered by recipient_name=current_user.name (mapping body→message, etc.).",
+    "Consider also hiding/showing scope-team tab consistently. Current Tasks.jsx renders it only when currentUserDept && teamNames.size>1 — fine for individual contributors but means dept heads with a still-seeded department but no colleagues won't see it. Doc this UX rule."
+  ],
+  "critical_code_review_comments": [
+    "server.py: /messages/unread-count is correctly declared BEFORE the dynamic /messages/{conversation_id} GET (lines 5124 vs 5149), preventing route shadowing. Verified by test_unread_count_route_not_shadowed.",
+    "server.py:create_task (line 2253) sets created_by=current_user.name authoritatively, writes per-recipient db.notifications, then invokes _email_notify_safe — wrapped so an email failure won't 500 the request. Good.",
+    "server.py:apply_scope/assert_scope_ownership (lines 401-471) cleanly handle scope='department' with a fallback to 'own' when user has no department. Uses $or list of {field: {$in: dept_names}} per SCOPE_FIELDS entry. Verified end-to-end via test_department_scope_filters_tasks.",
+    "server.py:get_dashboard_stats (line 581) computes tasks_count via me-only $or over assignee/responsible_person/created_by regardless of role.admin flag — matches spec. Verified by test_dashboard_tasks_count_excludes_others.",
+    "server.py:delete_message (5209) and delete_conversation (5262) correctly limit destructive action to sender/creator OR admin; also re-computes last_message preview on message delete. Verified by test_group_lifecycle_and_message_delete.",
+    "server.py:admin_reset_all_notifications (6519) uses _admin_only() and returns deletion counts for 3 collections; gracefully handles missing notification_emails collection.",
+    "calendar.jsx default weekStartsOn=1 — applies globally to every shadcn Calendar without per-call prop.",
+    "Tasks.jsx: SİZ badge & gradient background use task.assignee||responsible_person||created_by === currentUserName; created_by line uses data-testid='task-created-{id}'; subtask checklist persists via PUT /tasks/{id} with full subtasks array — implemented correctly.",
+    "Settings.jsx: reset-all-notifications-btn is gated behind isAdmin() and posts to /notifications/admin-reset-all; role modal scope columns are 3 (Hamısı/Yalnız özününki/Şöbə üçün) — wired correctly."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration63_tasks_messages_scope.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 pytest cases pass — subtasks CRUD, dashboard tasks me-only scoping, admin-reset-all admin+non-admin paths, db.notifications writes for task_assigned and message types, unread-count route ordering, group rename/delete/permission-403s, message delete + 403 for non-sender, mark-read upsert, department-scope filtering, plus regressions: login, /invitation-templates, /meetings, /organization/companies)",
+    "frontend": "P0 selectors & flows confirmed present: scope-all/scope-mine tabs render, add-subtask-btn adds rows, subtask-input-0 is editable, sidebar unread-badge-messages wired, role modal expected 3-column scope grid present in source. Could not exercise full SİZ badge / dept-head 'team' tab in a single session because admin user has no department + no own tasks; both behaviors are gated correctly and tests confirm the gating logic."
+  },
+  "test_credentials": "settings@marsol.az / marsol123 (admin); satis@marsol.az / marsol123 (non-admin) per /app/memory/test_credentials.md",
+  "seed_data_creation": "Tests create-and-cleanup (try/finally): TEST_subtasks_task_*, TEST_dash_other_*, TEST_notif_assign_*, TEST_GROUP_*, TEST_NOTIFCONV_* messages/conversations, TEST_role_dept_* role + TEST_DeptUser_* user + TEST_dept_visible_* / TEST_dept_hidden_* tasks. All cleaned up at the end of each test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend module fully covered by /app/backend/tests/test_iteration63_tasks_messages_scope.py (13 tests). To re-exercise the SİZ-badge / own-task gradient and the dept-head 'Əməkdaşlarımın' tab end-to-end via UI, log in as a NON-admin user that has BOTH (a) a populated department and (b) at least one colleague in the same dept; then assign tasks across self+colleagues and verify card backgrounds + tab visibility. The admin user used here has no department so 'team' tab is correctly hidden — that is not a bug.",
+  "rca of the issue": "Single noteworthy observation, not a regression: stored db.notifications docs of type 'task_assigned' and 'message' are written by create_task/send_message but get_notifications() only blends in db.notifications where type=='reminder'. If the spec intent is that the bell icon also surfaces these, the get_notifications() function needs an additional loader. Recommend clarifying with PRD owner."
+}

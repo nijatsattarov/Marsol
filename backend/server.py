@@ -292,6 +292,7 @@ class TaskCreate(BaseModel):
     phase: Optional[str] = ""
     status: Optional[str] = "Gözləyir"
     notes: Optional[str] = ""
+    subtasks: Optional[List[dict]] = []  # [{title, done}, ...]
 
 # Meeting Model  
 class MeetingCreate(BaseModel):
@@ -398,16 +399,42 @@ async def get_user_scopes(user: dict) -> dict:
     return role.get("scopes", {}) or {}
 
 async def apply_scope(query: dict, user: dict, module: str) -> dict:
-    """Merge scope-based ownership filter into query. Returns new query dict."""
+    """Merge scope-based ownership filter into query. Returns new query dict.
+
+    Scope values:
+        - "all"        → no filter (everyone visible)
+        - "own"        → only records the user is involved in (assignee/curator/...)
+        - "department" → records owned by users in the same department as `user`
+    """
     if user.get("role") == "admin":
         return query
     scopes = await get_user_scopes(user)
-    if scopes.get(module, "all") != "own":
+    scope = scopes.get(module, "all")
+    if scope == "all":
         return query
     fields = SCOPE_FIELDS.get(module, [])
     if not fields:
         return query
     user_name = user.get("name", "")
+    if scope == "department":
+        # Find all users sharing this department (fallback to "own" if no department set)
+        my_dept = (user.get("department") or "").strip()
+        if not my_dept:
+            scope = "own"
+        else:
+            dept_users = await db.users.find({"department": my_dept}, {"_id": 0, "name": 1}).to_list(500)
+            names = [u.get("name") for u in dept_users if u.get("name")]
+            if user_name and user_name not in names:
+                names.append(user_name)
+            if not names:
+                names = [user_name]
+            clauses = [{f: {"$in": names}} for f in fields]
+            if "$or" in query or "$and" in query:
+                return {"$and": [query, {"$or": clauses}]}
+            new_query = dict(query)
+            new_query["$or"] = clauses
+            return new_query
+    # scope == "own"
     clauses = [{f: user_name} for f in fields]
     if "$or" in query or "$and" in query:
         return {"$and": [query, {"$or": clauses}]}
@@ -415,18 +442,33 @@ async def apply_scope(query: dict, user: dict, module: str) -> dict:
     new_query["$or"] = clauses
     return new_query
 
+
 async def assert_scope_ownership(user: dict, module: str, record: Optional[dict]):
-    """Raise 403 if user has 'own' scope and record is not theirs."""
+    """Raise 403 if user has 'own'/'department' scope and record is not in their bucket."""
     if user.get("role") == "admin" or not record:
         return
     scopes = await get_user_scopes(user)
-    if scopes.get(module, "all") != "own":
+    scope = scopes.get(module, "all")
+    if scope == "all":
         return
     fields = SCOPE_FIELDS.get(module, [])
     user_name = user.get("name", "")
-    if any(record.get(f) == user_name for f in fields):
-        return
-    raise HTTPException(status_code=403, detail="Bu qeyd sizə aid deyil")
+    if scope == "own":
+        if any(record.get(f) == user_name for f in fields):
+            return
+        raise HTTPException(status_code=403, detail="Bu qeyd sizə aid deyil")
+    if scope == "department":
+        my_dept = (user.get("department") or "").strip()
+        if not my_dept:
+            if any(record.get(f) == user_name for f in fields):
+                return
+            raise HTTPException(status_code=403, detail="Bu qeyd sizə aid deyil")
+        dept_users = await db.users.find({"department": my_dept}, {"_id": 0, "name": 1}).to_list(500)
+        names = {u.get("name") for u in dept_users if u.get("name")}
+        names.add(user_name)
+        if any(record.get(f) in names for f in fields):
+            return
+        raise HTTPException(status_code=403, detail="Bu qeyd şöbənizə aid deyil")
 
 
 async def _user_email_by_name(name: str) -> Optional[str]:
@@ -541,7 +583,15 @@ async def get_dashboard_stats(current_user: dict = Depends(check_permission("das
     # Get real counts from database
     companies_count = await db.companies.count_documents({})
     employees_count = await db.employees.count_documents({})
-    tasks_count = await db.tasks.count_documents({})
+    # Dashboard 'tasks' widget shows ONLY the current user's own tasks (their workload)
+    me_name = current_user.get("name", "")
+    me_clauses = [
+        {"assignee": me_name},
+        {"responsible_person": me_name},
+        {"created_by": me_name},
+    ] if me_name else [{}]
+    me_tasks_query = {"$or": me_clauses}
+    tasks_count = await db.tasks.count_documents(me_tasks_query)
     meetings_count = await db.meetings.count_documents({})
     
     # Events stats
@@ -626,9 +676,9 @@ async def get_dashboard_stats(current_user: dict = Depends(check_permission("das
         },
         "tasks": {
             "total": tasks_count,
-            "pending": await db.tasks.count_documents({"status": "Gözləyir"}),
-            "in_progress": await db.tasks.count_documents({"status": "İcrada"}),
-            "completed": await db.tasks.count_documents({"status": "Tamamlandı"})
+            "pending": await db.tasks.count_documents({"$and": [me_tasks_query, {"status": "Gözləyir"}]}),
+            "in_progress": await db.tasks.count_documents({"$and": [me_tasks_query, {"status": "İcrada"}]}),
+            "completed": await db.tasks.count_documents({"$and": [me_tasks_query, {"status": "Tamamlandı"}]})
         },
         "meetings": {
             "total": meetings_count
@@ -2212,6 +2262,53 @@ async def create_task(task_data: TaskCreate, current_user: dict = Depends(check_
     }
     await db.tasks.insert_one(task_doc)
     task_doc.pop("_id", None)
+
+    # In-app notification to assignee + responsible_person (excluding the creator)
+    recipients = set()
+    for fld in ("assignee", "responsible_person"):
+        name = (task_doc.get(fld) or "").strip()
+        if name and name != current_user.get("name", ""):
+            recipients.add(name)
+    notif_body = (
+        f"Yeni tapşırıq sizə təyin olundu: {task_doc['task_name']} "
+        f"(Prioritet: {task_doc.get('priority', '')}, "
+        f"Bitmə: {task_doc.get('end_date', '—')})"
+    )
+    for r_name in recipients:
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()),
+            "type": "task_assigned",
+            "title": "Yeni tapşırıq",
+            "body": notif_body,
+            "task_id": task_doc["id"],
+            "task_code": task_code,
+            "recipient_name": r_name,
+            "is_read": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    # Email notification
+    recipient_emails = []
+    for r_name in recipients:
+        em = await _user_email_by_name(r_name)
+        if em:
+            recipient_emails.append(em)
+    if recipient_emails:
+        body_html = f"""<p>Sizə yeni tapşırıq təyin olunub:</p>
+        <table cellpadding='6' cellspacing='0' style='width:100%;border:1px solid #e2e8f0;border-radius:8px;font-size:13px'>
+          <tr><td style='color:#64748b'>Tapşırıq</td><td style='font-weight:600'>{task_doc.get('task_name', '')}</td></tr>
+          <tr><td style='color:#64748b'>Kod</td><td>{task_code}</td></tr>
+          <tr><td style='color:#64748b'>Prioritet</td><td>{task_doc.get('priority', '')}</td></tr>
+          <tr><td style='color:#64748b'>Başlanğıc</td><td>{task_doc.get('start_date') or '—'}</td></tr>
+          <tr><td style='color:#64748b'>Bitmə</td><td>{task_doc.get('end_date') or '—'}</td></tr>
+          <tr><td style='color:#64748b'>Yaradıcı</td><td>{task_doc.get('created_by', '')}</td></tr>
+        </table>"""
+        await _email_notify_safe(
+            title=f"Yeni tapşırıq: {task_doc.get('task_name', '')}",
+            body_html=body_html,
+            extra_recipients=recipient_emails,
+        )
+
     return task_doc
 
 @api_router.put("/tasks/{task_id}")
@@ -5023,6 +5120,32 @@ async def create_conversation(data: dict, current_user: dict = Depends(get_curre
     conv_doc.pop("_id", None)
     return conv_doc
 
+
+@api_router.get("/messages/unread-count")
+async def messages_unread_count(current_user: dict = Depends(get_current_user)):
+    """Return per-conversation unread message counts and total for the sidebar badge.
+
+    NOTE: This route MUST be declared before the dynamic `/messages/{conversation_id}`
+    one — otherwise FastAPI matches it as conversation_id='unread-count'.
+    """
+    me = current_user["id"]
+    convs = await db.conversations.find({"participants": me}, {"_id": 0, "id": 1}).to_list(500)
+    reads = {r["conversation_id"]: r.get("last_read_at", "") for r in await db.message_reads.find({"user_id": me}, {"_id": 0}).to_list(500)}
+    per_conv = {}
+    total = 0
+    for c in convs:
+        cid = c["id"]
+        last_read = reads.get(cid, "")
+        q = {"conversation_id": cid, "sender_id": {"$ne": me}}
+        if last_read:
+            q["created_at"] = {"$gt": last_read}
+        cnt = await db.messages.count_documents(q)
+        if cnt:
+            per_conv[cid] = cnt
+            total += cnt
+    return {"total": total, "per_conversation": per_conv}
+
+
 @api_router.get("/messages/{conversation_id}")
 async def get_messages(conversation_id: str, current_user: dict = Depends(get_current_user)):
     messages = await db.messages.find(
@@ -5059,7 +5182,109 @@ async def send_message(conversation_id: str, data: dict, current_user: dict = De
         {"id": conversation_id},
         {"$set": {"last_message": preview[:120], "last_message_at": msg_doc["created_at"]}}
     )
+
+    # In-app notifications to all participants except the sender
+    sender_name = current_user.get("name", "")
+    conv_label = conv.get("name") or sender_name
+    for pid in conv.get("participants", []):
+        if pid == current_user["id"]:
+            continue
+        user = await db.users.find_one({"id": pid}, {"_id": 0, "name": 1})
+        if not user:
+            continue
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()),
+            "type": "message",
+            "title": f"Yeni mesaj — {conv_label}",
+            "body": (preview[:160] if preview else "Yeni mesaj"),
+            "conversation_id": conversation_id,
+            "sender_name": sender_name,
+            "recipient_name": user.get("name", ""),
+            "is_read": False,
+            "created_at": msg_doc["created_at"],
+        })
     return msg_doc
+
+
+@api_router.delete("/messages/{conversation_id}/message/{message_id}")
+async def delete_message(conversation_id: str, message_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a single message. Only the sender (or admin) may delete it."""
+    msg = await db.messages.find_one({"id": message_id, "conversation_id": conversation_id}, {"_id": 0})
+    if not msg:
+        raise HTTPException(status_code=404, detail="Mesaj tapılmadı")
+    is_admin = (current_user.get("role") or "").lower() == "admin"
+    if msg.get("sender_id") != current_user["id"] and not is_admin:
+        raise HTTPException(status_code=403, detail="Yalnız mesaj göndərən və ya admin silə bilər")
+    await db.messages.delete_one({"id": message_id})
+    # Re-compute last message preview for the conversation
+    last = await db.messages.find({"conversation_id": conversation_id}, {"_id": 0}).sort("created_at", -1).limit(1).to_list(1)
+    if last:
+        last_doc = last[0]
+        preview = last_doc.get("text") or (last_doc.get("attachment") or {}).get("name") or "📎 Fayl"
+        await db.conversations.update_one(
+            {"id": conversation_id},
+            {"$set": {"last_message": preview[:120], "last_message_at": last_doc.get("created_at", "")}}
+        )
+    else:
+        await db.conversations.update_one({"id": conversation_id}, {"$set": {"last_message": "", "last_message_at": ""}})
+    return {"deleted": True}
+
+
+@api_router.put("/messages/conversations/{conversation_id}")
+async def update_conversation(conversation_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    """Edit a group conversation: rename and/or update participants.
+    Only the creator (or admin) of a group may modify it."""
+    conv = await db.conversations.find_one({"id": conversation_id}, {"_id": 0})
+    if not conv:
+        raise HTTPException(status_code=404, detail="Söhbət tapılmadı")
+    if not conv.get("is_group"):
+        raise HTTPException(status_code=400, detail="Yalnız qrup söhbətləri redaktə oluna bilər")
+    is_admin = (current_user.get("role") or "").lower() == "admin"
+    if conv.get("created_by") != current_user["id"] and not is_admin:
+        raise HTTPException(status_code=403, detail="Yalnız qrupu yaradan və ya admin redaktə edə bilər")
+    update = {}
+    if "name" in data:
+        update["name"] = (data.get("name") or "").strip()
+    if "participant_ids" in data and isinstance(data["participant_ids"], list):
+        creator = conv.get("created_by")
+        unique = [pid for pid in dict.fromkeys(data["participant_ids"]) if pid]
+        if creator not in unique:
+            unique.insert(0, creator)
+        update["participants"] = unique
+        user_docs = await db.users.find({"id": {"$in": unique}}, {"_id": 0, "id": 1, "name": 1}).to_list(100)
+        update["participant_names"] = {u["id"]: u.get("name", "") for u in user_docs}
+    if update:
+        await db.conversations.update_one({"id": conversation_id}, {"$set": update})
+    conv_updated = await db.conversations.find_one({"id": conversation_id}, {"_id": 0})
+    return conv_updated
+
+
+@api_router.delete("/messages/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a conversation entirely (only creator or admin)."""
+    conv = await db.conversations.find_one({"id": conversation_id}, {"_id": 0})
+    if not conv:
+        raise HTTPException(status_code=404, detail="Söhbət tapılmadı")
+    is_admin = (current_user.get("role") or "").lower() == "admin"
+    if conv.get("created_by") != current_user["id"] and not is_admin:
+        raise HTTPException(status_code=403, detail="Yalnız qrupu yaradan və ya admin silə bilər")
+    await db.messages.delete_many({"conversation_id": conversation_id})
+    await db.conversations.delete_one({"id": conversation_id})
+    await db.message_reads.delete_many({"conversation_id": conversation_id})
+    return {"deleted": True}
+
+
+@api_router.post("/messages/{conversation_id}/mark-read")
+async def mark_conversation_read(conversation_id: str, current_user: dict = Depends(get_current_user)):
+    """Record the last-read timestamp for the current user in this conversation."""
+    now = datetime.now(timezone.utc).isoformat()
+    await db.message_reads.update_one(
+        {"conversation_id": conversation_id, "user_id": current_user["id"]},
+        {"$set": {"last_read_at": now}},
+        upsert=True,
+    )
+    return {"marked": True, "at": now}
+
 
 # ==================== PACKAGE QUOTA CONFIG ====================
 
@@ -6289,6 +6514,21 @@ async def mark_all_notifications_read(current_user: dict = Depends(get_current_u
     if not ids:
         return {"marked": 0}
     return await mark_notifications_read({"ids": ids}, current_user=current_user)
+
+
+@api_router.post("/notifications/admin-reset-all")
+async def admin_reset_all_notifications(current_user: dict = Depends(get_current_user)):
+    """ADMIN-ONLY: clear notifications for ALL users system-wide.
+    Deletes all stored notifications, mark-read tracking, and dispatched-email tracking."""
+    _admin_only(current_user)
+    n1 = await db.notifications.delete_many({})
+    n2 = await db.notification_reads.delete_many({})
+    n3 = await db.notification_emails.delete_many({}) if "notification_emails" in await db.list_collection_names() else None
+    return {
+        "deleted_notifications": getattr(n1, "deleted_count", 0),
+        "deleted_reads": getattr(n2, "deleted_count", 0),
+        "deleted_dispatched_emails": getattr(n3, "deleted_count", 0) if n3 else 0,
+    }
 
 
 
