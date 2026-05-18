@@ -558,7 +558,7 @@ export default function Organization() {
                               onClick={() => openWhatsApp(inv)}
                               className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-600 transition-colors"
                               title="WhatsApp ilə dəvət göndər"
-                              data-testid={`whatsapp-${inv.id}`}
+                              data-testid={`invitation-row-whatsapp-btn-${inv.id}`}
                             >
                               <MessageCircle className="w-3.5 h-3.5" />
                             </button>
