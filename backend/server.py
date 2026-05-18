@@ -6204,6 +6204,31 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
     now = datetime.now(timezone.utc)
     today = now.strftime("%Y-%m-%d")
     cfg = await get_notification_settings()
+
+    # 0. Stored direct notifications (task_assigned, message, generic). Show ONLY
+    # those addressed to the current user (by name) over the last 30 days.
+    me_name = current_user.get("name", "")
+    if me_name:
+        cutoff = (now - timedelta(days=30)).isoformat()
+        stored = await db.notifications.find(
+            {
+                "recipient_name": me_name,
+                "created_at": {"$gte": cutoff},
+                "type": {"$in": ["task_assigned", "message"]},
+            },
+            {"_id": 0},
+        ).sort("created_at", -1).to_list(200)
+        for n in stored:
+            notifications.append({
+                "id": n.get("id", ""),
+                "type": n.get("type", "info"),
+                "severity": "medium",
+                "title": n.get("title", ""),
+                "message": n.get("body", ""),
+                "task_id": n.get("task_id", ""),
+                "conversation_id": n.get("conversation_id", ""),
+                "date": (n.get("created_at") or "")[:10] or today,
+            })
     
     # 1. Overdue debts (borclu şirkətlər)
     debtors = await db.companies.find({"debt_amount": {"$gt": 0}}, {"_id": 0}).to_list(500)
