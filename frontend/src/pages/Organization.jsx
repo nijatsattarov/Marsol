@@ -248,14 +248,27 @@ export default function Organization() {
     setShowWhatsAppModal(true);
   };
 
-  const sendWhatsApp = (phone) => {
+  const sendWhatsApp = async (phone) => {
     if (!whatsAppTarget || !selectedEvent) return;
-    const link = formatWhatsAppLink(phone, selectedEvent, whatsAppTarget.inv.company_name);
-    if (link) {
-      window.open(link, '_blank');
-      setShowWhatsAppModal(false);
-    } else {
-      toast.error('Telefon nömrəsi yoxdur');
+    const cleaned = (phone || '').replace(/\D/g, '');
+    if (!cleaned) { toast.error('Telefon nömrəsi yoxdur'); return; }
+    try {
+      // Generate branded invitation card on backend → Cloudinary URL
+      const res = await axios.post(
+        `${API}/invitations/${whatsAppTarget.inv.id}/generate-card`,
+        { phone, guest_name: whatsAppTarget.company?.owner_name || whatsAppTarget.inv.company_name },
+        { headers }
+      );
+      if (res.data?.whatsapp_link) {
+        window.open(res.data.whatsapp_link, '_blank');
+        setShowWhatsAppModal(false);
+        toast.success('Dəvətnamə hazırlandı, WhatsApp açılır');
+      } else {
+        toast.error('WhatsApp linki yaradıla bilmədi');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(err?.response?.data?.detail || 'Dəvətnamə yaradıla bilmədi');
     }
   };
 
@@ -867,9 +880,9 @@ export default function Organization() {
               {/* Preview */}
               {selectedEvent && (
                 <div className="bg-green-50/50 rounded-lg p-3 border border-green-100">
-                  <p className="text-[10px] text-green-700 font-medium mb-1">Mesaj önizləməsi:</p>
+                  <p className="text-[10px] text-green-700 font-medium mb-1">Dəvətnamə şəkli (PNG) + mətn:</p>
                   <p className="text-xs text-green-800 whitespace-pre-wrap">
-                    {`Hörmətli ${whatsAppTarget.inv.company_name}, sizi ${selectedEvent.date} tarixində${selectedEvent.time ? ` saat ${selectedEvent.time}-da` : ''} ${selectedEvent.venue || 'Marsol Group'}-da baş tutacaq ${selectedEvent.event_type === 'Breakfast' ? 'işgüzar səhər yeməyinə' : selectedEvent.event_type === 'Ofis ziyarəti' ? 'ofis ziyarətinə' : 'fəaliyyətə'} dəvət edirik.${selectedEvent.location_link ? `\n\nMəkan: ${selectedEvent.location_link}` : ''}\n\nMarsol Group`}
+                    {`Hörmətli ${whatsAppTarget.company?.owner_name || whatsAppTarget.inv.company_name},\nSizi "${selectedEvent.name}" tədbirinə dəvət edirik.\nTarix: ${selectedEvent.date}${selectedEvent.time ? ` ${selectedEvent.time}` : ''}${selectedEvent.venue ? `\nÜnvan: ${selectedEvent.venue}` : ''}\n\nDəvətnamə şəkli WhatsApp mesajında avtomatik göstəriləcək.`}
                   </p>
                 </div>
               )}

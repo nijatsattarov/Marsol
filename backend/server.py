@@ -27,6 +27,7 @@ import asyncio  # noqa: E402
 
 # Cloudinary upload service
 from cloudinary_service import upload_file as _cl_upload, delete_asset as _cl_delete  # noqa: E402
+from invitation_card import render_invitation_png  # noqa: E402
 
 # SMS service (LSIM Quick SMS)
 import sms_service  # noqa: E402
@@ -2727,6 +2728,101 @@ async def convert_event_invitation_to_lead(inv_id: str, current_user: dict = Dep
     await db.event_invitations.update_one({"id": inv_id}, {"$set": {"converted_to_lead": True, "lead_id": lead["id"]}})
     return lead
 
+
+def _fmt_dd_mm_yyyy(iso: str) -> str:
+    """Convert ISO YYYY-MM-DD to DD/MM/YYYY for display."""
+    if not iso or "-" not in iso:
+        return iso or ""
+    try:
+        parts = iso.split("T")[0].split("-")
+        if len(parts) == 3:
+            return f"{parts[2]}/{parts[1]}/{parts[0]}"
+    except Exception:
+        pass
+    return iso
+
+
+@api_router.post("/event-invitations/{inv_id}/generate-card")
+async def generate_invitation_card(inv_id: str, current_user: dict = Depends(check_permission("sales", "write"))):
+    """Render a personalised invitation PNG and upload to Cloudinary.
+
+    Looks up the invitation + linked event, renders the branded card with
+    dynamic guest name / event title / date+time / venue, uploads the PNG
+    to Cloudinary (folder marsol/invitations) and persists the URL back on
+    the invitation document. Returns { url, public_id, whatsapp_link }.
+    """
+    inv = await db.event_invitations.find_one({"id": inv_id}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Dəvət tapılmadı")
+    # Look up the linked event. Organization "Fəaliyyətlər" uses db.events;
+    # Sales "Projects" uses db.project_events. We probe both.
+    event = None
+    if inv.get("event_id"):
+        event = await db.events.find_one({"id": inv["event_id"]}, {"_id": 0})
+        if not event:
+            event = await db.project_events.find_one({"id": inv["event_id"]}, {"_id": 0})
+    event = event or {}
+
+    event_name = event.get("name") or inv.get("event_name") or "Tədbir"
+    event_date_iso = event.get("date", "")
+    event_date = _fmt_dd_mm_yyyy(event_date_iso)
+    event_time = event.get("time", "")
+    event_location = event.get("venue") or event.get("location") or ""
+
+    try:
+        png_bytes = render_invitation_png(
+            guest_name=inv.get("guest_name", "") or "Qonağımız",
+            event_name=event_name,
+            event_date=event_date,
+            event_time=event_time,
+            event_location=event_location,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=500, detail=f"Dəvətnamə şablonu tapılmadı: {e}")
+    except Exception as e:
+        logger.exception("Invitation render failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Dəvətnamə yaradıla bilmədi: {e}")
+
+    safe_name = "".join(c if c.isalnum() else "_" for c in (inv.get("guest_name") or "guest"))[:32]
+    filename = f"invitation_{safe_name}_{inv_id[:8]}.png"
+    try:
+        up = _cl_upload(png_bytes, filename=filename, folder="marsol/invitations", resource_type="image")
+    except Exception as e:
+        logger.exception("Cloudinary upload failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Cloudinary-ə yüklənmədi: {e}")
+
+    url = up.get("url")
+    public_id = up.get("public_id")
+
+    # Compose WhatsApp pre-filled message
+    phone = (inv.get("guest_phone") or "").strip()
+    digits = "".join(c for c in phone if c.isdigit())
+    msg_lines = [
+        f"Hörmətli {inv.get('guest_name') or 'Qonağımız'},",
+        f"Sizi \"{event_name}\" tədbirinə dəvət edirik.",
+    ]
+    if event_date or event_time:
+        msg_lines.append(f"Tarix: {event_date} {event_time}".strip())
+    if event_location:
+        msg_lines.append(f"Ünvan: {event_location}")
+    msg_lines.append("")
+    msg_lines.append(f"Dəvətnamə: {url}")
+    import urllib.parse as _up
+    text = _up.quote("\n".join(msg_lines))
+    whatsapp_link = f"https://wa.me/{digits}?text={text}" if digits else f"https://wa.me/?text={text}"
+
+    # Persist
+    await db.event_invitations.update_one(
+        {"id": inv_id},
+        {"$set": {
+            "invitation_card_url": url,
+            "invitation_card_public_id": public_id,
+            "invitation_card_generated_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+    return {"url": url, "public_id": public_id, "whatsapp_link": whatsapp_link, "filename": filename}
+
+
 # ==================== CONTACT LISTS (SİYAHILAR) ====================
 
 @api_router.get("/contact-lists")
@@ -5124,6 +5220,98 @@ async def delete_invitation(inv_id: str, current_user: dict = Depends(get_curren
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Dəvət tapılmadı")
     return {"message": "Dəvət silindi"}
+
+
+@api_router.post("/invitations/{inv_id}/generate-card")
+async def generate_company_invitation_card(
+    inv_id: str,
+    payload: dict | None = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """Render a personalised invitation PNG for a company-based invitation.
+
+    Looks up `db.invitations` (by `id`), resolves the linked company for the
+    guest name (owner_name / representative_name override possible via
+    payload.guest_name) and phone (payload.phone overrides), reads the event
+    details from `db.events`, renders + uploads to Cloudinary, and returns
+    `{ url, public_id, whatsapp_link }`. `payload` is optional: pass
+    `{ phone: "+994...", guest_name: "Custom Name" }` to override defaults.
+    """
+    inv = await db.invitations.find_one({"id": inv_id}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Dəvət tapılmadı")
+    event = await db.events.find_one({"id": inv.get("event_id", "")}, {"_id": 0}) or {}
+    company = await db.companies.find_one({"id": inv.get("company_id", "")}, {"_id": 0}) or {}
+
+    payload = payload or {}
+    guest_name = (
+        payload.get("guest_name")
+        or company.get("owner_name")
+        or company.get("representative_name")
+        or inv.get("company_name", "")
+        or "Qonağımız"
+    )
+    phone = (
+        payload.get("phone")
+        or company.get("owner_phone")
+        or company.get("company_phone")
+        or company.get("representative_phone")
+        or ""
+    )
+
+    event_name = event.get("name") or inv.get("event_name") or "Tədbir"
+    event_date = _fmt_dd_mm_yyyy(event.get("date") or inv.get("event_date") or "")
+    event_time = event.get("time", "")
+    event_location = event.get("venue") or event.get("location_link") or ""
+
+    try:
+        png_bytes = render_invitation_png(
+            guest_name=guest_name,
+            event_name=event_name,
+            event_date=event_date,
+            event_time=event_time,
+            event_location=event_location,
+        )
+    except Exception as e:
+        logger.exception("Invitation render failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Dəvətnamə yaradıla bilmədi: {e}")
+
+    safe_name = "".join(c if c.isalnum() else "_" for c in guest_name)[:32] or "guest"
+    filename = f"invitation_{safe_name}_{inv_id[:8]}.png"
+    try:
+        up = _cl_upload(png_bytes, filename=filename, folder="marsol/invitations", resource_type="image")
+    except Exception as e:
+        logger.exception("Cloudinary upload failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Cloudinary-ə yüklənmədi: {e}")
+
+    url = up.get("url")
+    public_id = up.get("public_id")
+
+    digits = "".join(c for c in (phone or "") if c.isdigit())
+    msg_lines = [
+        f"Hörmətli {guest_name},",
+        f"Sizi \"{event_name}\" tədbirinə dəvət edirik.",
+    ]
+    if event_date or event_time:
+        msg_lines.append(f"Tarix: {event_date} {event_time}".strip())
+    if event_location:
+        msg_lines.append(f"Ünvan: {event_location}")
+    msg_lines.append("")
+    msg_lines.append(f"Dəvətnamə: {url}")
+    import urllib.parse as _up
+    text = _up.quote("\n".join(msg_lines))
+    whatsapp_link = f"https://wa.me/{digits}?text={text}" if digits else f"https://wa.me/?text={text}"
+
+    await db.invitations.update_one(
+        {"id": inv_id},
+        {"$set": {
+            "invitation_card_url": url,
+            "invitation_card_public_id": public_id,
+            "invitation_card_generated_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+    return {"url": url, "public_id": public_id, "whatsapp_link": whatsapp_link, "filename": filename}
+
 
 # ==================== OBLIGATIONS (ÖHDƏLİKLƏR) ====================
 
