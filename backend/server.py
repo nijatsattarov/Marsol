@@ -412,7 +412,11 @@ async def apply_scope(query: dict, user: dict, module: str) -> dict:
     if user.get("role") == "admin":
         return query
     scopes = await get_user_scopes(user)
-    scope = scopes.get(module, "all")
+    # Default scope per module is "own" for non-admin users when the role
+    # hasn't explicitly configured it. This prevents legacy roles (no scopes
+    # field) from accidentally exposing data system-wide. Admins are
+    # short-circuited above.
+    scope = scopes.get(module, "own")
     if scope == "all":
         return query
     fields = SCOPE_FIELDS.get(module, [])
@@ -451,7 +455,7 @@ async def assert_scope_ownership(user: dict, module: str, record: Optional[dict]
     if user.get("role") == "admin" or not record:
         return
     scopes = await get_user_scopes(user)
-    scope = scopes.get(module, "all")
+    scope = scopes.get(module, "own")
     if scope == "all":
         return
     fields = SCOPE_FIELDS.get(module, [])
@@ -6363,7 +6367,7 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
     def _user_owns_company(c: dict) -> bool:
         if is_admin:
             return True
-        sc = scopes.get("companies", "all")
+        sc = scopes.get("companies", "own")
         if sc == "all":
             return True
         return c.get("curator") == me_name or c.get("created_by") == me_name
@@ -6371,7 +6375,7 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
     def _user_owns_meeting(m: dict) -> bool:
         if is_admin:
             return True
-        sc = scopes.get("meetings", "all")
+        sc = scopes.get("meetings", "own")
         if sc == "all":
             return True
         if m.get("created_by") == me_name or m.get("meeting_setter") == me_name:
@@ -8281,7 +8285,7 @@ async def list_files(
     user_name = current_user.get("name", "")
     if (current_user.get("role") or "").lower() != "admin":
         scopes = await get_user_scopes(current_user)
-        sc = scopes.get("files", "all")
+        sc = scopes.get("files", "own")
         if sc == "own":
             query["uploaded_by_name"] = user_name
         elif sc == "department":
