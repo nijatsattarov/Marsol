@@ -2265,6 +2265,7 @@ async def create_task(task_data: TaskCreate, current_user: dict = Depends(check_
         "task_code": task_code,
         **task_data.model_dump(),
         "created_by": current_user.get("name", ""),
+        "creator_department": current_user.get("department", "") or "",
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.tasks.insert_one(task_doc)

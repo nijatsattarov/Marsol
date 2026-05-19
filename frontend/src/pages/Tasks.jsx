@@ -123,10 +123,36 @@ export default function Tasks() {
     }
   };
 
-  const employeeNames = [...new Set([
-    ...users.filter(u => (u.status || 'Aktiv') === 'Aktiv' && u.name).map(u => u.name),
-    ...employees.map(e => `${e.first_name || ''} ${e.last_name || ''}`.trim()).filter(Boolean),
-  ])];
+  const allPeople = useMemo(() => {
+    const list = [];
+    users.forEach(u => {
+      if ((u.status || 'Aktiv') !== 'Aktiv' || !u.name) return;
+      list.push({ name: u.name.trim(), department: (u.department || '').trim() });
+    });
+    employees.forEach(e => {
+      const nm = `${e.first_name || ''} ${e.last_name || ''}`.trim();
+      if (!nm) return;
+      list.push({ name: nm, department: (e.department || '').trim() });
+    });
+    // Dedupe by lowercased name. Keep first encountered department (users beat employees).
+    const seen = new Map();
+    list.forEach(p => {
+      const key = p.name.toLowerCase();
+      if (!seen.has(key)) seen.set(key, p);
+      else if (!seen.get(key).department && p.department) seen.set(key, p);
+    });
+    return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, 'az'));
+  }, [users, employees]);
+
+  // Filter assignee/responsible options by selected executor department (if any).
+  const assigneeOptions = useMemo(() => {
+    const dept = (formData.department || '').trim();
+    const filtered = dept
+      ? allPeople.filter(p => (p.department || '').toLowerCase() === dept.toLowerCase())
+      : allPeople;
+    return filtered.map(p => p.name);
+  }, [allPeople, formData.department]);
+
   const departments = options.departments || [];
   const projects = options.projects || [];
 
@@ -291,7 +317,11 @@ export default function Tasks() {
   ), [users, currentUserDept]);
 
   const isOwnTask = (t) =>
-    !!currentUserName && (t.assignee === currentUserName || t.responsible_person === currentUserName);
+    !!currentUserName && (
+      t.assignee === currentUserName ||
+      t.responsible_person === currentUserName ||
+      t.created_by === currentUserName
+    );
 
   // Client-side filtering (instant — no backend round-trip)
   const filteredTasks = tasks.filter(t => {
@@ -544,7 +574,8 @@ export default function Tasks() {
                     )}
                   </div>
                   <div className="flex flex-wrap gap-1 mt-1.5">
-                    {task.department && <Badge className="text-[10px] bg-slate-100 text-slate-600">{task.department}</Badge>}
+                    {task.creator_department && <Badge className="text-[10px] bg-violet-50 text-violet-700 border border-violet-200">Yaradan: {task.creator_department}</Badge>}
+                    {task.department && <Badge className="text-[10px] bg-sky-50 text-sky-700 border border-sky-200">İcraçı: {task.department}</Badge>}
                     {task.related_object_type && (
                       <Badge className="text-[10px] bg-blue-50 text-blue-600">
                         <Link2 className="w-2.5 h-2.5 mr-0.5 inline" />
@@ -610,8 +641,17 @@ export default function Tasks() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs">Şöbə</Label>
-                <Select value={formData.department} onValueChange={(v) => setFormData({...formData, department: v})}>
+                <Label className="text-xs">İcraçı şöbə</Label>
+                <Select
+                  value={formData.department}
+                  onValueChange={(v) => setFormData({
+                    ...formData,
+                    department: v,
+                    // Reset assignee/responsible if they no longer belong to selected dept
+                    assignee: '',
+                    responsible_person: '',
+                  })}
+                >
                   <SelectTrigger className="text-sm" data-testid="task-dept-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
                   <SelectContent>{departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
                 </Select>
@@ -630,8 +670,8 @@ export default function Tasks() {
                 <SearchableSelect
                   value={formData.assignee}
                   onChange={(v) => setFormData({ ...formData, assignee: v })}
-                  options={employeeNames}
-                  placeholder="Ad-soyad yazaraq axtarın..."
+                  options={assigneeOptions}
+                  placeholder={formData.department ? 'Ad-soyad yazaraq axtarın...' : 'Əvvəlcə icraçı şöbə seçin (və ya hamısı)'}
                   testId="task-assignee-select"
                 />
               </div>
@@ -640,8 +680,8 @@ export default function Tasks() {
                 <SearchableSelect
                   value={formData.responsible_person}
                   onChange={(v) => setFormData({ ...formData, responsible_person: v })}
-                  options={employeeNames}
-                  placeholder="Ad-soyad yazaraq axtarın..."
+                  options={assigneeOptions}
+                  placeholder={formData.department ? 'Ad-soyad yazaraq axtarın...' : 'Əvvəlcə icraçı şöbə seçin (və ya hamısı)'}
                   testId="task-responsible-select"
                 />
               </div>
@@ -772,7 +812,8 @@ export default function Tasks() {
                 <div><span className="text-slate-400">Prioritet:</span> <span className="font-semibold">{detailTask.priority}</span></div>
                 <div><span className="text-slate-400">İcraçı:</span> {detailTask.assignee || '—'}</div>
                 <div><span className="text-slate-400">Məsul:</span> {detailTask.responsible_person || '—'}</div>
-                <div><span className="text-slate-400">Yaradan:</span> {detailTask.created_by || '—'}</div>
+                <div><span className="text-slate-400">Yaradan:</span> {detailTask.created_by || '—'}{detailTask.creator_department ? <span className="text-slate-400"> ({detailTask.creator_department})</span> : null}</div>
+                <div><span className="text-slate-400">İcraçı şöbə:</span> {detailTask.department || '—'}</div>
                 <div><span className="text-slate-400">Bitmə:</span> {detailTask.end_date ? formatDate(detailTask.end_date) : '—'}</div>
               </div>
 
