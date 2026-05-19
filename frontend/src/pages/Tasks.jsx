@@ -124,20 +124,28 @@ export default function Tasks() {
   };
 
   const allPeople = useMemo(() => {
+    const norm = (s) => (s || '')
+      .toString()
+      .normalize('NFC')
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, ' ')  // zero-width + nbsp → space
+      .replace(/\s+/g, ' ')
+      .trim();
     const list = [];
     users.forEach(u => {
-      if ((u.status || 'Aktiv') !== 'Aktiv' || !u.name) return;
-      list.push({ name: u.name.trim(), department: (u.department || '').trim() });
+      if ((u.status || 'Aktiv') !== 'Aktiv') return;
+      const nm = norm(u.name);
+      if (!nm) return;
+      list.push({ name: nm, department: norm(u.department) });
     });
     employees.forEach(e => {
-      const nm = `${e.first_name || ''} ${e.last_name || ''}`.trim();
+      const nm = norm(`${e.first_name || ''} ${e.last_name || ''}`);
       if (!nm) return;
-      list.push({ name: nm, department: (e.department || '').trim() });
+      list.push({ name: nm, department: norm(e.department) });
     });
-    // Dedupe by lowercased name. Keep first encountered department (users beat employees).
+    // Dedupe by case-folded NFC-normalised name. Users beat employees (richer data).
     const seen = new Map();
     list.forEach(p => {
-      const key = p.name.toLowerCase();
+      const key = p.name.toLocaleLowerCase('az');
       if (!seen.has(key)) seen.set(key, p);
       else if (!seen.get(key).department && p.department) seen.set(key, p);
     });
@@ -146,11 +154,20 @@ export default function Tasks() {
 
   // Filter assignee/responsible options by selected executor department (if any).
   const assigneeOptions = useMemo(() => {
-    const dept = (formData.department || '').trim();
+    const dept = (formData.department || '').trim().toLocaleLowerCase('az');
     const filtered = dept
-      ? allPeople.filter(p => (p.department || '').toLowerCase() === dept.toLowerCase())
+      ? allPeople.filter(p => (p.department || '').toLocaleLowerCase('az') === dept)
       : allPeople;
-    return filtered.map(p => p.name);
+    // Extra safety: dedupe again by NFC-normalised name (case-insensitive).
+    const seen = new Set();
+    const out = [];
+    filtered.forEach(p => {
+      const key = (p.name || '').normalize('NFC').toLocaleLowerCase('az');
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      out.push(p.name);
+    });
+    return out;
   }, [allPeople, formData.department]);
 
   const departments = options.departments || [];
