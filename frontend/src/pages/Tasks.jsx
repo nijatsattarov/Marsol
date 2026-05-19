@@ -68,7 +68,7 @@ export default function Tasks() {
   const [showFilters, setShowFilters] = useState(false);
 
   const initialFormData = {
-    task_name: '', department: '', assignee: '', responsible_person: '',
+    task_name: '', department: '', assignee: [], responsible_person: '',
     priority: 'Orta', start_date: new Date().toISOString().split('T')[0],
     end_date: '', related_object_type: '', related_object_id: '', related_object: '',
     phase: '', status: 'Gözləyir', notes: '', subtasks: []
@@ -175,16 +175,18 @@ export default function Tasks() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.assignee?.trim()) { toast.error('İcraçı əməkdaş məcburidir'); return; }
+    const aArr = toAssigneeArray(formData.assignee);
+    if (aArr.length === 0) { toast.error('Ən azı 1 icraçı əməkdaş seçin'); return; }
     if (!formData.responsible_person?.trim()) { toast.error('Məsul şəxs məcburidir'); return; }
+    const payload = { ...formData, assignee: aArr };
     try {
       if (editingTask) {
-        const { data: updated } = await axios.put(`${API}/tasks/${editingTask.id}`, formData, { headers });
+        const { data: updated } = await axios.put(`${API}/tasks/${editingTask.id}`, payload, { headers });
         toast.success('Tapşırıq yeniləndi');
         // Optimistic update — replace task in local state without waiting for refetch
         setTasks(prev => prev.map(t => t.id === editingTask.id ? { ...t, ...updated } : t));
       } else {
-        const { data: created } = await axios.post(`${API}/tasks`, formData, { headers });
+        const { data: created } = await axios.post(`${API}/tasks`, payload, { headers });
         toast.success('Tapşırıq əlavə edildi');
         // Optimistic insert — prepend the new task so it appears on the board immediately
         setTasks(prev => [created, ...prev]);
@@ -293,7 +295,11 @@ export default function Tasks() {
 
   const handleEdit = (task) => {
     setEditingTask(task);
-    setFormData({ ...initialFormData, ...task });
+    setFormData({
+      ...initialFormData,
+      ...task,
+      assignee: toAssigneeArray(task.assignee),
+    });
     setShowModal(true);
   };
 
@@ -333,12 +339,34 @@ export default function Tasks() {
     users.filter(u => (u.department || '') === currentUserDept && u.name).map(u => u.name)
   ), [users, currentUserDept]);
 
-  const isOwnTask = (t) =>
-    !!currentUserName && (
-      t.assignee === currentUserName ||
+  const isOwnTask = (t) => {
+    if (!currentUserName) return false;
+    const aList = Array.isArray(t.assignee) ? t.assignee : (t.assignee ? [t.assignee] : []);
+    return aList.includes(currentUserName) ||
       t.responsible_person === currentUserName ||
-      t.created_by === currentUserName
-    );
+      t.created_by === currentUserName;
+  };
+
+  // Display helper — turn assignee (string|array) into a comma-joined string
+  const assigneeDisplay = (t) => {
+    const a = t.assignee;
+    if (Array.isArray(a)) return a.filter(Boolean).join(', ');
+    return a || '';
+  };
+
+  const toAssigneeArray = (val) => {
+    if (Array.isArray(val)) return val.map(v => (v || '').toString().trim()).filter(Boolean);
+    if (typeof val === 'string' && val.trim()) return [val.trim()];
+    return [];
+  };
+
+  // Filter by team scope — works with array or string assignee
+  const isTeamTask = (t) => {
+    const aList = Array.isArray(t.assignee) ? t.assignee : (t.assignee ? [t.assignee] : []);
+    if (aList.some(n => teamNames.has(n))) return true;
+    if (t.responsible_person && teamNames.has(t.responsible_person)) return true;
+    return false;
+  };
 
   // Client-side filtering (instant — no backend round-trip)
   const filteredTasks = tasks.filter(t => {
@@ -347,7 +375,7 @@ export default function Tasks() {
     if (scopeFilter === 'mine' && !isOwnTask(t)) return false;
     if (scopeFilter === 'team') {
       // Show team members' tasks (others in my dept, excluding me)
-      if (!teamNames.has(t.assignee) && !teamNames.has(t.responsible_person)) return false;
+      if (!isTeamTask(t)) return false;
       if (isOwnTask(t)) return false;
     }
     return true;
@@ -473,7 +501,7 @@ export default function Tasks() {
                         {t.task_code && <span className="font-mono text-[10px] text-slate-400 mr-1">{t.task_code}</span>}
                         {t.task_name}
                       </td>
-                      <td className="px-2 py-1.5 text-slate-600">{t.assignee || '-'}</td>
+                      <td className="px-2 py-1.5 text-slate-600">{assigneeDisplay(t) || '-'}</td>
                       <td className="px-2 py-1.5 text-slate-600">{t.created_by || '-'}</td>
                       <td className="px-2 py-1.5 text-slate-600">{formatDate(t.archived_at)}</td>
                       <td className="px-2 py-1.5 text-slate-600">{t.archived_by || '-'}</td>
@@ -566,7 +594,7 @@ export default function Tasks() {
                   <div className="space-y-1 mb-1.5">
                     <div className="flex items-center gap-1.5 text-xs text-slate-600">
                       <User className="w-3 h-3 shrink-0 text-slate-400" />
-                      <span className="truncate">{task.assignee || '-'}</span>
+                      <span className="truncate">{assigneeDisplay(task) || '-'}</span>
                     </div>
                     {task.responsible_person && (
                       <p className="text-[10px] text-slate-400 pl-4">Məsul: {task.responsible_person}</p>
@@ -665,7 +693,7 @@ export default function Tasks() {
                     ...formData,
                     department: v,
                     // Reset assignee/responsible if they no longer belong to selected dept
-                    assignee: '',
+                    assignee: [],
                     responsible_person: '',
                   })}
                 >
@@ -683,14 +711,37 @@ export default function Tasks() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs">İcraçı əməkdaş *</Label>
+                <Label className="text-xs">İcraçı əməkdaşlar * <span className="text-slate-400 font-normal">(bir neçə seçə bilərsiniz)</span></Label>
                 <SearchableSelect
-                  value={formData.assignee}
-                  onChange={(v) => setFormData({ ...formData, assignee: v })}
-                  options={assigneeOptions}
-                  placeholder={formData.department ? 'Ad-soyad yazaraq axtarın...' : 'Əvvəlcə icraçı şöbə seçin (və ya hamısı)'}
+                  value=""
+                  onChange={(v) => {
+                    if (!v) return;
+                    const cur = toAssigneeArray(formData.assignee);
+                    if (cur.includes(v)) { toast.info(`${v} artıq seçilib`); return; }
+                    setFormData({ ...formData, assignee: [...cur, v] });
+                  }}
+                  options={assigneeOptions.filter(n => !toAssigneeArray(formData.assignee).includes(n))}
+                  placeholder={formData.department ? 'Ad-soyad yazaraq əlavə edin...' : 'Əvvəlcə icraçı şöbə seçin (və ya hamısı)'}
                   testId="task-assignee-select"
                 />
+                {toAssigneeArray(formData.assignee).length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1.5" data-testid="task-assignee-chips">
+                    {toAssigneeArray(formData.assignee).map(nm => (
+                      <Badge key={nm} className="bg-[#9ACD32]/20 text-[#3D4F6F] border border-[#9ACD32] text-[11px] gap-1 pr-1">
+                        <User className="w-2.5 h-2.5" />
+                        {nm}
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, assignee: toAssigneeArray(formData.assignee).filter(x => x !== nm) })}
+                          className="ml-0.5 hover:bg-red-100 rounded-full p-0.5"
+                          data-testid={`remove-assignee-${nm}`}
+                        >
+                          <X className="w-2.5 h-2.5 text-red-500" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <Label className="text-xs">Məsul şəxs *</Label>
@@ -827,7 +878,7 @@ export default function Tasks() {
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div><span className="text-slate-400">Status:</span> <span className="font-semibold">{detailTask.status}</span></div>
                 <div><span className="text-slate-400">Prioritet:</span> <span className="font-semibold">{detailTask.priority}</span></div>
-                <div><span className="text-slate-400">İcraçı:</span> {detailTask.assignee || '—'}</div>
+                <div><span className="text-slate-400">İcraçı:</span> {assigneeDisplay(detailTask) || '—'}</div>
                 <div><span className="text-slate-400">Məsul:</span> {detailTask.responsible_person || '—'}</div>
                 <div><span className="text-slate-400">Yaradan:</span> {detailTask.created_by || '—'}{detailTask.creator_department ? <span className="text-slate-400"> ({detailTask.creator_department})</span> : null}</div>
                 <div><span className="text-slate-400">İcraçı şöbə:</span> {detailTask.department || '—'}</div>

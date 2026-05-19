@@ -9,7 +9,7 @@ import logging
 import re
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 import uuid
 import io
 from datetime import datetime, timezone, timedelta
@@ -281,7 +281,7 @@ class ExpenseCreate(BaseModel):
 class TaskCreate(BaseModel):
     task_name: str
     department: Optional[str] = ""
-    assignee: Optional[str] = ""
+    assignee: Optional[Union[str, List[str]]] = ""
     responsible_person: Optional[str] = ""
     priority: str  # Yüksək, Orta, Aşağı
     start_date: Optional[str] = ""
@@ -393,6 +393,16 @@ SCOPE_FIELDS = {
     "organization": ["created_by"],
 }
 
+
+def _as_name_list(value) -> list:
+    """Normalise a value that may be a string or a list/tuple into a clean list of trimmed names."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return [str(v).strip() for v in value if v and str(v).strip()]
+    s = str(value).strip()
+    return [s] if s else []
+
 async def get_user_scopes(user: dict) -> dict:
     if user.get("role") == "admin":
         return {}
@@ -460,21 +470,32 @@ async def assert_scope_ownership(user: dict, module: str, record: Optional[dict]
         return
     fields = SCOPE_FIELDS.get(module, [])
     user_name = user.get("name", "")
+
+    def _field_matches(val) -> bool:
+        if isinstance(val, (list, tuple, set)):
+            return user_name in val
+        return val == user_name
+
     if scope == "own":
-        if any(record.get(f) == user_name for f in fields):
+        if any(_field_matches(record.get(f)) for f in fields):
             return
         raise HTTPException(status_code=403, detail="Bu qeyd sizə aid deyil")
     if scope == "department":
         my_dept = (user.get("department") or "").strip()
         if not my_dept:
-            if any(record.get(f) == user_name for f in fields):
+            if any(_field_matches(record.get(f)) for f in fields):
                 return
             raise HTTPException(status_code=403, detail="Bu qeyd sizə aid deyil")
         dept_users = await db.users.find({"department": my_dept}, {"_id": 0, "name": 1}).to_list(500)
         names = {u.get("name") for u in dept_users if u.get("name")}
         names.add(user_name)
-        if any(record.get(f) in names for f in fields):
-            return
+        for f in fields:
+            v = record.get(f)
+            if isinstance(v, (list, tuple, set)):
+                if any(n in names for n in v):
+                    return
+            elif v in names:
+                return
         raise HTTPException(status_code=403, detail="Bu qeyd şöbənizə aid deyil")
 
 
@@ -2271,12 +2292,15 @@ async def create_task(task_data: TaskCreate, current_user: dict = Depends(check_
     await db.tasks.insert_one(task_doc)
     task_doc.pop("_id", None)
 
-    # In-app notification to assignee + responsible_person (excluding the creator)
+    # In-app notification to assignee(s) + responsible_person (excluding the creator)
     recipients = set()
-    for fld in ("assignee", "responsible_person"):
-        name = (task_doc.get(fld) or "").strip()
-        if name and name != current_user.get("name", ""):
-            recipients.add(name)
+    actor_name = current_user.get("name", "")
+    for nm in _as_name_list(task_doc.get("assignee")):
+        if nm and nm != actor_name:
+            recipients.add(nm)
+    rp = (task_doc.get("responsible_person") or "").strip()
+    if rp and rp != actor_name:
+        recipients.add(rp)
     notif_body = (
         f"Yeni tapşırıq sizə təyin olundu: {task_doc['task_name']} "
         f"(Prioritet: {task_doc.get('priority', '')}, "
@@ -2347,10 +2371,12 @@ async def update_task(task_id: str, task_data: dict, current_user: dict = Depend
             changes.append(label)
     if changes:
         recipients = set()
-        for fld in ("assignee", "responsible_person"):
-            name = (task.get(fld) or "").strip()
-            if name and name != actor:
-                recipients.add(name)
+        for nm in _as_name_list(task.get("assignee")):
+            if nm and nm != actor:
+                recipients.add(nm)
+        rp = (task.get("responsible_person") or "").strip()
+        if rp and rp != actor:
+            recipients.add(rp)
         body = f"\"{task.get('task_name','')}\" tapşırığı yeniləndi: {', '.join(changes)}. Dəyişikliyi edən: {actor or '—'}"
         for r_name in recipients:
             await db.notifications.insert_one({
@@ -2443,10 +2469,13 @@ async def add_task_comment(task_id: str, payload: dict, current_user: dict = Dep
     await db.task_comments.insert_one(comment)
     comment.pop("_id", None)
 
-    # Notify other stakeholders (creator + assignee + responsible_person)
+    # Notify other stakeholders (creator + assignee(s) + responsible_person)
     actor = current_user.get("name", "")
     recipients = set()
-    for f in ("created_by", "assignee", "responsible_person"):
+    for nm in _as_name_list(task.get("assignee")):
+        if nm and nm != actor:
+            recipients.add(nm)
+    for f in ("created_by", "responsible_person"):
         n = (task.get(f) or "").strip()
         if n and n != actor:
             recipients.add(n)
