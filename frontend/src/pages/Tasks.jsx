@@ -127,30 +127,19 @@ export default function Tasks() {
     const norm = (s) => (s || '')
       .toString()
       .normalize('NFC')
-      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, ' ')  // zero-width + nbsp → space
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    const list = [];
+    const seen = new Map();
     users.forEach(u => {
       if ((u.status || 'Aktiv') !== 'Aktiv') return;
       const nm = norm(u.name);
       if (!nm) return;
-      list.push({ name: nm, department: norm(u.department) });
-    });
-    employees.forEach(e => {
-      const nm = norm(`${e.first_name || ''} ${e.last_name || ''}`);
-      if (!nm) return;
-      list.push({ name: nm, department: norm(e.department) });
-    });
-    // Dedupe by case-folded NFC-normalised name. Users beat employees (richer data).
-    const seen = new Map();
-    list.forEach(p => {
-      const key = p.name.toLocaleLowerCase('az');
-      if (!seen.has(key)) seen.set(key, p);
-      else if (!seen.get(key).department && p.department) seen.set(key, p);
+      const key = nm.toLocaleLowerCase('az');
+      if (!seen.has(key)) seen.set(key, { name: nm, department: norm(u.department) });
     });
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, 'az'));
-  }, [users, employees]);
+  }, [users]);
 
   // Filter assignee/responsible options by selected executor department (if any).
   const assigneeOptions = useMemo(() => {
