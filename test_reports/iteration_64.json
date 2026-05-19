@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 64 — Backend (11/11 pytest pass) + Frontend P0 selectors verified end-to-end via Playwright. Covered: POST /tasks/bulk-delete (admin deletes all / non-admin only own; archived to db.tasks_archive); /tasks/{id}/comments CRUD with author-or-admin DELETE 403 enforcement and oldest-first GET; task_updated notification on PUT /tasks/{id} fired to assignee but NOT to actor; meeting-request → /respond accept creates exactly ONE shared meeting visible to both sender and recipient with participant_names containing both; Files scope='own' (after temporarily patching Satış meneceri role) prevents listing other users' files (no leak); note_shared in-app notification appears for shared_with_users recipient via GET /notifications. Frontend verified: tasks-page loads with 8 cards, task-select-{id} checkbox toggles bulk-delete-bar+bulk-delete-btn, SearchableSelect input task-assignee-select-input filters dropdown when typing, clicking task card body opens task-detail-modal containing task-result-textarea + task-comments-list + task-comment-input + task-comment-send, Settings → Rollar → edit modal shows the relabeled 'Fəaliyyətlər / Təşkilatçılıq' row exactly 2 times (permissions row + scope row).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration64_tasks_meetings_scope.py",
+    "/app/test_reports/pytest/iteration_64_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:bulk_delete_tasks (2390) correctly filters by created_by for non-admin and archives only deletable docs; returns {deleted, skipped}.",
+    "server.py:add_task_comment (2421) inserts task_comment notifications for created_by/assignee/responsible_person, excluding the actor — verified via /notifications surfacing for user2 when admin commented.",
+    "server.py:update_task (2317) computes a changes diff over a sensible tracked_fields whitelist and notifies assignee+responsible_person excluding the actor; actor correctly sees no task_updated entry for self-driven updates.",
+    "server.py:respond_to_meeting_request (2701) inserts a SINGLE shared meeting doc with participant_ids+participant_names when ALL recipients accepted; SCOPE_FIELDS['meetings'] now includes 'participant_names' so the same doc surfaces in GET /meetings for sender AND recipient.",
+    "server.py:list_files (8271) applies its own own/department/all filter on uploaded_by_name — confirmed no leak under scope='own'.",
+    "server.py:create_note (8622) writes a note_shared notification for each id in shared_with_users excluding the author; get_notifications (6326) blends these in via type whitelist {task_assigned, task_updated, task_comment, message, note_shared}.",
+    "Frontend: SearchableSelect input uses testId+'-input' suffix as documented; bulk-delete-bar appears as amber bar matching spec; task-detail-modal opens on card body click (not on checkbox click — confirmed by separate event handlers); Settings.jsx scope+permissions rows both relabeled to 'Fəaliyyətlər / Təşkilatçılıq' (occurrence count = 2)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration64_tasks_meetings_scope.py"],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% (all P0 selectors + interactions verified)"},
+  "test_credentials": "settings@marsol.az / marsol123 (admin); satis@marsol.az / marsol123 (non-admin Satış meneceri)",
+  "seed_data_creation": "All test data prefixed TEST_* and cleaned in try/finally: bulk-delete tasks, comment tasks, update-notif tasks, meeting + meeting_request, files (admin+user2 uploads with role temporarily patched then restored), shared note. Role Satış meneceri scopes.files & permissions.files temporarily set then restored to original snapshot.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite /app/backend/tests/test_iteration64_tasks_meetings_scope.py covers all P0 contracts of iteration 64. GET /api/notifications now returns {'notifications': [...]} dict (NOT a bare list) — use response.json().get('notifications', []) when extending tests. /tasks/{id} GET returns 405 (no individual GET route) — verify deletion via listing instead. /files POST requires url starting with 'https://res.cloudinary.com/<CLOUDINARY_CLOUD_NAME>/' but does not call Cloudinary, so a fake prefixed URL is acceptable for tests. Satış meneceri role has files='read' by default; tests must patch to 'write' if uploads needed.",
+  "rca of the issue": "N/A — no defects found. All 11 backend P0 contracts pass and every frontend P0 data-testid is present and interactive."
+}

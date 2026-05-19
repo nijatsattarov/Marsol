@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { 
   Plus, Loader2, Calendar, Clock, User, CheckCircle2, Circle, CheckSquare, Square,
-  MoreVertical, Pencil, Trash2, AlertCircle, Flag, Filter, Link2, X
+  MoreVertical, Pencil, Trash2, AlertCircle, Flag, Filter, Link2, X, MessageSquare, Send
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -16,6 +16,7 @@ import { Toaster, toast } from 'sonner';
 import { usePermissions, canEdit } from '../context/PermissionContext';
 import { formatDate } from '../lib/dateUtils';
 import { DatePickerAz } from '../components/DateTimePickerAz';
+import { SearchableSelect } from '../components/SearchableSelect';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -149,6 +150,77 @@ export default function Tasks() {
       setEditingTask(null);
       setFormData(initialFormData);
     } catch (error) { toast.error('Xəta baş verdi'); }
+  };
+
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [detailTask, setDetailTask] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [commentText, setCommentText] = useState('');
+  const [savingComment, setSavingComment] = useState(false);
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const bulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`${selectedIds.size} tapşırığı silmək istədiyinizə əminsiniz?`)) return;
+    try {
+      const r = await axios.post(`${API}/tasks/bulk-delete`, { ids: Array.from(selectedIds) }, { headers });
+      toast.success(`${r.data?.deleted || 0} tapşırıq silindi${r.data?.skipped ? `, ${r.data.skipped} icazəsiz` : ''}`);
+      setSelectedIds(new Set());
+      fetchData();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Xəta');
+    }
+  };
+
+  const openDetail = async (task) => {
+    setDetailTask(task);
+    setComments([]);
+    try {
+      const r = await axios.get(`${API}/tasks/${task.id}/comments`, { headers });
+      setComments(r.data || []);
+    } catch (_) {}
+  };
+
+  const submitComment = async () => {
+    if (!detailTask || !commentText.trim()) return;
+    setSavingComment(true);
+    try {
+      const r = await axios.post(`${API}/tasks/${detailTask.id}/comments`, { text: commentText }, { headers });
+      setComments(prev => [...prev, r.data]);
+      setCommentText('');
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Şərh göndərilmədi');
+    } finally { setSavingComment(false); }
+  };
+
+  const saveResult = async (text) => {
+    if (!detailTask) return;
+    try {
+      await axios.put(`${API}/tasks/${detailTask.id}`, { result: text }, { headers });
+      setDetailTask(prev => prev ? { ...prev, result: text } : prev);
+      setTasks(prev => prev.map(t => t.id === detailTask.id ? { ...t, result: text } : t));
+      toast.success('Nəticə yadda saxlanıldı');
+    } catch (e) {
+      toast.error('Nəticə yenilənmədi');
+    }
+  };
+
+  const deleteComment = async (cid) => {
+    if (!detailTask) return;
+    if (!window.confirm('Şərhi silmək istəyirsinizmi?')) return;
+    try {
+      await axios.delete(`${API}/tasks/${detailTask.id}/comments/${cid}`, { headers });
+      setComments(prev => prev.filter(c => c.id !== cid));
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Şərh silinmədi');
+    }
   };
 
   const currentUserName = (() => {
@@ -287,6 +359,19 @@ export default function Tasks() {
         </div>
       </div>
 
+      {/* Bulk-delete bar */}
+      {selectedIds.size > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3 flex items-center justify-between" data-testid="bulk-delete-bar">
+          <span className="text-xs font-semibold text-amber-700">{selectedIds.size} tapşırıq seçildi</span>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())} className="h-7 text-xs">Ləğv et</Button>
+            <Button size="sm" onClick={bulkDelete} className="h-7 text-xs bg-red-500 hover:bg-red-600 text-white" data-testid="bulk-delete-btn">
+              <Trash2 className="w-3 h-3 mr-1" />Sil
+            </Button>
+          </div>
+        </div>
+      )}
+
       {showFilters && (
         <div className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-slate-100 flex flex-wrap gap-3">
           <div className="w-40">
@@ -384,10 +469,22 @@ export default function Tasks() {
                 return (
                 <div
                   key={task.id}
-                  className={`rounded-lg p-3 shadow-sm border ${own ? 'bg-gradient-to-br from-[#FDFFEB] to-[#F4FBD7] border-[#9ACD32] ring-1 ring-[#9ACD32]/30' : 'bg-white border-slate-100'}`}
+                  className={`rounded-lg p-3 shadow-sm border cursor-pointer relative ${selectedIds.has(task.id) ? 'ring-2 ring-amber-400' : ''} ${own ? 'bg-gradient-to-br from-[#FDFFEB] to-[#F4FBD7] border-[#9ACD32] ring-1 ring-[#9ACD32]/30' : 'bg-white border-slate-100'}`}
                   data-testid={`task-card-${task.id}`}
+                  onClick={(e) => { if (e.target.closest('button,input,[role="menuitem"]')) return; openDetail(task); }}
                 >
-                  <div className="flex items-start justify-between mb-1.5">
+                  {/* Bulk-select checkbox */}
+                  {canDeleteTask(task) && (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(task.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleSelect(task.id)}
+                      className="absolute top-2 right-2 w-3.5 h-3.5 accent-amber-500"
+                      data-testid={`task-select-${task.id}`}
+                    />
+                  )}
+                  <div className="flex items-start justify-between mb-1.5 pr-5">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1">
                         {task.task_code && <span className="text-[10px] text-slate-400 font-mono">{task.task_code}</span>}
@@ -530,17 +627,23 @@ export default function Tasks() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">İcraçı əməkdaş *</Label>
-                <Select value={formData.assignee} onValueChange={(v) => setFormData({...formData, assignee: v})}>
-                  <SelectTrigger className="text-sm" data-testid="task-assignee-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
-                  <SelectContent>{employeeNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={formData.assignee}
+                  onChange={(v) => setFormData({ ...formData, assignee: v })}
+                  options={employeeNames}
+                  placeholder="Ad-soyad yazaraq axtarın..."
+                  testId="task-assignee-select"
+                />
               </div>
               <div>
                 <Label className="text-xs">Məsul şəxs *</Label>
-                <Select value={formData.responsible_person} onValueChange={(v) => setFormData({...formData, responsible_person: v})}>
-                  <SelectTrigger className="text-sm" data-testid="task-responsible-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
-                  <SelectContent>{employeeNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={formData.responsible_person}
+                  onChange={(v) => setFormData({ ...formData, responsible_person: v })}
+                  options={employeeNames}
+                  placeholder="Ad-soyad yazaraq axtarın..."
+                  testId="task-responsible-select"
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -650,6 +753,85 @@ export default function Tasks() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Task Detail Modal — Nəticə + Şərhlər */}
+      <Dialog open={!!detailTask} onOpenChange={(o) => { if (!o) { setDetailTask(null); setComments([]); } }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="task-detail-modal">
+          <DialogHeader>
+            <DialogTitle style={{ color: '#3D4F6F' }} className="flex items-center gap-2">
+              {detailTask?.task_code && <Badge className="bg-slate-100 text-slate-600 text-xs">{detailTask.task_code}</Badge>}
+              {detailTask?.task_name}
+            </DialogTitle>
+          </DialogHeader>
+          {detailTask && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div><span className="text-slate-400">Status:</span> <span className="font-semibold">{detailTask.status}</span></div>
+                <div><span className="text-slate-400">Prioritet:</span> <span className="font-semibold">{detailTask.priority}</span></div>
+                <div><span className="text-slate-400">İcraçı:</span> {detailTask.assignee || '—'}</div>
+                <div><span className="text-slate-400">Məsul:</span> {detailTask.responsible_person || '—'}</div>
+                <div><span className="text-slate-400">Yaradan:</span> {detailTask.created_by || '—'}</div>
+                <div><span className="text-slate-400">Bitmə:</span> {detailTask.end_date ? formatDate(detailTask.end_date) : '—'}</div>
+              </div>
+
+              {/* Nəticə (Result) */}
+              <div className="bg-emerald-50/50 border border-emerald-100 rounded-lg p-3">
+                <Label className="text-xs font-semibold text-emerald-700">Nəticə</Label>
+                <Textarea
+                  defaultValue={detailTask.result || ''}
+                  placeholder="Tapşırığın nəticəsini buraya yazın..."
+                  rows={3}
+                  className="mt-1 text-sm bg-white"
+                  data-testid="task-result-textarea"
+                  onBlur={(e) => {
+                    if (e.target.value !== (detailTask.result || '')) saveResult(e.target.value);
+                  }}
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Mətn sahəsindən çıxdıqda avtomatik saxlanır</p>
+              </div>
+
+              {/* Comments */}
+              <div className="border border-slate-200 rounded-lg p-3">
+                <Label className="text-xs font-semibold text-[#3D4F6F] flex items-center gap-1 mb-2">
+                  <MessageSquare className="w-3 h-3" />Şərhlər ({comments.length})
+                </Label>
+                <div className="space-y-2 max-h-60 overflow-y-auto mb-3" data-testid="task-comments-list">
+                  {comments.length === 0 && <p className="text-xs text-slate-400 italic">Hələ şərh yoxdur</p>}
+                  {comments.map(c => (
+                    <div key={c.id} className="bg-slate-50 rounded p-2 group">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-[11px] font-semibold text-[#3D4F6F]">{c.author_name}</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-slate-400">{c.created_at ? new Date(c.created_at).toLocaleString('az-AZ') : ''}</span>
+                          {(c.author_name === currentUserName || currentUserRole === 'admin') && (
+                            <button type="button" onClick={() => deleteComment(c.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Trash2 className="w-3 h-3 text-red-400" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-700 whitespace-pre-wrap">{c.text}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    placeholder="Şərhinizi yazın..."
+                    className="text-sm"
+                    data-testid="task-comment-input"
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment(); } }}
+                  />
+                  <Button type="button" onClick={submitComment} disabled={savingComment || !commentText.trim()} className="bg-[#3D4F6F] text-white" data-testid="task-comment-send">
+                    <Send className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

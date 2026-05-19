@@ -384,10 +384,13 @@ SCOPE_FIELDS = {
     "members": ["curator", "created_by"],
     "companies": ["curator", "created_by"],
     "tasks": ["assignee", "responsible_person", "created_by"],
-    "meetings": ["employee", "meeting_setter", "created_by"],
+    "meetings": ["employee", "meeting_setter", "created_by", "participant_names"],
     "sales": ["curator", "created_by"],
     "projects": ["created_by"],
     "assembly": ["created_by", "curator"],
+    "files": ["uploaded_by", "owner"],
+    "notes": ["created_by", "shared_with_users"],
+    "organization": ["created_by"],
 }
 
 async def get_user_scopes(user: dict) -> dict:
@@ -2322,6 +2325,40 @@ async def update_task(task_id: str, task_data: dict, current_user: dict = Depend
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Tapşırıq tapılmadı")
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+
+    # When the creator (or anyone else) modifies a meaningful field, notify the
+    # assignee + responsible_person (excluding whoever made the change).
+    actor = (current_user.get("name") or "").strip()
+    tracked_fields = ("task_name", "priority", "start_date", "end_date", "status", "notes", "phase", "assignee", "responsible_person", "subtasks")
+    changes = []
+    for k in tracked_fields:
+        if k in update_data and existing.get(k) != update_data[k]:
+            label = {
+                "task_name": "Ad", "priority": "Prioritet", "start_date": "Başlama tarixi",
+                "end_date": "Bitmə tarixi", "status": "Status", "notes": "Qeyd",
+                "phase": "Mərhələ", "assignee": "İcraçı", "responsible_person": "Məsul",
+                "subtasks": "Alt mərhələlər",
+            }.get(k, k)
+            changes.append(label)
+    if changes:
+        recipients = set()
+        for fld in ("assignee", "responsible_person"):
+            name = (task.get(fld) or "").strip()
+            if name and name != actor:
+                recipients.add(name)
+        body = f"\"{task.get('task_name','')}\" tapşırığı yeniləndi: {', '.join(changes)}. Dəyişikliyi edən: {actor or '—'}"
+        for r_name in recipients:
+            await db.notifications.insert_one({
+                "id": str(uuid.uuid4()),
+                "type": "task_updated",
+                "title": "Tapşırıq yeniləndi",
+                "body": body,
+                "task_id": task["id"],
+                "task_code": task.get("task_code", ""),
+                "recipient_name": r_name,
+                "is_read": False,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
     return task
 
 @api_router.delete("/tasks/{task_id}")
@@ -2348,6 +2385,91 @@ async def delete_task(task_id: str, current_user: dict = Depends(check_permissio
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Tapşırıq tapılmadı")
     return {"message": "Tapşırıq arxivləndi"}
+
+
+@api_router.post("/tasks/bulk-delete")
+async def bulk_delete_tasks(payload: dict, current_user: dict = Depends(check_permission("tasks", "write"))):
+    """Bulk-delete (archive) selected tasks. Admin can delete any; non-admins
+    can only delete tasks they created."""
+    ids = payload.get("ids", []) if isinstance(payload, dict) else []
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(status_code=400, detail="ids massivi boşdur")
+    is_admin = (current_user.get("role") or "").lower() == "admin"
+    me = (current_user.get("name") or "").strip()
+    docs = await db.tasks.find({"id": {"$in": ids}}, {"_id": 0}).to_list(len(ids))
+    deletable = [d for d in docs if is_admin or (d.get("created_by") or "") == me]
+    deletable_ids = [d["id"] for d in deletable]
+    if not deletable_ids:
+        raise HTTPException(status_code=403, detail="Heç bir tapşırığı silmək icazəniz yoxdur")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    archive_docs = []
+    for d in deletable:
+        archive_docs.append({**d, "archive_id": str(uuid.uuid4()), "archived_at": now_iso, "archived_by": me})
+    if archive_docs:
+        await db.tasks_archive.insert_many(archive_docs)
+    res = await db.tasks.delete_many({"id": {"$in": deletable_ids}})
+    return {"deleted": res.deleted_count, "skipped": len(ids) - len(deletable_ids)}
+
+
+@api_router.get("/tasks/{task_id}/comments")
+async def list_task_comments(task_id: str, current_user: dict = Depends(check_permission("tasks", "read"))):
+    """List comments on a single task, oldest first."""
+    items = await db.task_comments.find({"task_id": task_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    return items
+
+
+@api_router.post("/tasks/{task_id}/comments")
+async def add_task_comment(task_id: str, payload: dict, current_user: dict = Depends(check_permission("tasks", "write"))):
+    """Append a comment to a task and notify the other stakeholders."""
+    text = (payload.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Şərh boş ola bilməz")
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Tapşırıq tapılmadı")
+    comment = {
+        "id": str(uuid.uuid4()),
+        "task_id": task_id,
+        "author_name": current_user.get("name", ""),
+        "author_id": current_user.get("id", ""),
+        "text": text,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.task_comments.insert_one(comment)
+    comment.pop("_id", None)
+
+    # Notify other stakeholders (creator + assignee + responsible_person)
+    actor = current_user.get("name", "")
+    recipients = set()
+    for f in ("created_by", "assignee", "responsible_person"):
+        n = (task.get(f) or "").strip()
+        if n and n != actor:
+            recipients.add(n)
+    for r_name in recipients:
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()),
+            "type": "task_comment",
+            "title": f"Yeni şərh — {task.get('task_name', '')}",
+            "body": f"{actor}: {text[:160]}",
+            "task_id": task_id,
+            "recipient_name": r_name,
+            "is_read": False,
+            "created_at": comment["created_at"],
+        })
+    return comment
+
+
+@api_router.delete("/tasks/{task_id}/comments/{comment_id}")
+async def delete_task_comment(task_id: str, comment_id: str, current_user: dict = Depends(check_permission("tasks", "write"))):
+    """Delete a comment (author or admin only)."""
+    c = await db.task_comments.find_one({"id": comment_id, "task_id": task_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Şərh tapılmadı")
+    is_admin = (current_user.get("role") or "").lower() == "admin"
+    if c.get("author_id") != current_user.get("id") and not is_admin:
+        raise HTTPException(status_code=403, detail="Yalnız müəllif və ya admin silə bilər")
+    await db.task_comments.delete_one({"id": comment_id})
+    return {"deleted": True}
 
 
 @api_router.get("/tasks/archive")
@@ -2618,7 +2740,7 @@ async def respond_to_meeting_request(req_id: str, data: dict, current_user: dict
         {"meeting_request_id": req_id, "recipient_id": uid},
         {"$set": {"is_read": True}},
     )
-    # If now fully accepted → insert meetings for sender + all recipients
+    # If now fully accepted → insert ONE shared meeting visible to all participants
     if req["status"] == "accepted":
         sender = await db.users.find_one({"id": req["sender_id"]}, {"_id": 0, "password": 0})
         participants = [
@@ -2627,30 +2749,33 @@ async def respond_to_meeting_request(req_id: str, data: dict, current_user: dict
         ]
         names = ", ".join({p["name"] for p in participants if p["name"]})
         now_iso = datetime.now(timezone.utc).isoformat()
-        for p in participants:
-            meeting_doc = {
-                "id": str(uuid.uuid4()),
-                "employee": p["name"],
-                "meeting_setter": req["sender_name"],
-                "date": req.get("date", ""),
-                "time": req.get("time", ""),
-                "company": "",
-                "contact_person": "",
-                "project": "",
-                "meeting_type": req.get("meeting_type", ""),
-                "meeting_mode": req.get("meeting_mode", "Offline"),
-                "department": "",
-                "location": req.get("location", ""),
-                "result": "",
-                "next_meeting": "",
-                "notes": (req.get("notes", "") + (f"\nİştirakçılar: {names}" if names else "")).strip(),
-                "reminders": [],
-                "created_by": req["sender_name"],
-                "created_at": now_iso,
-                "meeting_request_id": req_id,
-                "is_internal": True,
-            }
-            await db.meetings.insert_one(meeting_doc)
+        # Single shared meeting doc; `employee` lists everyone (comma-separated)
+        # and `participant_ids`/`participant_names` enable scope filtering.
+        meeting_doc = {
+            "id": str(uuid.uuid4()),
+            "employee": names,  # display: comma-separated participant list
+            "meeting_setter": req["sender_name"],
+            "date": req.get("date", ""),
+            "time": req.get("time", ""),
+            "company": "",
+            "contact_person": "",
+            "project": "",
+            "meeting_type": req.get("meeting_type", ""),
+            "meeting_mode": req.get("meeting_mode", "Offline"),
+            "department": "",
+            "location": req.get("location", ""),
+            "result": "",
+            "next_meeting": "",
+            "notes": (req.get("notes", "") + (f"\nİştirakçılar: {names}" if names else "")).strip(),
+            "reminders": [],
+            "created_by": req["sender_name"],
+            "created_at": now_iso,
+            "meeting_request_id": req_id,
+            "is_internal": True,
+            "participant_ids": [p["id"] for p in participants if p.get("id")],
+            "participant_names": [p["name"] for p in participants if p.get("name")],
+        }
+        await db.meetings.insert_one(meeting_doc)
         # Notify sender that all accepted
         await db.notifications.insert_one({
             "id": str(uuid.uuid4()),
@@ -6214,7 +6339,7 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
             {
                 "recipient_name": me_name,
                 "created_at": {"$gte": cutoff},
-                "type": {"$in": ["task_assigned", "message"]},
+                "type": {"$in": ["task_assigned", "task_updated", "task_comment", "message", "note_shared"]},
             },
             {"_id": 0},
         ).sort("created_at", -1).to_list(200)
@@ -6229,10 +6354,39 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
                 "conversation_id": n.get("conversation_id", ""),
                 "date": (n.get("created_at") or "")[:10] or today,
             })
+
+    # Scope helper for computed notifications: non-admin users with scope='own'
+    # should only see notifications tied to records they curate / are assigned to.
+    is_admin = (current_user.get("role") or "").lower() == "admin"
+    scopes = await get_user_scopes(current_user) if not is_admin else {}
+
+    def _user_owns_company(c: dict) -> bool:
+        if is_admin:
+            return True
+        sc = scopes.get("companies", "all")
+        if sc == "all":
+            return True
+        return c.get("curator") == me_name or c.get("created_by") == me_name
+
+    def _user_owns_meeting(m: dict) -> bool:
+        if is_admin:
+            return True
+        sc = scopes.get("meetings", "all")
+        if sc == "all":
+            return True
+        if m.get("created_by") == me_name or m.get("meeting_setter") == me_name:
+            return True
+        if m.get("employee") == me_name:
+            return True
+        if me_name in (m.get("participant_names") or []):
+            return True
+        return False
     
     # 1. Overdue debts (borclu şirkətlər)
     debtors = await db.companies.find({"debt_amount": {"$gt": 0}}, {"_id": 0}).to_list(500)
     for c in debtors:
+        if not _user_owns_company(c):
+            continue
         days_overdue = 0
         if c.get("payment_due_date"):
             try:
@@ -6266,6 +6420,8 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
     # 2. Contract expiring soon (müqavilə xitamı yaxınlaşan)
     all_companies = await db.companies.find({"contract_end_date": {"$ne": ""}}, {"_id": 0}).to_list(500)
     for c in all_companies:
+        if not _user_owns_company(c):
+            continue
         end_str = c.get("contract_end_date")
         if not end_str:
             continue
@@ -6303,6 +6459,8 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
     for c in pending_form_companies:
         if not (c.get("pending_form_data") or {}):
             continue
+        if not _user_owns_company(c):
+            continue
         notifications.append({
             "id": f"form-pending-{c['id']}",
             "type": "form_submission",
@@ -6315,7 +6473,21 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
 
     # 4. Meeting reminders (görüş xatırlatmaları)
     meeting_reminders = await db.notifications.find({"type": "reminder"}, {"_id": 0}).to_list(500)
+    # Build a meeting lookup map to test ownership per reminder
+    rem_meeting_ids = [r.get("meeting_id") for r in meeting_reminders if r.get("meeting_id")]
+    if rem_meeting_ids and not is_admin:
+        rem_meetings_map = {m["id"]: m for m in await db.meetings.find({"id": {"$in": rem_meeting_ids}}, {"_id": 0}).to_list(500)}
+    else:
+        rem_meetings_map = {}
     for r in meeting_reminders:
+        if not is_admin and scopes.get("meetings", "all") != "all":
+            mid = r.get("meeting_id")
+            m = rem_meetings_map.get(mid) if mid else None
+            if m and not _user_owns_meeting(m):
+                continue
+            # If there's no meeting record (orphan reminder), prefer privacy → skip for non-admins
+            if not m:
+                continue
         severity = "low"
         rem_date = r.get("reminder_date", "")
         if rem_date:
@@ -6347,6 +6519,8 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
     warning_days = cfg["membership_warning_days"]
     expiring = await db.companies.find({"contract_end_date": {"$ne": ""}}, {"_id": 0, "id": 1, "brand_name": 1, "contract_end_date": 1, "curator": 1}).to_list(500)
     for c in expiring:
+        if not _user_owns_company(c):
+            continue
         end_str = c.get("contract_end_date")
         if not end_str:
             continue
@@ -6439,6 +6613,8 @@ async def get_notifications(current_user: dict = Depends(get_current_user)):
         },
     ).to_list(2000)
     for c in bday_companies:
+        if not _user_owns_company(c):
+            continue
         cid = c["id"]
         cname = c.get("brand_name") or ""
         # Single-owner shortcut
@@ -8100,6 +8276,24 @@ async def list_files(
     query: Dict[str, Any] = {}
     if folder:
         query["folder"] = folder
+    # Apply scope: own/department/all. Files store `uploaded_by_name` (mapped via
+    # SCOPE_FIELDS where we treat it as the owner field).
+    user_name = current_user.get("name", "")
+    if (current_user.get("role") or "").lower() != "admin":
+        scopes = await get_user_scopes(current_user)
+        sc = scopes.get("files", "all")
+        if sc == "own":
+            query["uploaded_by_name"] = user_name
+        elif sc == "department":
+            my_dept = (current_user.get("department") or "").strip()
+            if my_dept:
+                dept_users = await db.users.find({"department": my_dept}, {"_id": 0, "name": 1}).to_list(500)
+                names = [u.get("name") for u in dept_users if u.get("name")] or [user_name]
+                if user_name not in names:
+                    names.append(user_name)
+                query["uploaded_by_name"] = {"$in": names}
+            else:
+                query["uploaded_by_name"] = user_name
     files = await db.files.find(query, {"_id": 0}).sort("uploaded_at", -1).to_list(2000)
     return files
 
@@ -8451,6 +8645,23 @@ async def create_note(data: dict, current_user: dict = Depends(check_permission(
         raise HTTPException(status_code=400, detail="Başlıq və ya məzmun lazımdır")
     await db.notes.insert_one(doc)
     doc.pop("_id", None)
+
+    # Notify the explicitly-shared users
+    target_ids = [uid for uid in doc["shared_with_users"] if uid and uid != user_id]
+    if target_ids:
+        recipients = await db.users.find({"id": {"$in": target_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(200)
+        preview = (doc["title"] or doc["content"])[:160]
+        for r in recipients:
+            await db.notifications.insert_one({
+                "id": str(uuid.uuid4()),
+                "type": "note_shared",
+                "title": f"Yeni qeyd sizinlə paylaşıldı — {doc['created_by']}",
+                "body": preview,
+                "note_id": doc["id"],
+                "recipient_name": r.get("name", ""),
+                "is_read": False,
+                "created_at": doc["created_at"],
+            })
     return doc
 
 

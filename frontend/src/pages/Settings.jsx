@@ -1290,7 +1290,7 @@ export default function Settings() {
                         {[
                           ['dashboard', 'İdarə Paneli'], ['companies', 'Şirkət Məlumatları'], ['hr', 'İnsan Resursları'],
                           ['sales', 'Satış (Şirkət Bazası)'], ['members', 'Üzvlər'], ['obligations', 'Öhdəliklər'],
-                          ['finance', 'Maliyyə'], ['organization', 'Təşkilatçılıq'], ['meetings', 'Görüşlər'],
+                          ['finance', 'Maliyyə'], ['organization', 'Fəaliyyətlər / Təşkilatçılıq'], ['meetings', 'Görüşlər'],
                           ['assembly', 'İclaslar'], ['tasks', 'Tapşırıqlar'], ['marketing', 'Marketinq'],
                           ['projects', 'Layihələr'], ['reports', 'Hesabatlar'], ['messages', 'Mesajlar'],
                           ['files', 'Fayllar'], ['notes', 'Qeydlər'], ['sms', 'SMS'], ['settings', 'Tənzimləmələr'],
@@ -1338,7 +1338,7 @@ export default function Settings() {
                           ['members', 'Üzvlər'],
                           ['obligations', 'Öhdəliklər'],
                           ['finance', 'Maliyyə'],
-                          ['organization', 'Təşkilatçılıq'],
+                          ['organization', 'Fəaliyyətlər / Təşkilatçılıq'],
                           ['meetings', 'Görüşlər'],
                           ['assembly', 'İclaslar'],
                           ['tasks', 'Tapşırıqlar'],
