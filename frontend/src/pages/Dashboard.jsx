@@ -418,6 +418,13 @@ export default function Dashboard() {
               </div>
               <TrendingUp className="w-6 h-6 text-green-500" />
             </div>
+            <div className="flex justify-between items-center p-3 rounded-xl bg-red-50">
+              <div>
+                <p className="text-xs text-red-600">Ləğv edildi</p>
+                <p className="text-xl font-bold text-red-600">{stats.tasks?.cancelled || 0}</p>
+              </div>
+              <ClipboardList className="w-6 h-6 text-red-500" />
+            </div>
           </div>
         </ChartCard>
         )}

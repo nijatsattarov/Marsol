@@ -611,14 +611,20 @@ async def get_dashboard_stats(current_user: dict = Depends(check_permission("das
     # Get real counts from database
     companies_count = await db.companies.count_documents({})
     employees_count = await db.employees.count_documents({})
-    # Dashboard 'tasks' widget shows ONLY the current user's own tasks (their workload)
+    # Dashboard 'tasks' widget: admin sees TOTAL across all users; non-admin
+    # sees only their own workload (tasks they are assignee / responsible /
+    # created for).
+    is_admin_dash = (current_user.get("role") or "").lower() == "admin"
     me_name = current_user.get("name", "")
-    me_clauses = [
-        {"assignee": me_name},
-        {"responsible_person": me_name},
-        {"created_by": me_name},
-    ] if me_name else [{}]
-    me_tasks_query = {"$or": me_clauses}
+    if is_admin_dash:
+        me_tasks_query: Dict[str, Any] = {}
+    else:
+        me_clauses = [
+            {"assignee": me_name},
+            {"responsible_person": me_name},
+            {"created_by": me_name},
+        ] if me_name else [{}]
+        me_tasks_query = {"$or": me_clauses}
     tasks_count = await db.tasks.count_documents(me_tasks_query)
     meetings_count = await db.meetings.count_documents({})
     
@@ -704,9 +710,10 @@ async def get_dashboard_stats(current_user: dict = Depends(check_permission("das
         },
         "tasks": {
             "total": tasks_count,
-            "pending": await db.tasks.count_documents({"$and": [me_tasks_query, {"status": "Gözləyir"}]}),
-            "in_progress": await db.tasks.count_documents({"$and": [me_tasks_query, {"status": "İcrada"}]}),
-            "completed": await db.tasks.count_documents({"$and": [me_tasks_query, {"status": "Tamamlandı"}]})
+            "pending": await db.tasks.count_documents({"$and": [me_tasks_query, {"status": "Gözləyir"}]}) if me_tasks_query else await db.tasks.count_documents({"status": "Gözləyir"}),
+            "in_progress": await db.tasks.count_documents({"$and": [me_tasks_query, {"status": "İcrada"}]}) if me_tasks_query else await db.tasks.count_documents({"status": "İcrada"}),
+            "completed": await db.tasks.count_documents({"$and": [me_tasks_query, {"status": "Tamamlandı"}]}) if me_tasks_query else await db.tasks.count_documents({"status": "Tamamlandı"}),
+            "cancelled": await db.tasks.count_documents({"$and": [me_tasks_query, {"status": "Ləğv edildi"}]}) if me_tasks_query else await db.tasks.count_documents({"status": "Ləğv edildi"})
         },
         "meetings": {
             "total": meetings_count

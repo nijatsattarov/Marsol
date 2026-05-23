@@ -328,12 +328,22 @@ export default function Tasks() {
     users.filter(u => (u.department || '') === currentUserDept && u.name).map(u => u.name)
   ), [users, currentUserDept]);
 
+  // Normalised name comparison (handles trailing spaces, NFC/NFD, case)
+  const normName = (s) => (s || '')
+    .toString()
+    .normalize('NFC')
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLocaleLowerCase('az');
+
   const isOwnTask = (t) => {
-    if (!currentUserName) return false;
+    const me = normName(currentUserName);
+    if (!me) return false;
     const aList = Array.isArray(t.assignee) ? t.assignee : (t.assignee ? [t.assignee] : []);
-    return aList.includes(currentUserName) ||
-      t.responsible_person === currentUserName ||
-      t.created_by === currentUserName;
+    return aList.some(n => normName(n) === me) ||
+      normName(t.responsible_person) === me ||
+      normName(t.created_by) === me;
   };
 
   // Display helper — turn assignee (string|array) into a comma-joined string
