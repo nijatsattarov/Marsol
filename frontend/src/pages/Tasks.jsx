@@ -148,23 +148,18 @@ export default function Tasks() {
     return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, 'az'));
   }, [users]);
 
-  // Filter assignee/responsible options by selected executor department (if any).
+  // All users available regardless of executor department selection.
   const assigneeOptions = useMemo(() => {
-    const dept = (formData.department || '').trim().toLocaleLowerCase('az');
-    const filtered = dept
-      ? allPeople.filter(p => (p.department || '').toLocaleLowerCase('az') === dept)
-      : allPeople;
-    // Extra safety: dedupe again by NFC-normalised name (case-insensitive).
     const seen = new Set();
     const out = [];
-    filtered.forEach(p => {
+    allPeople.forEach(p => {
       const key = (p.name || '').normalize('NFC').toLocaleLowerCase('az');
       if (!key || seen.has(key)) return;
       seen.add(key);
       out.push(p.name);
     });
     return out;
-  }, [allPeople, formData.department]);
+  }, [allPeople]);
 
   const departments = options.departments || [];
   const projects = options.projects || [];
@@ -949,13 +944,7 @@ export default function Tasks() {
                 <Label className="text-xs">İcraçı şöbə</Label>
                 <Select
                   value={formData.department}
-                  onValueChange={(v) => setFormData({
-                    ...formData,
-                    department: v,
-                    // Reset assignee/responsible if they no longer belong to selected dept
-                    assignee: [],
-                    responsible_person: '',
-                  })}
+                  onValueChange={(v) => setFormData({ ...formData, department: v })}
                 >
                   <SelectTrigger className="text-sm" data-testid="task-dept-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
                   <SelectContent>{departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
@@ -981,7 +970,7 @@ export default function Tasks() {
                     setFormData({ ...formData, assignee: [...cur, v] });
                   }}
                   options={assigneeOptions.filter(n => !toAssigneeArray(formData.assignee).includes(n))}
-                  placeholder={formData.department ? 'Ad-soyad yazaraq əlavə edin...' : 'Əvvəlcə icraçı şöbə seçin (və ya hamısı)'}
+                  placeholder="Ad-soyad yazaraq əlavə edin..."
                   testId="task-assignee-select"
                 />
                 {toAssigneeArray(formData.assignee).length > 0 && (
@@ -1009,7 +998,7 @@ export default function Tasks() {
                   value={formData.responsible_person}
                   onChange={(v) => setFormData({ ...formData, responsible_person: v })}
                   options={assigneeOptions}
-                  placeholder={formData.department ? 'Ad-soyad yazaraq axtarın...' : 'Əvvəlcə icraçı şöbə seçin (və ya hamısı)'}
+                  placeholder="Ad-soyad yazaraq axtarın..."
                   testId="task-responsible-select"
                 />
               </div>

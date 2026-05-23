@@ -55,6 +55,9 @@ export default function Attendance() {
   const [sessions, setSessions] = useState([]);
   const [sessionTotals, setSessionTotals] = useState([]);
   const [sessionsDate, setSessionsDate] = useState(today());
+  const [sessionsStart, setSessionsStart] = useState('');
+  const [sessionsEnd, setSessionsEnd] = useState('');
+  const [sessionsMode, setSessionsMode] = useState('day'); // 'day' | 'range'
   const [sessionsLoading, setSessionsLoading] = useState(false);
 
   const fetchEmployees = useCallback(async () => {
@@ -77,10 +80,19 @@ export default function Attendance() {
     catch { setLeaves([]); }
   }, []);
 
-  const fetchSessions = useCallback(async (d) => {
+  const fetchSessions = useCallback(async () => {
     setSessionsLoading(true);
     try {
-      const r = await axios.get(`${API}/attendance/system-sessions?date=${d}`, { headers });
+      let url = `${API}/attendance/system-sessions`;
+      if (sessionsMode === 'range' && (sessionsStart || sessionsEnd)) {
+        const params = new URLSearchParams();
+        if (sessionsStart) params.set('start_date', sessionsStart);
+        if (sessionsEnd) params.set('end_date', sessionsEnd);
+        url += `?${params.toString()}`;
+      } else {
+        url += `?date=${sessionsDate}`;
+      }
+      const r = await axios.get(url, { headers });
       // Backend returns { sessions: [...], totals: [...] } (new shape). Keep
       // backward compat in case an older payload is cached.
       if (Array.isArray(r.data)) {
@@ -92,9 +104,9 @@ export default function Attendance() {
       }
     } catch { setSessions([]); setSessionTotals([]); }
     finally { setSessionsLoading(false); }
-  }, []);
+  }, [sessionsDate, sessionsStart, sessionsEnd, sessionsMode]);
 
-  useEffect(() => { if (tab === 'system') fetchSessions(sessionsDate); }, [tab, sessionsDate, fetchSessions]);
+  useEffect(() => { if (tab === 'system') fetchSessions(); }, [tab, fetchSessions]);
 
   useEffect(() => {
     (async () => { await Promise.all([fetchEmployees(), fetchRecords(date), fetchStats(month), fetchLeaves()]); setLoading(false); })();
@@ -433,11 +445,38 @@ export default function Attendance() {
 
         {/* SYSTEM SESSIONS TAB */}
         <TabsContent value="system">
-          <div className="bg-white rounded-xl shadow-sm border p-3 mb-4 flex flex-wrap items-center gap-3">
+          <div className="bg-white rounded-xl shadow-sm border p-3 mb-4 flex flex-wrap items-center gap-2">
             <Activity className="w-4 h-4 text-[#3D4F6F]" />
-            <Input type="date" value={sessionsDate} onChange={e => setSessionsDate(e.target.value)} className="w-[160px] text-sm" data-testid="sessions-date-picker" />
-            <Button onClick={() => setSessionsDate(today())} variant="outline" size="sm" className="text-xs">Bu gün</Button>
-            <Button onClick={() => fetchSessions(sessionsDate)} variant="outline" size="sm" className="text-xs">Yenilə</Button>
+            <div className="inline-flex rounded-md border border-slate-200 overflow-hidden">
+              <button onClick={() => setSessionsMode('day')} className={`px-2.5 py-1 text-xs font-medium ${sessionsMode === 'day' ? 'bg-[#3D4F6F] text-white' : 'text-slate-600 hover:bg-slate-50'}`} data-testid="sessions-mode-day">Gün</button>
+              <button onClick={() => setSessionsMode('range')} className={`px-2.5 py-1 text-xs font-medium ${sessionsMode === 'range' ? 'bg-[#3D4F6F] text-white' : 'text-slate-600 hover:bg-slate-50'}`} data-testid="sessions-mode-range">Aralıq</button>
+            </div>
+            {sessionsMode === 'day' ? (
+              <>
+                <Input type="date" value={sessionsDate} onChange={e => setSessionsDate(e.target.value)} className="w-[160px] text-sm" data-testid="sessions-date-picker" />
+                <Button onClick={() => setSessionsDate(today())} variant="outline" size="sm" className="text-xs">Bu gün</Button>
+              </>
+            ) : (
+              <>
+                <span className="text-xs text-slate-500">Başlanğıc:</span>
+                <Input type="date" value={sessionsStart} onChange={e => setSessionsStart(e.target.value)} className="w-[150px] text-sm" data-testid="sessions-start-date" />
+                <span className="text-xs text-slate-500">Bitiş:</span>
+                <Input type="date" value={sessionsEnd} onChange={e => setSessionsEnd(e.target.value)} className="w-[150px] text-sm" data-testid="sessions-end-date" />
+                <Button
+                  onClick={() => {
+                    const d = new Date();
+                    const start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+                    setSessionsStart(start);
+                    setSessionsEnd(today());
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  data-testid="sessions-this-month"
+                >Bu ay</Button>
+              </>
+            )}
+            <Button onClick={() => fetchSessions()} variant="outline" size="sm" className="text-xs" data-testid="sessions-refresh">Yenilə</Button>
             <div className="flex-1"></div>
             <Button onClick={exportSessions} variant="outline" className="text-[#3D4F6F]" data-testid="export-sessions-btn"><Download className="w-4 h-4 mr-1" />Excel</Button>
           </div>
@@ -449,11 +488,13 @@ export default function Attendance() {
             <div className="bg-white rounded-lg p-3 border" data-testid="stat-sessions-time"><p className="text-lg font-bold text-[#3D4F6F]">{fmtDuration(sessions.reduce((acc, s) => acc + (s.active_seconds || 0), 0))}</p><p className="text-[10px] text-slate-500">Ümumi aktiv vaxt</p></div>
           </div>
 
-          {/* Per-user daily totals — sums all sessions of the same user on this day */}
+          {/* Per-user daily totals — sums all sessions of the same user in selected period */}
           {sessionTotals.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm border overflow-hidden mb-4" data-testid="session-totals-card">
               <div className="px-4 py-2.5 bg-slate-50 border-b flex items-center justify-between">
-                <p className="text-xs font-semibold text-[#3D4F6F]">Bu gün toplam (istifadəçi üzrə)</p>
+                <p className="text-xs font-semibold text-[#3D4F6F]">
+                  {sessionsMode === 'range' ? 'Seçilmiş aralıqda toplam (istifadəçi üzrə)' : 'Bu gün toplam (istifadəçi üzrə)'}
+                </p>
                 <span className="text-[10px] text-slate-500">{sessionTotals.length} istifadəçi</span>
               </div>
               <div className="overflow-x-auto">
@@ -509,13 +550,15 @@ export default function Attendance() {
                         <td className="px-3 py-2.5 text-sm font-medium text-[#3D4F6F]">{s.user_name}</td>
                         <td className="px-3 py-2.5 text-xs text-slate-500">{s.user_email}</td>
                         <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">{fmtTime(s.login_at)}</td>
-                        <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">{s.logout_at ? fmtTime(s.logout_at) : <span className="text-green-600 font-medium">— hələ aktiv —</span>}</td>
+                        <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">{s.logout_at ? fmtTime(s.logout_at) : (s.is_open ? <span className="text-green-600 font-medium">— hələ aktiv —</span> : <span className="text-amber-600 font-medium" title="Heartbeat 5+ dəq gəlmir">— qopub —</span>)}</td>
                         <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">{fmtTime(s.last_active_at)}</td>
                         <td className="px-3 py-2.5 text-xs font-semibold text-[#3D4F6F] whitespace-nowrap">{fmtDuration(s.active_seconds)}</td>
                         <td className="px-3 py-2.5">
                           {s.is_open
                             ? <Badge className="bg-green-100 text-green-700 text-[10px]">Aktiv</Badge>
-                            : <Badge className="bg-slate-100 text-slate-600 text-[10px]">Bağlı</Badge>}
+                            : s.is_stale
+                              ? <Badge className="bg-amber-100 text-amber-700 text-[10px]">Qopub</Badge>
+                              : <Badge className="bg-slate-100 text-slate-600 text-[10px]">Bağlı</Badge>}
                         </td>
                       </tr>
                     ))

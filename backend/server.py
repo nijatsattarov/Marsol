@@ -560,6 +560,16 @@ async def login(user_data: UserLogin):
     # Record system session (for Davamiyyət — Sistem fəaliyyəti)
     try:
         now = datetime.now(timezone.utc)
+        # Auto-close any previous still-open session(s) for this user. The
+        # logout_at is pinned to the LAST heartbeat (last_active_at) — not
+        # to "now" — so an abandoned tab from days ago doesn't suddenly count
+        # the intervening idle time.
+        async for prev in db.user_sessions.find({"user_id": user["id"], "logout_at": None}):
+            close_ts = prev.get("last_active_at") or prev.get("login_at") or now.isoformat()
+            await db.user_sessions.update_one(
+                {"_id": prev["_id"]},
+                {"$set": {"logout_at": close_ts, "auto_closed": True}},
+            )
         await db.user_sessions.insert_one({
             "id": str(uuid.uuid4()),
             "user_id": user["id"],
@@ -1339,20 +1349,35 @@ async def delete_attendance(record_id: str, current_user: dict = Depends(check_p
 @api_router.get("/attendance/system-sessions")
 async def attendance_system_sessions(
     date: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     user_id: Optional[str] = None,
     current_user: dict = Depends(check_permission("hr", "read")),
 ):
     """Returns user login/logout sessions with active duration in seconds.
 
     - `date` filter (YYYY-MM-DD) keeps sessions whose login_at is on that day
-    - Open sessions (logout_at is null) report active_seconds based on last_active_at
+    - `start_date` / `end_date` (YYYY-MM-DD) bound the login_at range inclusively
+    - Open sessions report active_seconds based on the LAST heartbeat
+      (`last_active_at`), NOT wall-clock now. A session that hasn't heartbeated
+      in over STALE_MINUTES is treated as effectively closed (browser tab
+      killed) so we don't keep accruing idle time.
     """
+    STALE_MINUTES = 5  # heartbeat gap that flags a tab as effectively closed
     query: Dict[str, Any] = {}
     if user_id:
         query["user_id"] = user_id
     if date:
         # date filter on login_at prefix (ISO strings start with YYYY-MM-DD)
         query["login_at"] = {"$regex": f"^{date}"}
+    elif start_date or end_date:
+        # Range filter (string compare works because ISO timestamps are lexicographically sortable)
+        rng: Dict[str, Any] = {}
+        if start_date:
+            rng["$gte"] = f"{start_date}T00:00:00"
+        if end_date:
+            rng["$lte"] = f"{end_date}T23:59:59.999999+00:00"
+        query["login_at"] = rng
     sessions = await db.user_sessions.find(query, {"_id": 0}).sort("login_at", -1).to_list(2000)
 
     def _parse(ts: Optional[str]) -> Optional[datetime]:
@@ -1365,15 +1390,23 @@ async def attendance_system_sessions(
 
     out = []
     now_dt = datetime.now(timezone.utc)
+    stale_threshold = timedelta(minutes=STALE_MINUTES)
     for s in sessions:
         login_dt = _parse(s.get("login_at"))
         logout_dt = _parse(s.get("logout_at"))
         last_dt = _parse(s.get("last_active_at"))
         is_open = s.get("logout_at") is None
-        # For open sessions report a LIVE duration (now - login) so the UI is
-        # accurate without waiting for the next heartbeat.
+        is_stale = False
+        # Determine end timestamp:
+        #   - closed session → logout_at (fallback last_active_at)
+        #   - open session   → last_active_at (when heartbeat stalled the user
+        #     has effectively disconnected; using `now` would falsely count
+        #     every minute the page sits closed)
         if is_open:
-            end = now_dt
+            end = last_dt or login_dt
+            # Mark as stale if no heartbeat in N minutes
+            if last_dt and (now_dt - last_dt) > stale_threshold:
+                is_stale = True
         else:
             end = logout_dt or last_dt or login_dt
         active_seconds = 0
@@ -1382,11 +1415,10 @@ async def attendance_system_sessions(
         out.append({
             **s,
             "active_seconds": active_seconds,
-            "is_open": is_open,
+            "is_open": is_open and not is_stale,
+            "is_stale": is_stale,
         })
-    # Aggregate per-user totals (sum of all session durations on the given date) so
-    # the UI can display "Bu gün toplam: Xh Ym" — a user with multiple logins gets
-    # a combined active duration instead of seeing them only as separate rows.
+    # Aggregate per-user totals (sum of all session durations within range)
     totals: Dict[str, Dict[str, Any]] = {}
     for row in out:
         uid = row.get("user_id") or ""
