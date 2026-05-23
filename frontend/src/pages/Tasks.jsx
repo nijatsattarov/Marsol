@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { 
   Plus, Loader2, Calendar, Clock, User, CheckCircle2, Circle, CheckSquare, Square,
-  MoreVertical, Pencil, Trash2, AlertCircle, Flag, Filter, Link2, X, MessageSquare, Send
+  MoreVertical, Pencil, Trash2, AlertCircle, Flag, Filter, Link2, X, MessageSquare, Send,
+  CalendarDays, List, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -64,8 +65,14 @@ export default function Tasks() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
-  const [filters, setFilters] = useState({ status: 'all', priority: 'all' });
+  const [filters, setFilters] = useState({ status: 'all', priority: 'all', assignee: '', responsible_person: '', date_from: '', date_to: '' });
   const [showFilters, setShowFilters] = useState(false);
+  const [viewMode, setViewMode] = useState('kanban'); // 'kanban' | 'calendar'
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+  const [selectedDay, setSelectedDay] = useState(null);
 
   const initialFormData = {
     task_name: '', department: '', assignee: [], responsible_person: '',
@@ -371,6 +378,20 @@ export default function Tasks() {
   const filteredTasks = tasks.filter(t => {
     if (filters.status !== 'all' && t.status !== filters.status) return false;
     if (filters.priority !== 'all' && t.priority !== filters.priority) return false;
+    if (filters.assignee) {
+      const need = normName(filters.assignee);
+      const aList = Array.isArray(t.assignee) ? t.assignee : (t.assignee ? [t.assignee] : []);
+      if (!aList.some(n => normName(n) === need)) return false;
+    }
+    if (filters.responsible_person) {
+      if (normName(t.responsible_person) !== normName(filters.responsible_person)) return false;
+    }
+    if (filters.date_from || filters.date_to) {
+      const td = (t.end_date || t.start_date || '').slice(0, 10);
+      if (!td) return false;
+      if (filters.date_from && td < filters.date_from) return false;
+      if (filters.date_to && td > filters.date_to) return false;
+    }
     if (scopeFilter === 'mine' && !isOwnTask(t)) return false;
     if (scopeFilter === 'team') {
       // Show team members' tasks (others in my dept, excluding me)
@@ -384,7 +405,77 @@ export default function Tasks() {
     return acc;
   }, {});
 
-  const activeFilterCount = Object.values(filters).filter(v => v !== 'all').length;
+  const activeFilterCount = [
+    filters.status !== 'all',
+    filters.priority !== 'all',
+    !!filters.assignee,
+    !!filters.responsible_person,
+    !!filters.date_from,
+    !!filters.date_to,
+  ].filter(Boolean).length;
+
+  // ========== Calendar helpers ==========
+  const AZ_MONTHS = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'İyun', 'İyul', 'Avqust', 'Sentyabr', 'Oktyabr', 'Noyabr', 'Dekabr'];
+  const AZ_DAYS = ['B.e', 'Ç.a', 'Ç', 'C.a', 'C', 'Ş', 'B'];
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // Group filtered tasks by end_date (due date) — fall back to start_date.
+  const tasksByDate = filteredTasks.reduce((acc, t) => {
+    const ds = (t.end_date || t.start_date || '').slice(0, 10);
+    if (!ds) return acc;
+    (acc[ds] = acc[ds] || []).push(t);
+    return acc;
+  }, {});
+
+  const monthGrid = (() => {
+    const { year, month } = calendarMonth;
+    const first = new Date(year, month, 1);
+    const last = new Date(year, month + 1, 0);
+    const startDow = (first.getDay() + 6) % 7; // Monday-first
+    const cells = [];
+    for (let i = 0; i < startDow; i++) {
+      const d = new Date(year, month, -startDow + i + 1);
+      cells.push({ date: d, currentMonth: false });
+    }
+    for (let day = 1; day <= last.getDate(); day++) {
+      cells.push({ date: new Date(year, month, day), currentMonth: true });
+    }
+    while (cells.length % 7 !== 0 || cells.length < 42) {
+      const d = new Date(cells[cells.length - 1].date);
+      d.setDate(d.getDate() + 1);
+      cells.push({ date: d, currentMonth: d.getMonth() === month });
+    }
+    return cells;
+  })();
+
+  const fmtCalDate = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const shiftMonth = (delta) => {
+    setCalendarMonth(prev => {
+      const d = new Date(prev.year, prev.month + delta, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+  };
+
+  const goToCurrentMonth = () => {
+    const d = new Date();
+    setCalendarMonth({ year: d.getFullYear(), month: d.getMonth() });
+  };
+
+  const taskDotColor = (t) => {
+    if (t.status === 'Tamamlandı') return 'bg-emerald-500';
+    if (t.status === 'İcrada') return 'bg-blue-500';
+    if (t.status === 'Ləğv edildi') return 'bg-red-400';
+    if (t.priority === 'Yüksək') return 'bg-rose-500';
+    return 'bg-amber-500'; // Gözləyir / default
+  };
+
+  const selectedDayTasks = selectedDay ? (tasksByDate[selectedDay] || []) : [];
 
   if (loading) return <div className="flex items-center justify-center h-[60vh]"><Loader2 className="w-8 h-8 animate-spin" style={{ color: '#3D4F6F' }} /></div>;
 
@@ -398,6 +489,25 @@ export default function Tasks() {
           <p className="text-slate-500 text-sm mt-1">Cəmi {filteredTasks.length} tapşırıq{scopeFilter !== 'all' && <span className="text-[#9ACD32] font-semibold ml-1">({scopeFilter === 'mine' ? 'Mənim' : 'Əməkdaşlarımın'})</span>}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {/* View mode toggle */}
+          <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden bg-white" data-testid="view-mode-toggle">
+            <button
+              type="button"
+              onClick={() => setViewMode('kanban')}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 ${viewMode === 'kanban' ? 'bg-[#3D4F6F] text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+              data-testid="view-kanban-btn"
+            >
+              <List className="w-3.5 h-3.5" />Kanban
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('calendar')}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 ${viewMode === 'calendar' ? 'bg-[#3D4F6F] text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+              data-testid="view-calendar-btn"
+            >
+              <CalendarDays className="w-3.5 h-3.5" />Kalendar
+            </button>
+          </div>
           {/* Scope tabs */}
           <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden bg-white" data-testid="task-scope-tabs">
             {[
@@ -447,7 +557,7 @@ export default function Tasks() {
       )}
 
       {showFilters && (
-        <div className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-slate-100 flex flex-wrap gap-3">
+        <div className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-slate-100 flex flex-wrap gap-3 items-end">
           <div className="w-40">
             <Label className="text-xs">Status</Label>
             <Select value={filters.status} onValueChange={(v) => setFilters({...filters, status: v})}>
@@ -468,6 +578,45 @@ export default function Tasks() {
               </SelectContent>
             </Select>
           </div>
+          <div className="w-56">
+            <Label className="text-xs">İcraçı əməkdaş</Label>
+            <SearchableSelect
+              value={filters.assignee}
+              onChange={(v) => setFilters({ ...filters, assignee: v })}
+              options={allPeople.map(p => p.name)}
+              placeholder="Hamısı"
+              testId="filter-assignee"
+            />
+          </div>
+          <div className="w-56">
+            <Label className="text-xs">Məsul şəxs</Label>
+            <SearchableSelect
+              value={filters.responsible_person}
+              onChange={(v) => setFilters({ ...filters, responsible_person: v })}
+              options={allPeople.map(p => p.name)}
+              placeholder="Hamısı"
+              testId="filter-responsible"
+            />
+          </div>
+          <div className="w-40">
+            <Label className="text-xs">Tarixdən</Label>
+            <DatePickerAz value={filters.date_from} onChange={(v) => setFilters({ ...filters, date_from: v })} testId="filter-date-from" />
+          </div>
+          <div className="w-40">
+            <Label className="text-xs">Tarixə qədər</Label>
+            <DatePickerAz value={filters.date_to} onChange={(v) => setFilters({ ...filters, date_to: v })} testId="filter-date-to" />
+          </div>
+          {activeFilterCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFilters({ status: 'all', priority: 'all', assignee: '', responsible_person: '', date_from: '', date_to: '' })}
+              className="text-xs h-9"
+              data-testid="filter-reset-btn"
+            >
+              <X className="w-3 h-3 mr-1" />Filterləri sıfırla
+            </Button>
+          )}
         </div>
       )}
 
@@ -523,6 +672,7 @@ export default function Tasks() {
       )}
 
       {/* Kanban Board */}
+      {viewMode === 'kanban' && (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statuses.map(status => (
           <div key={status} className="bg-slate-50 rounded-xl p-3">
@@ -671,6 +821,117 @@ export default function Tasks() {
           </div>
         ))}
       </div>
+      )}
+
+      {/* Calendar View */}
+      {viewMode === 'calendar' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 sm:p-4" data-testid="tasks-calendar">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <button onClick={() => shiftMonth(-1)} className="p-2 rounded-lg hover:bg-slate-100" data-testid="cal-prev-month"><ChevronLeft className="w-4 h-4 text-[#3D4F6F]" /></button>
+              <h3 className="text-sm sm:text-base font-bold text-[#3D4F6F] min-w-[160px] text-center" data-testid="cal-current-month">
+                {AZ_MONTHS[calendarMonth.month]} {calendarMonth.year}
+              </h3>
+              <button onClick={() => shiftMonth(1)} className="p-2 rounded-lg hover:bg-slate-100" data-testid="cal-next-month"><ChevronRight className="w-4 h-4 text-[#3D4F6F]" /></button>
+            </div>
+            <Button variant="outline" size="sm" onClick={goToCurrentMonth} className="text-xs" data-testid="cal-today-btn">Bu ay</Button>
+          </div>
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {AZ_DAYS.map((d, i) => (
+              <div key={d} className={`text-[10px] sm:text-xs font-semibold text-center py-1.5 ${i >= 5 ? 'text-red-500' : 'text-slate-500'}`}>{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {monthGrid.map((cell, idx) => {
+              const ds = fmtCalDate(cell.date);
+              const dayTasks = tasksByDate[ds] || [];
+              const isToday = ds === todayStr;
+              const isWeekend = cell.date.getDay() === 0 || cell.date.getDay() === 6;
+              return (
+                <button
+                  key={idx}
+                  onClick={() => dayTasks.length > 0 && setSelectedDay(ds)}
+                  className={`min-h-[70px] sm:min-h-[90px] p-1.5 rounded-lg border text-left transition-all
+                    ${cell.currentMonth ? 'bg-white border-slate-200 hover:border-[#9ACD32] hover:shadow-sm' : 'bg-slate-50/50 border-slate-100 opacity-50'}
+                    ${isToday ? 'ring-2 ring-[#9ACD32] border-[#9ACD32]' : ''}
+                    ${dayTasks.length > 0 && cell.currentMonth ? 'cursor-pointer' : 'cursor-default'}`}
+                  data-testid={`cal-day-${ds}`}
+                >
+                  <div className={`text-xs sm:text-sm font-semibold mb-1 ${isToday ? 'text-[#3D4F6F]' : isWeekend && cell.currentMonth ? 'text-red-400' : 'text-slate-700'}`}>
+                    {cell.date.getDate()}
+                  </div>
+                  {dayTasks.length > 0 && (
+                    <div className="space-y-0.5">
+                      {dayTasks.slice(0, 3).map(t => (
+                        <div key={t.id} className="flex items-center gap-1 truncate">
+                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${taskDotColor(t)}`}></span>
+                          <span className="text-[9px] sm:text-[10px] text-slate-700 truncate font-medium">
+                            {t.task_name}
+                          </span>
+                        </div>
+                      ))}
+                      {dayTasks.length > 3 && (
+                        <div className="text-[9px] sm:text-[10px] text-[#3D4F6F] font-semibold">+{dayTasks.length - 3} daha</div>
+                      )}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-[10px] sm:text-xs text-slate-500">
+            <span className="font-semibold text-[#3D4F6F]">İzah:</span>
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500"></span>Gözləyir</span>
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500"></span>İcrada</span>
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500"></span>Tamamlandı</span>
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-400"></span>Ləğv edildi</span>
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-500"></span>Yüksək prioritet</span>
+          </div>
+        </div>
+      )}
+
+      {/* Day-Detail Dialog (calendar day click) */}
+      <Dialog open={!!selectedDay} onOpenChange={(o) => !o && setSelectedDay(null)}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" data-testid="day-detail-dialog">
+          <DialogHeader>
+            <DialogTitle style={{ color: '#3D4F6F' }} className="flex items-center gap-2">
+              <Calendar className="w-4 h-4" />
+              {selectedDay && formatDate(selectedDay)} — {selectedDayTasks.length} tapşırıq
+            </DialogTitle>
+          </DialogHeader>
+          {selectedDayTasks.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-sm">Bu gün üçün tapşırıq yoxdur</div>
+          ) : (
+            <div className="space-y-2">
+              {selectedDayTasks
+                .sort((a, b) => (a.priority || '').localeCompare(b.priority || ''))
+                .map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => { setSelectedDay(null); openDetail(t); }}
+                    className="w-full text-left border border-slate-200 rounded-lg p-3 hover:bg-slate-50 transition-colors block"
+                    data-testid={`day-task-${t.id}`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`w-2 h-2 rounded-full ${taskDotColor(t)}`}></span>
+                        {t.task_code && <span className="text-[10px] text-slate-400 font-mono">{t.task_code}</span>}
+                        <Badge className={`text-[10px] ${getStatusColor(t.status)}`}>{t.status}</Badge>
+                        <Badge className={`text-[10px] bg-slate-100 ${getPriorityColor(t.priority)}`}>{t.priority}</Badge>
+                      </div>
+                    </div>
+                    <h4 className="font-medium text-sm text-slate-800 mb-1">{t.task_name}</h4>
+                    <div className="text-[11px] text-slate-500 space-y-0.5">
+                      <div>İcraçı: {assigneeDisplay(t) || '—'}</div>
+                      {t.responsible_person && <div>Məsul: {t.responsible_person}</div>}
+                      {t.created_by && <div>Yaradan: {t.created_by}</div>}
+                    </div>
+                  </button>
+                ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Add/Edit Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
