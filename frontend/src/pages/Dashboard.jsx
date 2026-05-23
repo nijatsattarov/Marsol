@@ -227,7 +227,11 @@ export default function Dashboard() {
           <StatCard
             title="Görüşlər"
             value={stats.meetings?.total || 0}
-            subtitle={`${stats.meetings?.upcoming || 0} qarşıdan`}
+            subtitle={
+              (stats.meetings?.today || 0) > 0
+                ? `Bu gün ${stats.meetings.today}, qarşıdan ${stats.meetings?.upcoming || 0}`
+                : `${stats.meetings?.upcoming || 0} qarşıdan, ${stats.meetings?.past || 0} keçmiş`
+            }
             icon={CreditCard}
             color="#3D4F6F"
           />

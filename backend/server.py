@@ -636,7 +636,20 @@ async def get_dashboard_stats(current_user: dict = Depends(check_permission("das
         ] if me_name else [{}]
         me_tasks_query = {"$or": me_clauses}
     tasks_count = await db.tasks.count_documents(me_tasks_query)
-    meetings_count = await db.meetings.count_documents({})
+    # Meetings count — admin sees total; non-admin sees only meetings scoped to them
+    # (assignee/setter/created_by/participant via apply_scope).
+    today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if is_admin_dash:
+        base_meetings_q: Dict[str, Any] = {}
+    else:
+        base_meetings_q = await apply_scope({}, current_user, "meetings")
+    meetings_count = await db.meetings.count_documents(base_meetings_q)
+    upcoming_q = {"$and": [base_meetings_q, {"date": {"$gt": today_iso}}]} if base_meetings_q else {"date": {"$gt": today_iso}}
+    today_q = {"$and": [base_meetings_q, {"date": today_iso}]} if base_meetings_q else {"date": today_iso}
+    past_q = {"$and": [base_meetings_q, {"date": {"$lt": today_iso}}]} if base_meetings_q else {"date": {"$lt": today_iso}}
+    meetings_upcoming = await db.meetings.count_documents(upcoming_q)
+    meetings_today = await db.meetings.count_documents(today_q)
+    meetings_past = await db.meetings.count_documents(past_q)
     
     # Events stats
     events_count = await db.events.count_documents({})
@@ -726,7 +739,10 @@ async def get_dashboard_stats(current_user: dict = Depends(check_permission("das
             "cancelled": await db.tasks.count_documents({"$and": [me_tasks_query, {"status": "Ləğv edildi"}]}) if me_tasks_query else await db.tasks.count_documents({"status": "Ləğv edildi"})
         },
         "meetings": {
-            "total": meetings_count
+            "total": meetings_count,
+            "upcoming": meetings_upcoming,
+            "today": meetings_today,
+            "past": meetings_past,
         },
         "events": {
             "total": events_count,
