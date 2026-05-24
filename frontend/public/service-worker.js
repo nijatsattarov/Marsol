@@ -11,7 +11,7 @@
  *     index.html so deep-links work offline.
  */
 
-const VERSION = 'mms-v2';
+const VERSION = 'mms-v3-safearea';
 const APP_SHELL = `mms-shell-${VERSION}`;
 const RUNTIME = `mms-runtime-${VERSION}`;
 const SHELL_ASSETS = [

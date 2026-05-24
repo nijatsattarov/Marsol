@@ -344,6 +344,10 @@ export const Sidebar = () => {
           lg:translate-x-0
           ${collapsed ? 'lg:w-20' : 'lg:w-[280px]'}
         `}
+        style={{
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
         data-testid="sidebar"
       >
         {/* Logo Section */}
@@ -467,25 +471,35 @@ export const Sidebar = () => {
 // Mobile Header with Menu Button
 export const MobileHeader = () => {
   const { openMobileMenu } = useSidebar();
-  
+
+  // Notes on safe-area:
+  //   On iOS PWA (apple-mobile-web-app-status-bar-style="black-translucent")
+  //   the status bar overlays the page content. We pad the top of the bar with
+  //   env(safe-area-inset-top) so the logo/menu/bell sit BELOW the clock area.
+  //   The bar itself stays 56 px (h-14) tall, padding pushes its contents down.
   return (
-    <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-white border-b border-slate-100 z-30 flex items-center justify-between px-4 shadow-sm">
-      <div className="flex items-center">
-        <button
-          onClick={openMobileMenu}
-          className="p-2 -ml-2 rounded-lg hover:bg-slate-100 transition-colors active:bg-slate-200"
-          data-testid="mobile-menu-btn"
-          type="button"
-        >
-          <Menu className="w-6 h-6" style={{ color: '#3D4F6F' }} />
-        </button>
-        <img 
-          src="https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png" 
-          alt="Marsol Group" 
-          className="h-7 ml-3"
-        />
+    <div
+      className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b border-slate-100 z-30 shadow-sm"
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+    >
+      <div className="h-14 flex items-center justify-between px-4">
+        <div className="flex items-center">
+          <button
+            onClick={openMobileMenu}
+            className="p-2 -ml-2 rounded-lg hover:bg-slate-100 transition-colors active:bg-slate-200"
+            data-testid="mobile-menu-btn"
+            type="button"
+          >
+            <Menu className="w-6 h-6" style={{ color: '#3D4F6F' }} />
+          </button>
+          <img
+            src="https://customer-assets.emergentagent.com/job_03e89fda-1599-48f3-846d-f1d3e818b1fa/artifacts/h0q248dw_Marsol.png"
+            alt="Marsol Group"
+            className="h-7 ml-3"
+          />
+        </div>
+        <NotificationBell />
       </div>
-      <NotificationBell />
     </div>
   );
 };

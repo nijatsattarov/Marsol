@@ -37,16 +37,28 @@ const DashboardContent = () => {
       <Sidebar />
       <MobileHeader />
       {/* Top Notification Bar (desktop) - sticky regardless of scroll */}
-      <div className={`fixed top-0 right-0 z-30 hidden lg:flex items-center justify-end h-14 px-6 bg-white/85 backdrop-blur-sm border-b border-slate-100 transition-all duration-300 ${collapsed ? 'left-20' : 'left-[280px]'}`}>
+      <div
+        className={`fixed top-0 right-0 z-30 hidden lg:flex items-center justify-end px-6 bg-white/85 backdrop-blur-sm border-b border-slate-100 transition-all duration-300 ${collapsed ? 'left-20' : 'left-[280px]'}`}
+        style={{
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          height: 'calc(3.5rem + env(safe-area-inset-top, 0px))',
+        }}
+      >
         <NotificationBell />
       </div>
       <main 
         className={`
           transition-all duration-300
-          pt-14 lg:pt-14
           min-w-0 overflow-x-hidden
           ${collapsed ? 'lg:ml-20' : 'lg:ml-[280px]'}
         `}
+        style={{
+          // 56 px header + iOS safe-area-inset (notch / status bar). Padding
+          // top is needed on mobile (where MobileHeader is fixed) AND desktop
+          // (where the NotificationBell bar is fixed).
+          paddingTop: 'calc(3.5rem + env(safe-area-inset-top, 0px))',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
         data-testid="main-content"
       >
         <Outlet />
