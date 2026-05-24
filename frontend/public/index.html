@@ -2,10 +2,23 @@
 <html lang="az">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#3D4F6F" />
     <meta name="description" content="Marsol Group İdarəetmə Sistemi" />
+
+    <!-- PWA -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <link rel="icon" type="image/png" sizes="32x32" href="%PUBLIC_URL%/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="%PUBLIC_URL%/favicon-64.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Marsol MMS" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="Marsol MMS" />
+    <meta name="msapplication-TileColor" content="#3D4F6F" />
+    <meta name="msapplication-TileImage" content="%PUBLIC_URL%/icon-192.png" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -14,5 +27,39 @@
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+    <script>
+      // Register the PWA service worker as soon as the page is interactive.
+      // The SW lives at /service-worker.js — see public/service-worker.js.
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker
+            .register('/service-worker.js', { scope: '/' })
+            .then(function (reg) {
+              // When a new SW takes control, refresh once so users get the latest assets.
+              if (reg && reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
+              if (reg) {
+                reg.addEventListener('updatefound', function () {
+                  var nw = reg.installing;
+                  if (!nw) return;
+                  nw.addEventListener('statechange', function () {
+                    if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+                      // A new SW is ready — silently apply on next reload.
+                      reg.waiting && reg.waiting.postMessage('SKIP_WAITING');
+                    }
+                  });
+                });
+              }
+            })
+            .catch(function () { /* swallow — non-fatal */ });
+
+          var refreshing = false;
+          navigator.serviceWorker.addEventListener('controllerchange', function () {
+            if (refreshing) return;
+            refreshing = true;
+            window.location.reload();
+          });
+        });
+      }
+    </script>
   </body>
 </html>
