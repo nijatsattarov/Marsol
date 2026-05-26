@@ -96,8 +96,24 @@ async def send_push(
     if link:
         payload_data["link"] = link
 
+    # FCM's WebpushFCMOptions.link requires an ABSOLUTE https:// URL — relative
+    # paths like "/dashboard" are rejected ("link must be a HTTPS URL").
+    # Prepend PUBLIC_APP_URL when the caller passes a relative path. If the URL
+    # isn't configured (or is non-https in dev), skip the click-through option
+    # so the push still gets delivered.
+    public_app_url = (os.environ.get("PUBLIC_APP_URL") or "").rstrip("/")
+    abs_link: Optional[str] = None
+    if link:
+        if link.startswith("https://"):
+            abs_link = link
+        elif link.startswith("http://"):
+            abs_link = None  # FCM rejects http
+        elif public_app_url.startswith("https://"):
+            abs_link = f"{public_app_url}{link if link.startswith('/') else '/' + link}"
+
     for start in range(0, len(tokens), 500):
         batch = tokens[start : start + 500]
+        webpush_fcm_opts = messaging.WebpushFCMOptions(link=abs_link) if abs_link else None
         message = messaging.MulticastMessage(
             notification=messaging.Notification(title=title[:200], body=body[:500]),
             data=payload_data,
@@ -109,7 +125,7 @@ async def send_push(
                     icon="/icon-192.png",
                     badge="/favicon-64.png",
                 ),
-                fcm_options=messaging.WebpushFCMOptions(link=link or "/dashboard"),
+                fcm_options=webpush_fcm_opts,
             ),
         )
         try:
