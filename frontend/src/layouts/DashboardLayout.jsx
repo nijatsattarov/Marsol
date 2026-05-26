@@ -50,8 +50,24 @@ const DashboardContent = () => {
           : undefined,
       });
     };
+    // SW post-message → navigate (fallback for browsers that don't expose client.navigate)
+    const onSwMessage = (event) => {
+      if (event.data?.type === 'PUSH_NAV' && event.data.target) {
+        try {
+          const u = new URL(event.data.target);
+          // Use path+search so React Router controls the transition
+          navigate(u.pathname + u.search + u.hash);
+        } catch (_) {
+          navigate(event.data.target);
+        }
+      }
+    };
     window.addEventListener('fcm-foreground', onForeground);
-    return () => window.removeEventListener('fcm-foreground', onForeground);
+    if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', onSwMessage);
+    return () => {
+      window.removeEventListener('fcm-foreground', onForeground);
+      if (navigator.serviceWorker) navigator.serviceWorker.removeEventListener('message', onSwMessage);
+    };
   }, [navigate]);
 
   return (
