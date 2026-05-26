@@ -29,6 +29,26 @@ import asyncio  # noqa: E402
 from cloudinary_service import upload_file as _cl_upload, delete_asset as _cl_delete  # noqa: E402
 from invitation_card import render_invitation_png  # noqa: E402
 
+# Firebase Cloud Messaging (push notifications)
+from push_service import init_firebase as _init_fcm, push_to_users as _push_to_users  # noqa: E402
+_init_fcm()
+
+
+def _safe_push(recipient_names, title: str, body: str, link: Optional[str] = None, data: Optional[dict] = None):
+    """Fire-and-forget push to users. Never raises — DB notification is the
+    primary record; push is best-effort and survives FCM outages.
+    """
+    async def _runner():
+        try:
+            await _push_to_users(db, recipient_names, title, body, data=data, link=link)
+        except Exception as exc:
+            logging.error("push notification failed: %s", exc)
+    try:
+        asyncio.create_task(_runner())
+    except RuntimeError:
+        # Not in an event loop (rare path). Skip silently.
+        pass
+
 # Default invitation message templates per event type. Each template supports
 # placeholders {guest_name}, {event_name}, {event_date}, {event_time},
 # {event_location}. Newlines split into separate lines on the rendered card.
@@ -613,6 +633,64 @@ async def heartbeat(current_user: dict = Depends(get_current_user)):
 @api_router.get("/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
     return current_user
+
+# ==================== PUSH NOTIFICATIONS (FCM) ====================
+
+@api_router.post("/push/subscribe")
+async def push_subscribe(payload: dict, current_user: dict = Depends(get_current_user)):
+    """Persist an FCM device token for the current user (multi-device aware).
+
+    Body: { token, platform? } — token from firebase/messaging getToken().
+    Idempotent: upsert keyed on token (one device = one row).
+    """
+    token = (payload or {}).get("token", "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="token missing")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.push_tokens.update_one(
+        {"token": token},
+        {
+            "$set": {
+                "user_id": current_user["id"],
+                "user_email": current_user.get("email", ""),
+                "user_name": current_user.get("name", ""),
+                "platform": (payload.get("platform") or "web")[:32],
+                "last_used_at": now,
+            },
+            "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": now},
+        },
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api_router.post("/push/unsubscribe")
+async def push_unsubscribe(payload: dict, current_user: dict = Depends(get_current_user)):
+    token = (payload or {}).get("token", "").strip()
+    if token:
+        await db.push_tokens.delete_one({"token": token, "user_id": current_user["id"]})
+    else:
+        # Remove all tokens for this user
+        await db.push_tokens.delete_many({"user_id": current_user["id"]})
+    return {"ok": True}
+
+
+@api_router.post("/push/test")
+async def push_test(payload: dict = None, current_user: dict = Depends(get_current_user)):
+    """Send a sample push to the calling user's own devices — Settings UI uses this."""
+    title = (payload or {}).get("title") or "Marsol MMS — test bildirişi"
+    body = (payload or {}).get("body") or f"Salam, {current_user.get('name', '')}! Push bildirişləri aktivdir."
+    result = await _push_to_users(db, [current_user.get("name", "")], title, body, link="/dashboard")
+    return {"ok": True, "result": result}
+
+
+@api_router.get("/push/status")
+async def push_status(current_user: dict = Depends(get_current_user)):
+    """Returns device count + last_used per device for the current user."""
+    rows = await db.push_tokens.find(
+        {"user_id": current_user["id"]}, {"_id": 0, "platform": 1, "last_used_at": 1, "created_at": 1}
+    ).to_list(50)
+    return {"devices": rows, "count": len(rows)}
 
 # ==================== DASHBOARD ====================
 
@@ -2373,6 +2451,8 @@ async def create_task(task_data: TaskCreate, current_user: dict = Depends(check_
             "is_read": False,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
+    if recipients:
+        _safe_push(list(recipients), "Yeni tapşırıq", notif_body, link=f"/tasks?id={task_doc['id']}", data={"type": "task_assigned", "task_id": task_doc["id"]})
 
     # Email notification
     recipient_emails = []
@@ -2445,6 +2525,8 @@ async def update_task(task_id: str, task_data: dict, current_user: dict = Depend
                 "is_read": False,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             })
+        if recipients:
+            _safe_push(list(recipients), "Tapşırıq yeniləndi", body, link=f"/tasks?id={task['id']}", data={"type": "task_updated", "task_id": task["id"]})
     return task
 
 @api_router.delete("/tasks/{task_id}")
@@ -2545,6 +2627,8 @@ async def add_task_comment(task_id: str, payload: dict, current_user: dict = Dep
             "is_read": False,
             "created_at": comment["created_at"],
         })
+    if recipients:
+        _safe_push(list(recipients), f"Yeni şərh — {task.get('task_name','')}", f"{actor}: {text[:160]}", link=f"/tasks?id={task_id}", data={"type": "task_comment", "task_id": task_id})
     return comment
 
 
@@ -2760,6 +2844,7 @@ async def create_meeting_request(data: dict, current_user: dict = Depends(check_
     await db.meeting_requests.insert_one(request_doc)
     request_doc.pop("_id", None)
     # Notify each recipient
+    recipient_names_push = []
     for r in recipients:
         notif = {
             "id": str(uuid.uuid4()),
@@ -2772,6 +2857,16 @@ async def create_meeting_request(data: dict, current_user: dict = Depends(check_
             "created_at": now_iso,
         }
         await db.notifications.insert_one(notif)
+        if r.get("name"):
+            recipient_names_push.append(r["name"])
+    if recipient_names_push:
+        _safe_push(
+            recipient_names_push,
+            f"Görüş təklifi: {sender_name}",
+            f"{request_doc['date']} {request_doc['time']} · {request_doc['meeting_type'] or 'Görüş'}",
+            link="/meetings",
+            data={"type": "meeting_request", "request_id": req_id},
+        )
     return request_doc
 
 
@@ -2876,6 +2971,8 @@ async def respond_to_meeting_request(req_id: str, data: dict, current_user: dict
             "is_read": False,
             "created_at": now_iso,
         })
+        if req.get("sender_name"):
+            _safe_push([req["sender_name"]], "Görüş təklifi qəbul edildi", f"{names} — {req['date']} {req['time']}", link="/meetings", data={"type": "meeting_request_accepted"})
     elif req["status"] == "rejected":
         rejecter = current_user.get("name", "")
         await db.notifications.insert_one({
@@ -2888,6 +2985,8 @@ async def respond_to_meeting_request(req_id: str, data: dict, current_user: dict
             "is_read": False,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
+        if req.get("sender_name"):
+            _safe_push([req["sender_name"]], "Görüş təklifi rədd edildi", f"{rejecter} təklifinizi rədd etdi", link="/meetings", data={"type": "meeting_request_rejected"})
     return req
 
 
@@ -5400,6 +5499,7 @@ async def send_message(conversation_id: str, data: dict, current_user: dict = De
     # In-app notifications to all participants except the sender
     sender_name = current_user.get("name", "")
     conv_label = conv.get("name") or sender_name
+    push_recipients = []
     for pid in conv.get("participants", []):
         if pid == current_user["id"]:
             continue
@@ -5417,6 +5517,16 @@ async def send_message(conversation_id: str, data: dict, current_user: dict = De
             "is_read": False,
             "created_at": msg_doc["created_at"],
         })
+        if user.get("name"):
+            push_recipients.append(user["name"])
+    if push_recipients:
+        _safe_push(
+            push_recipients,
+            f"Yeni mesaj — {conv_label}",
+            preview[:160] if preview else "Yeni mesaj",
+            link=f"/messages?conversation={conversation_id}",
+            data={"type": "message", "conversation_id": conversation_id},
+        )
     return msg_doc
 
 
@@ -8740,6 +8850,7 @@ async def create_note(data: dict, current_user: dict = Depends(check_permission(
     if target_ids:
         recipients = await db.users.find({"id": {"$in": target_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(200)
         preview = (doc["title"] or doc["content"])[:160]
+        push_recipients = []
         for r in recipients:
             await db.notifications.insert_one({
                 "id": str(uuid.uuid4()),
@@ -8751,6 +8862,16 @@ async def create_note(data: dict, current_user: dict = Depends(check_permission(
                 "is_read": False,
                 "created_at": doc["created_at"],
             })
+            if r.get("name"):
+                push_recipients.append(r["name"])
+        if push_recipients:
+            _safe_push(
+                push_recipients,
+                f"Yeni qeyd — {doc['created_by']}",
+                preview,
+                link=f"/notes?id={doc['id']}",
+                data={"type": "note_shared", "note_id": doc["id"]},
+            )
     return doc
 
 

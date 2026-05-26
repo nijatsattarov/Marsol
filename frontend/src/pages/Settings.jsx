@@ -4,7 +4,7 @@ import {
   Settings as SettingsIcon, Package, FolderKanban, Users, Columns3,
   Plus, Pencil, Trash2, Loader2, Shield, Eye, EyeOff, UserCog, User,
   ChevronDown, Search, X, Building2, Layers, Briefcase, Activity, Building,
-  Calendar, Target, TrendingUp, Image as ImageIcon, Upload, ListChecks, List, MessageSquare, Globe
+  Calendar, Target, TrendingUp, Image as ImageIcon, Upload, ListChecks, List, MessageSquare, Globe, Bell
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import PushPanel from '../components/PushPanel';
 import { Toaster, toast } from 'sonner';
 import PackageServicesManager from '../components/PackageServicesManager';
 import ManageableListsPanel from '../components/ManageableListsPanel';
@@ -571,6 +572,7 @@ export default function Settings() {
                 { value: 'roles', icon: Shield, label: 'Rollar' },
                 { value: 'users', icon: Users, label: 'İstifadəçilər' },
                 { value: 'branding', icon: ImageIcon, label: 'Brendinq' },
+                { value: 'push', icon: Bell, label: 'Push bildirişləri' },
                 ...(canSms ? [{ value: 'sms', icon: MessageSquare, label: 'SMS' }] : []),
               ]},
             ].map((group, gi) => (
@@ -1609,6 +1611,11 @@ export default function Settings() {
               💡 Qeyd: Sidebar loqosu PNG şəffaf fonlu olsa, tünd fon üzərində daha yaxşı görünəcək. Dəyişikliklər səhifəni yeniləyəndən sonra tətbiq olunur.
             </p>
           </div>
+        </TabsContent>
+
+        {/* ========= PUSH NOTIFICATIONS TAB ========= */}
+        <TabsContent value="push">
+          <PushPanel />
         </TabsContent>
 
         {/* ========= SMS TAB ========= */}

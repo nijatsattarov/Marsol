@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
 import axios from 'axios';
 import { Outlet, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Sidebar, MobileHeader, SidebarProvider, useSidebar } from '../components/Sidebar';
 import NotificationBell from '../components/NotificationBell';
 import { PermissionProvider } from '../context/PermissionContext';
+import { initPush } from '../lib/firebase';
 
 const DashboardContent = () => {
   const navigate = useNavigate();
@@ -31,6 +33,26 @@ const DashboardContent = () => {
     const id = setInterval(ping, 60_000);
     return () => clearInterval(id);
   }, []);
+
+  // Web Push initialisation (FCM). Runs once after login; quietly no-ops if
+  // permission is denied or the browser is unsupported.
+  useEffect(() => {
+    const tk = localStorage.getItem('token');
+    if (!tk) return;
+    initPush().catch(() => {});
+    // Foreground messages → toast. The FCM SW handles background notifications.
+    const onForeground = (e) => {
+      const { title, body, link } = e.detail || {};
+      toast.message(title || 'Yeni bildiriş', {
+        description: body,
+        action: link
+          ? { label: 'Aç', onClick: () => navigate(link) }
+          : undefined,
+      });
+    };
+    window.addEventListener('fcm-foreground', onForeground);
+    return () => window.removeEventListener('fcm-foreground', onForeground);
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
