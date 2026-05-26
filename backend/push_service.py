@@ -24,19 +24,42 @@ _initialized = False
 
 
 def init_firebase() -> bool:
-    """Initialize Firebase Admin SDK once. Returns True if usable, False otherwise."""
+    """Initialize Firebase Admin SDK once. Returns True if usable, False otherwise.
+
+    Two credential sources are supported (in priority order):
+      1. FIREBASE_ADMIN_JSON  — raw JSON content as a single env var (preferred
+         on Render / Heroku / Vercel where the file system is ephemeral and
+         secrets are managed via env vars)
+      2. FIREBASE_ADMIN_JSON_PATH — absolute path to the service-account JSON
+         on disk (suitable for self-hosted servers / docker volumes)
+    """
     global _initialized
     if _initialized:
         return True
     if firebase_admin._apps:
         _initialized = True
         return True
-    path = os.environ.get("FIREBASE_ADMIN_JSON_PATH")
-    if not path or not os.path.exists(path):
-        logger.warning("Firebase Admin SDK credentials not found at FIREBASE_ADMIN_JSON_PATH")
+
+    cred = None
+    raw_json = os.environ.get("FIREBASE_ADMIN_JSON", "").strip()
+    if raw_json:
+        try:
+            import json
+            info = json.loads(raw_json)
+            cred = credentials.Certificate(info)
+        except Exception as exc:
+            logger.error("Failed to parse FIREBASE_ADMIN_JSON env var: %s", exc)
+    if cred is None:
+        path = os.environ.get("FIREBASE_ADMIN_JSON_PATH")
+        if path and os.path.exists(path):
+            try:
+                cred = credentials.Certificate(path)
+            except Exception as exc:
+                logger.error("Failed to read FIREBASE_ADMIN_JSON_PATH: %s", exc)
+    if cred is None:
+        logger.warning("Firebase Admin credentials not configured (set FIREBASE_ADMIN_JSON or FIREBASE_ADMIN_JSON_PATH)")
         return False
     try:
-        cred = credentials.Certificate(path)
         firebase_admin.initialize_app(cred)
         _initialized = True
         logger.info("Firebase Admin SDK initialized")
