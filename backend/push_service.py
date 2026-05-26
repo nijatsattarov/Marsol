@@ -111,6 +111,17 @@ async def send_push(
         elif public_app_url.startswith("https://"):
             abs_link = f"{public_app_url}{link if link.startswith('/') else '/' + link}"
 
+    # iOS Safari + Apple Push (APNS via Web Push) requires ABSOLUTE HTTPS URLs
+    # for icon/badge. Relative paths like "/icon-192.png" work in Chrome but
+    # are silently dropped on iOS. Build absolute URLs when PUBLIC_APP_URL is
+    # configured.
+    if public_app_url.startswith("https://"):
+        icon_url = f"{public_app_url}/icon-192.png"
+        badge_url = f"{public_app_url}/favicon-64.png"
+    else:
+        icon_url = "/icon-192.png"
+        badge_url = "/favicon-64.png"
+
     for start in range(0, len(tokens), 500):
         batch = tokens[start : start + 500]
         webpush_fcm_opts = messaging.WebpushFCMOptions(link=abs_link) if abs_link else None
@@ -119,11 +130,16 @@ async def send_push(
             data=payload_data,
             tokens=batch,
             webpush=messaging.WebpushConfig(
+                # APNS urgency=high ensures iOS displays the notification
+                # immediately. Without it, Apple may batch/delay or drop the
+                # push entirely on low-power mode.
+                headers={"Urgency": "high", "TTL": "86400"},
                 notification=messaging.WebpushNotification(
                     title=title[:200],
                     body=body[:500],
-                    icon="/icon-192.png",
-                    badge="/favicon-64.png",
+                    icon=icon_url,
+                    badge=badge_url,
+                    require_interaction=False,
                 ),
                 fcm_options=webpush_fcm_opts,
             ),

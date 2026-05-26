@@ -22,13 +22,15 @@ const messaging = firebase.messaging();
 // Background message handler. Firebase automatically displays the notification
 // payload if present; we override to add icon + click-through link.
 messaging.onBackgroundMessage((payload) => {
-  const { title, body } = payload.notification || {};
+  const { title, body, icon, badge } = payload.notification || {};
   const data = payload.data || {};
   const notificationTitle = title || 'Marsol MMS';
+  // Resolve icons against the SW origin so iOS Safari/APNS accepts them
+  const origin = self.location.origin;
   const notificationOptions = {
     body: body || '',
-    icon: '/icon-192.png',
-    badge: '/favicon-64.png',
+    icon: icon || `${origin}/icon-192.png`,
+    badge: badge || `${origin}/favicon-64.png`,
     tag: data.task_id || data.conversation_id || data.note_id || 'mms',
     renotify: true,
     data,
