@@ -677,10 +677,24 @@ async def push_unsubscribe(payload: dict, current_user: dict = Depends(get_curre
 
 @api_router.post("/push/test")
 async def push_test(payload: dict = None, current_user: dict = Depends(get_current_user)):
-    """Send a sample push to the calling user's own devices — Settings UI uses this."""
+    """Send a sample push to the calling user's own devices — Settings UI uses this.
+
+    On failure the response includes the FCM-reported reason so the UI can
+    actually display *why* a push didn't go through (instead of "uğursuz: 1").
+    """
     title = (payload or {}).get("title") or "Marsol MMS — test bildirişi"
     body = (payload or {}).get("body") or f"Salam, {current_user.get('name', '')}! Push bildirişləri aktivdir."
-    result = await _push_to_users(db, [current_user.get("name", "")], title, body, link="/dashboard")
+    me = current_user.get("name", "")
+    rows = await db.push_tokens.find({"user_name": me}, {"_id": 0, "token": 1}).to_list(50)
+    tokens = list({r["token"] for r in rows if r.get("token")})
+    if not tokens:
+        return {"ok": True, "result": {"success": 0, "failure": 0, "invalid": [], "no_tokens": True}}
+    from push_service import send_push as _send_push
+    result = await _send_push(db, tokens, title, body, link="/dashboard")
+    # After auto-pruning invalid tokens, tell the UI how many devices are left so
+    # the user knows whether they need to re-subscribe.
+    remaining = await db.push_tokens.count_documents({"user_name": me})
+    result["remaining_devices"] = remaining
     return {"ok": True, "result": result}
 
 

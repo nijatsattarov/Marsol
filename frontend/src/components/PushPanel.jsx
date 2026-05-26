@@ -70,8 +70,15 @@ export default function PushPanel() {
         toast.warning('Bu istifadəçi üçün cihaz qeydiyyatda yoxdur. Əvvəlcə push aktivləşdirin.');
       } else if (res.success > 0) {
         toast.success(`Test push ${res.success} cihaza göndərildi`);
+      } else if (res.invalid && res.invalid.length > 0) {
+        const remaining = res.remaining_devices ?? 0;
+        toast.error(
+          `Köhnə token aşkar olundu və avtomatik silindi. ${remaining > 0 ? 'Yenidən "Test push" basın.' : 'Lütfən "Bu cihazda söndür" → səhifəni yeniləyin → "Aktivləşdir" basın.'}`,
+          { duration: 8000 }
+        );
+        refreshDevices();
       } else {
-        toast.error(`Push göndərilmədi (uğursuz: ${res.failure || 0})`);
+        toast.error(`Push göndərilmədi (uğursuz: ${res.failure || 0}). Render log-larını yoxlayın.`);
       }
     } catch (err) {
       toast.error('Test push uğursuz: ' + (err.message || 'naməlum'));

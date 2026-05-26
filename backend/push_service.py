@@ -119,11 +119,14 @@ async def send_push(
             for idx, r in enumerate(resp.responses):
                 if r.success:
                     continue
-                code = (r.exception and getattr(r.exception, "code", "") or "").lower()
+                err_str = str(r.exception or "")
+                err_code = (r.exception and getattr(r.exception, "code", "") or "").lower()
+                # Log the actual reason so we can debug from Render logs
+                logger.error("FCM token failure (%s...): %s [code=%s]", batch[idx][:20], err_str, err_code)
                 # Stale / invalid registration → drop from DB
-                if any(s in str(r.exception) for s in ("registration-token-not-registered", "invalid-registration-token", "INVALID_ARGUMENT")):
+                if any(s in err_str for s in ("registration-token-not-registered", "invalid-registration-token", "INVALID_ARGUMENT", "Requested entity was not found", "UNREGISTERED")):
                     invalid.append(batch[idx])
-                elif "404" in str(r.exception) or "not-found" in code:
+                elif "404" in err_str or "not-found" in err_code:
                     invalid.append(batch[idx])
         except Exception as exc:
             logger.error("FCM send failed: %s", exc)
