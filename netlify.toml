@@ -1,0 +1,42 @@
+[build]
+  base = "frontend"
+  command = "yarn install --frozen-lockfile && yarn build"
+  publish = "build"
+
+[build.environment]
+  NODE_VERSION = "20"
+  YARN_VERSION = "1.22.22"
+  CI = "true"
+  # Firebase Web API key (firebase-messaging-sw.js) is public-safe by design.
+  # See: https://firebase.google.com/docs/projects/api-keys
+  # Disable Netlify's secret scanner for this known-public configuration.
+  SECRETS_SCAN_OMIT_KEYS = "REACT_APP_FIREBASE_API_KEY,REACT_APP_FIREBASE_APP_ID,REACT_APP_FIREBASE_MESSAGING_SENDER_ID,REACT_APP_FIREBASE_VAPID_KEY"
+  SECRETS_SCAN_OMIT_PATHS = "public/firebase-messaging-sw.js,build/firebase-messaging-sw.js,build/static/**"
+
+# SPA — every non-asset request returns index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Service workers must NEVER be cached aggressively
+[[headers]]
+  for = "/service-worker.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/firebase-messaging-sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+# PWA icons — long cache OK (hashed assets)
+[[headers]]
+  for = "/icon-*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
