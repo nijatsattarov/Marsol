@@ -18,7 +18,10 @@ const DashboardContent = () => {
     }
   }, [navigate]);
 
-  // System session heartbeat — fires every minute so server can compute active duration
+  // System session heartbeat — fires every minute so server can compute active duration.
+  // Also performs sliding-window JWT refresh: when the heartbeat response includes a
+  // new `access_token`, we swap it into localStorage so the session never expires
+  // as long as the user opens the app at least once within the refresh window.
   useEffect(() => {
     const ping = () => {
       const tk = localStorage.getItem('token');
@@ -26,6 +29,11 @@ const DashboardContent = () => {
       axios
         .post(`${process.env.REACT_APP_BACKEND_URL}/api/auth/heartbeat`, {}, {
           headers: { Authorization: `Bearer ${tk}` },
+        })
+        .then((res) => {
+          if (res?.data?.access_token) {
+            try { localStorage.setItem('token', res.data.access_token); } catch (_) { /* quota */ }
+          }
         })
         .catch(() => {});
     };

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -116,7 +116,7 @@ db = client[os.environ.get('DB_NAME', 'marsol_db')]
 # JWT Settings
 SECRET_KEY = os.environ.get('SECRET_KEY', 'marsol-secret-key-2024')
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 90  # 90 days — long-lived session for PWAs
 
 security = HTTPBearer()
 
@@ -619,16 +619,44 @@ async def logout(current_user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 @api_router.post("/auth/heartbeat")
-async def heartbeat(current_user: dict = Depends(get_current_user)):
+async def heartbeat(current_user: dict = Depends(get_current_user), request: Request = None):
     """Bumps last_active_at on the latest open session so we can compute
-    accurate active duration even when the user closes the tab without logout."""
+    accurate active duration even when the user closes the tab without logout.
+
+    Also performs a SLIDING-WINDOW token refresh: when the caller's JWT has
+    less than half of its lifetime remaining, we mint a fresh long-lived
+    token. The frontend swaps it into localStorage so PWAs effectively stay
+    logged in indefinitely as long as the user opens the app at least once
+    every 45 days (half of the 90-day window).
+    """
     now = datetime.now(timezone.utc).isoformat()
     await db.user_sessions.update_one(
         {"user_id": current_user["id"], "logout_at": None},
         {"$set": {"last_active_at": now}},
         upsert=False,
     )
-    return {"ok": True, "ts": now}
+    new_token: Optional[str] = None
+    try:
+        auth_header = request.headers.get("Authorization", "") if request else ""
+        if auth_header.lower().startswith("bearer "):
+            tok = auth_header.split(None, 1)[1]
+            decoded = jwt.decode(tok, SECRET_KEY, algorithms=[ALGORITHM])
+            exp_ts = decoded.get("exp")
+            if exp_ts:
+                # Refresh once the token's remaining lifetime drops below 50%
+                # of the full window.
+                from datetime import datetime as _dt, timezone as _tz
+                remaining = exp_ts - _dt.now(_tz.utc).timestamp()
+                full = ACCESS_TOKEN_EXPIRE_MINUTES * 60
+                if remaining < full * 0.5:
+                    new_token = create_access_token({"sub": current_user["id"], "email": current_user["email"]})
+    except Exception:
+        # Heartbeat must never 5xx — token refresh is best effort.
+        pass
+    resp: Dict[str, Any] = {"ok": True, "ts": now}
+    if new_token:
+        resp["access_token"] = new_token
+    return resp
 
 @api_router.get("/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
