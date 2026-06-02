@@ -478,47 +478,72 @@ async def apply_scope(query: dict, user: dict, module: str) -> dict:
     """
     if user.get("role") == "admin":
         return query
-    # Tenant (Müəssisə) isolation — applies BEFORE the per-module scope so the
-    # downstream $or clauses can be safely composed on top of it.
-    tenant = _user_tenant(user)
-    if tenant and module in TENANT_MODULES:
-        query = _merge_filter(query, {"marsol_company": tenant})
     scopes = await get_user_scopes(user)
     # Default scope per module is "own" for non-admin users when the role
     # hasn't explicitly configured it. This prevents legacy roles (no scopes
     # field) from accidentally exposing data system-wide. Admins are
     # short-circuited above.
     scope = scopes.get(module, "own")
-    if scope == "all":
-        return query
     fields = SCOPE_FIELDS.get(module, [])
-    if not fields:
-        return query
     user_name = user.get("name", "")
+    tenant = _user_tenant(user)
+    tenant_active = bool(tenant and module in TENANT_MODULES)
+
+    # Build "personal involvement" clauses — records where the user is
+    # explicitly named (assignee/curator/created_by/…). These records remain
+    # visible to the user EVEN IF the record sits on a different müəssisə.
+    own_clauses = [{f: user_name} for f in fields] if (fields and user_name) else []
+
+    if scope == "own":
+        # Pure ownership — tenant filter is implicit (user is named ⇒ relevant).
+        if not own_clauses:
+            return query
+        if "$or" in query or "$and" in query:
+            return {"$and": [query, {"$or": own_clauses}]}
+        new_query = dict(query)
+        new_query["$or"] = own_clauses
+        return new_query
+
     if scope == "department":
-        # Find all users sharing this department (fallback to "own" if no department set)
         my_dept = (user.get("department") or "").strip()
-        if not my_dept:
-            scope = "own"
-        else:
+        dept_clauses = []
+        if my_dept and fields:
             dept_users = await db.users.find({"department": my_dept}, {"_id": 0, "name": 1}).to_list(500)
             names = [u.get("name") for u in dept_users if u.get("name")]
             if user_name and user_name not in names:
                 names.append(user_name)
-            if not names:
-                names = [user_name]
-            clauses = [{f: {"$in": names}} for f in fields]
-            if "$or" in query or "$and" in query:
-                return {"$and": [query, {"$or": clauses}]}
-            new_query = dict(query)
-            new_query["$or"] = clauses
-            return new_query
-    # scope == "own"
-    clauses = [{f: user_name} for f in fields]
+            if names:
+                dept_clauses = [{f: {"$in": names}} for f in fields]
+        # Compose: (department records restricted by tenant)  OR  (own records cross-tenant)
+        outer = []
+        if dept_clauses:
+            inner = {"$or": dept_clauses}
+            if tenant_active:
+                inner = {"$and": [{"marsol_company": tenant}, inner]}
+            outer.append(inner)
+        # Add own_clauses individually so $or stays flat (cheap to index)
+        outer.extend(own_clauses)
+        if not outer:
+            return query
+        clause = {"$or": outer} if len(outer) > 1 else outer[0]
+        if "$or" in query or "$and" in query:
+            return {"$and": [query, clause]}
+        new_query = dict(query)
+        new_query.update(clause if "$or" not in clause else {"$or": clause["$or"]})
+        if "$and" in clause:
+            new_query["$and"] = clause["$and"]
+        return new_query
+
+    # scope == "all"
+    # See everyone in my müəssisə + my personal cross-tenant records.
+    if not tenant_active:
+        return query
+    outer = [{"marsol_company": tenant}] + own_clauses
+    clause = {"$or": outer} if len(outer) > 1 else {"marsol_company": tenant}
     if "$or" in query or "$and" in query:
-        return {"$and": [query, {"$or": clauses}]}
+        return {"$and": [query, clause]}
     new_query = dict(query)
-    new_query["$or"] = clauses
+    new_query.update(clause)
     return new_query
 
 
@@ -526,16 +551,7 @@ async def assert_scope_ownership(user: dict, module: str, record: Optional[dict]
     """Raise 403 if user has 'own'/'department' scope and record is not in their bucket."""
     if user.get("role") == "admin" or not record:
         return
-    # Tenant isolation first
-    tenant = _user_tenant(user)
-    if tenant and module in TENANT_MODULES:
-        rec_tenant = (record.get("marsol_company") or "").strip()
-        if rec_tenant and rec_tenant != tenant:
-            raise HTTPException(status_code=403, detail="Bu qeyd başqa müəssisəyə aiddir")
-    scopes = await get_user_scopes(user)
-    scope = scopes.get(module, "own")
-    if scope == "all":
-        return
+
     fields = SCOPE_FIELDS.get(module, [])
     user_name = user.get("name", "")
 
@@ -544,6 +560,23 @@ async def assert_scope_ownership(user: dict, module: str, record: Optional[dict]
             return user_name in val
         return val == user_name
 
+    # User is explicitly named in the record → ALWAYS allowed (their own item,
+    # even if it sits on a different müəssisə — cross-tenant assignment case)
+    is_personal = any(_field_matches(record.get(f)) for f in fields) if fields else False
+    if is_personal:
+        return
+
+    # Tenant isolation — applied only for non-personal records
+    tenant = _user_tenant(user)
+    if tenant and module in TENANT_MODULES:
+        rec_tenant = (record.get("marsol_company") or "").strip()
+        if rec_tenant and rec_tenant != tenant:
+            raise HTTPException(status_code=403, detail="Bu qeyd başqa müəssisəyə aiddir")
+
+    scopes = await get_user_scopes(user)
+    scope = scopes.get(module, "own")
+    if scope == "all":
+        return
     if scope == "own":
         if any(_field_matches(record.get(f)) for f in fields):
             return
