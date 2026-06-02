@@ -64,6 +64,7 @@ export default function Tasks() {
   const [assemblies, setAssemblies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [savingTask, setSavingTask] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [filters, setFilters] = useState({ status: 'all', priority: 'all', assignee: '', responsible_person: '', date_from: '', date_to: '' });
   const [showFilters, setShowFilters] = useState(false);
@@ -166,9 +167,11 @@ export default function Tasks() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (savingTask) return; // prevent double-submit (rapid double-click / Enter spam)
     const aArr = toAssigneeArray(formData.assignee);
     if (aArr.length === 0) { toast.error('Ən azı 1 icraçı əməkdaş seçin'); return; }
     if (!formData.responsible_person?.trim()) { toast.error('Məsul şəxs məcburidir'); return; }
+    setSavingTask(true);
     const payload = { ...formData, assignee: aArr };
     try {
       if (editingTask) {
@@ -179,13 +182,14 @@ export default function Tasks() {
       } else {
         const { data: created } = await axios.post(`${API}/tasks`, payload, { headers });
         toast.success('Tapşırıq əlavə edildi');
-        // Optimistic insert — prepend the new task so it appears on the board immediately
-        setTasks(prev => [created, ...prev]);
+        // Dedupe optimistic insert — guard against state updaters that already added the task
+        setTasks(prev => prev.some(t => t.id === created.id) ? prev : [created, ...prev]);
       }
       setShowModal(false);
       setEditingTask(null);
       setFormData(initialFormData);
     } catch (error) { toast.error('Xəta baş verdi'); }
+    finally { setSavingTask(false); }
   };
 
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -1105,8 +1109,10 @@ export default function Tasks() {
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Ləğv et</Button>
-              <Button type="submit" className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold" data-testid="task-submit-btn">
-                {editingTask ? 'Yadda saxla' : 'Əlavə et'}
+              <Button type="submit" disabled={savingTask} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-bold disabled:opacity-60 disabled:cursor-not-allowed" data-testid="task-submit-btn">
+                {savingTask ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saxlanılır...</>
+                ) : (editingTask ? 'Yadda saxla' : 'Əlavə et')}
               </Button>
             </div>
           </form>

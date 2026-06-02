@@ -2454,15 +2454,34 @@ async def get_tasks(
 
 @api_router.post("/tasks")
 async def create_task(task_data: TaskCreate, current_user: dict = Depends(check_permission("tasks", "write"))):
+    # Idempotency guard: if the SAME user submitted the SAME task name within the
+    # last 10 seconds, return the existing record instead of inserting a duplicate.
+    # Protects against double-clicks, retried POSTs (e.g. flaky 3G), and React
+    # StrictMode dev double-renders.
+    creator_name = current_user.get("name", "")
+    now_dt = datetime.now(timezone.utc)
+    cutoff = (now_dt - timedelta(seconds=10)).isoformat()
+    dupe = await db.tasks.find_one(
+        {
+            "created_by": creator_name,
+            "task_name": task_data.task_name,
+            "created_at": {"$gte": cutoff},
+        },
+        {"_id": 0},
+    )
+    if dupe:
+        logging.info("Duplicate task suppressed for %s: %s", creator_name, task_data.task_name)
+        return dupe
+
     count = await db.tasks.count_documents({})
     task_code = f"T-{str(count + 1).zfill(3)}"
     task_doc = {
         "id": str(uuid.uuid4()),
         "task_code": task_code,
         **task_data.model_dump(),
-        "created_by": current_user.get("name", ""),
+        "created_by": creator_name,
         "creator_department": current_user.get("department", "") or "",
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "created_at": now_dt.isoformat()
     }
     await db.tasks.insert_one(task_doc)
     task_doc.pop("_id", None)
