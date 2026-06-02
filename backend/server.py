@@ -5273,6 +5273,29 @@ async def create_marsol_company(data: dict, current_user: dict = Depends(get_cur
     doc.pop("_id", None)
     return doc
 
+@api_router.post("/settings/tenant/repair")
+async def repair_tenant_assignments(current_user: dict = Depends(get_current_user)):
+    """Admin-only: re-run the smart tenant backfill. Repairs legacy records
+    whose tenant got mis-assigned to the default by looking up the creator's
+    actual müəssisə. Useful if the production data shows hidden legacy items.
+    """
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Yalnız admin")
+    # Clear the v2 flag so the smart re-backfill re-scans every record.
+    collections = ["tasks", "meetings", "companies", "sales_leads", "assemblies", "project_events", "notes", "files"]
+    for c in collections:
+        await db[c].update_many({}, {"$unset": {"tenant_backfill_v2": ""}})
+    first = await db.marsol_companies.find_one({}, {"_id": 0, "name": 1})
+    default_name = (first.get("name") if first else None) or "Marsol Group"
+    await _smart_retenant_records(default_name)
+    # Count of records per tenant after repair
+    summary = {}
+    for c in collections:
+        pipeline = [{"$group": {"_id": "$marsol_company", "count": {"$sum": 1}}}]
+        rows = await db[c].aggregate(pipeline).to_list(50)
+        summary[c] = {r["_id"] or "_none_": r["count"] for r in rows}
+    return {"message": "Tenant repair tamamlandı", "summary": summary}
+
 @api_router.delete("/settings/marsol-companies/{item_id}")
 async def delete_marsol_company(item_id: str, current_user: dict = Depends(get_current_user)):
     await db.marsol_companies.delete_one({"id": item_id})
@@ -9109,6 +9132,77 @@ async def _backfill_marsol_company_tenant():
         )
         if res.modified_count:
             logging.info("Tenant backfill: %s %s → '%s'", res.modified_count, coll_name, default_name)
+
+    # 4. Smart re-backfill — repair legacy records whose tenant got mis-assigned
+    # to the default. We look up the creator's actual tenant and override.
+    # Idempotent: skips records flagged `tenant_backfill_v2: True`.
+    await _smart_retenant_records(default_name)
+
+
+async def _smart_retenant_records(default_name: str):
+    """For each tenant-aware collection, find records whose `marsol_company` is
+    still the global default but whose creator belongs to a DIFFERENT müəssisə.
+    Update the record's tenant to match its creator. Idempotent via the flag
+    `tenant_backfill_v2`.
+    """
+    # Build user name → tenant map (only users on non-default tenants — those
+    # are the candidates whose legacy data may currently be hidden)
+    user_tenant_map = {}
+    cursor = db.users.find({"marsol_company": {"$nin": [None, "", default_name]}}, {"_id": 0, "name": 1, "marsol_company": 1})
+    async for u in cursor:
+        nm = (u.get("name") or "").strip()
+        if nm:
+            user_tenant_map[nm] = u.get("marsol_company")
+
+    if not user_tenant_map:
+        return
+
+    creator_field_by_collection = {
+        "tasks": ["created_by", "assignee", "responsible_person"],
+        "meetings": ["created_by", "employee", "meeting_setter"],
+        "companies": ["created_by", "curator"],
+        "sales_leads": ["created_by", "curator"],
+        "assemblies": ["created_by", "curator"],
+        "project_events": ["created_by"],
+        "notes": ["created_by"],
+        "files": ["uploaded_by", "owner"],
+    }
+
+    total_repaired = 0
+    for coll_name, fields in creator_field_by_collection.items():
+        coll = db[coll_name]
+        # Only candidates: currently default-tenant AND not yet repaired
+        cursor = coll.find(
+            {"marsol_company": default_name, "tenant_backfill_v2": {"$ne": True}},
+            {"_id": 0, "id": 1, **{f: 1 for f in fields}},
+        )
+        async for rec in cursor:
+            new_tenant = None
+            for f in fields:
+                v = rec.get(f)
+                # assignee/responsible_person may be a list (multi-assignee)
+                candidates = v if isinstance(v, list) else [v]
+                for cand in candidates:
+                    cand_name = (str(cand).strip() if cand else "")
+                    if cand_name and cand_name in user_tenant_map:
+                        new_tenant = user_tenant_map[cand_name]
+                        break
+                if new_tenant:
+                    break
+            update = {"tenant_backfill_v2": True}
+            if new_tenant and new_tenant != default_name:
+                update["marsol_company"] = new_tenant
+            await coll.update_one({"id": rec.get("id")}, {"$set": update})
+            if new_tenant and new_tenant != default_name:
+                total_repaired += 1
+        # Mark records that already had a non-default tenant as v2 too, to
+        # avoid re-scanning on every restart.
+        await coll.update_many(
+            {"marsol_company": {"$ne": default_name}, "tenant_backfill_v2": {"$ne": True}},
+            {"$set": {"tenant_backfill_v2": True}},
+        )
+    if total_repaired:
+        logging.info("Tenant smart re-backfill: %s records re-assigned by creator tenant", total_repaired)
 
 
 @app.on_event("startup")
