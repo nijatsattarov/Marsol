@@ -413,6 +413,39 @@ SCOPE_FIELDS = {
     "organization": ["created_by"],
 }
 
+# Modules that participate in Müəssisə (multi-tenant) isolation. Each entry maps
+# to the corresponding MongoDB collection field used as the tenant marker.
+TENANT_MODULES = {
+    "members", "companies", "tasks", "meetings", "sales",
+    "projects", "assembly", "files", "notes", "organization",
+}
+
+
+def _user_tenant(user: dict) -> Optional[str]:
+    """Return the active müəssisə name for `user`, or None if no filter should be
+    applied. Admin users are always cross-tenant (return None)."""
+    if not user or user.get("role") == "admin":
+        return None
+    val = (user.get("marsol_company") or "").strip()
+    return val or None
+
+
+def _merge_filter(query: dict, extra: dict) -> dict:
+    """Safely merge `extra` filter clauses into `query` without clobbering keys."""
+    if not extra:
+        return query
+    if not query:
+        return dict(extra)
+    out = dict(query)
+    for k, v in extra.items():
+        if k not in out:
+            out[k] = v
+        else:
+            # key collision → wrap into $and
+            out = {"$and": [out, {k: v}]}
+            break
+    return out
+
 
 def _as_name_list(value) -> list:
     """Normalise a value that may be a string or a list/tuple into a clean list of trimmed names."""
@@ -438,9 +471,18 @@ async def apply_scope(query: dict, user: dict, module: str) -> dict:
         - "all"        → no filter (everyone visible)
         - "own"        → only records the user is involved in (assignee/curator/...)
         - "department" → records owned by users in the same department as `user`
+
+    Additionally, when the module participates in multi-tenant (Müəssisə)
+    isolation and the user has a `marsol_company` assigned, records are
+    filtered to that tenant. Admin users bypass both scope and tenant filters.
     """
     if user.get("role") == "admin":
         return query
+    # Tenant (Müəssisə) isolation — applies BEFORE the per-module scope so the
+    # downstream $or clauses can be safely composed on top of it.
+    tenant = _user_tenant(user)
+    if tenant and module in TENANT_MODULES:
+        query = _merge_filter(query, {"marsol_company": tenant})
     scopes = await get_user_scopes(user)
     # Default scope per module is "own" for non-admin users when the role
     # hasn't explicitly configured it. This prevents legacy roles (no scopes
@@ -484,6 +526,12 @@ async def assert_scope_ownership(user: dict, module: str, record: Optional[dict]
     """Raise 403 if user has 'own'/'department' scope and record is not in their bucket."""
     if user.get("role") == "admin" or not record:
         return
+    # Tenant isolation first
+    tenant = _user_tenant(user)
+    if tenant and module in TENANT_MODULES:
+        rec_tenant = (record.get("marsol_company") or "").strip()
+        if rec_tenant and rec_tenant != tenant:
+            raise HTTPException(status_code=403, detail="Bu qeyd başqa müəssisəyə aiddir")
     scopes = await get_user_scopes(user)
     scope = scopes.get(module, "own")
     if scope == "all":
@@ -1033,6 +1081,9 @@ async def create_company(company_data: dict, current_user: dict = Depends(check_
         **company_data,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
+    # Tenant isolation: auto-set marsol_company from creating user if not provided
+    if not (company_doc.get("marsol_company") or "").strip():
+        company_doc["marsol_company"] = (current_user.get("marsol_company") or "").strip()
     # Calculate debt
     total = company_doc.get("total_amount", 0) or 0
     paid = company_doc.get("paid_amount", 0) or 0
@@ -2481,6 +2532,7 @@ async def create_task(task_data: TaskCreate, current_user: dict = Depends(check_
         **task_data.model_dump(),
         "created_by": creator_name,
         "creator_department": current_user.get("department", "") or "",
+        "marsol_company": (current_user.get("marsol_company") or "").strip(),
         "created_at": now_dt.isoformat()
     }
     await db.tasks.insert_one(task_doc)
@@ -2785,6 +2837,7 @@ async def create_meeting(data: dict, current_user: dict = Depends(check_permissi
         "notes": data.get("notes", ""),
         "reminders": data.get("reminders", []),
         "created_by": current_user.get("name", ""),
+        "marsol_company": (current_user.get("marsol_company") or "").strip(),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.meetings.insert_one(meeting_doc)
@@ -3077,6 +3130,7 @@ async def create_project_event(data: dict, current_user: dict = Depends(check_pe
         "price_per_sqm": data.get("price_per_sqm"),
         "total_price": data.get("total_price"),
         "created_by": current_user.get("name", ""),
+        "marsol_company": (current_user.get("marsol_company") or "").strip(),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.project_events.insert_one(doc)
@@ -3506,7 +3560,7 @@ async def create_sales_lead(data: dict, current_user: dict = Depends(check_permi
         "hall_number": data.get("hall_number", ""),
         "total_amount": data.get("total_amount"),
         "participant_count": data.get("participant_count"),
-        "marsol_company": data.get("marsol_company", ""),
+        "marsol_company": (data.get("marsol_company") or current_user.get("marsol_company") or "").strip(),
         "curator": data.get("curator") or current_user.get("name", ""),
         "created_by": current_user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()
@@ -3730,6 +3784,7 @@ async def create_member(data: dict, current_user: dict = Depends(check_permissio
         "joined_project": data.get("project", "Üzvlük"),
         "status": data.get("status", "Aktiv"),
         "curator": current_user.get("name", ""),
+        "marsol_company": (current_user.get("marsol_company") or "").strip(),
         "registration_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -3956,6 +4011,7 @@ async def create_assembly(data: dict, current_user: dict = Depends(check_permiss
         "next_assembly_date": data.get("next_assembly_date", ""),
         "decisions": data.get("decisions", []),
         "created_by": current_user.get("name", ""),
+        "marsol_company": (current_user.get("marsol_company") or "").strip(),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.assemblies.insert_one(doc)
@@ -9012,12 +9068,59 @@ app.add_middleware(
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+
+async def _backfill_marsol_company_tenant():
+    """One-time backfill so multi-tenant filtering doesn't accidentally hide
+    existing data:
+
+    1. Ensure at least one entry exists in `marsol_companies` (default "Marsol Group").
+    2. Users with empty/None `marsol_company` → set to the default tenant name.
+    3. Records in tenant-aware collections missing `marsol_company` → backfill
+       with the default tenant name.
+    """
+    # 1. Default tenant
+    first = await db.marsol_companies.find_one({}, {"_id": 0, "name": 1})
+    if not first:
+        default_doc = {
+            "id": str(uuid.uuid4()),
+            "name": "Marsol Group",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.marsol_companies.insert_one(default_doc)
+        default_name = "Marsol Group"
+    else:
+        default_name = first.get("name") or "Marsol Group"
+
+    # 2. Backfill users
+    u_res = await db.users.update_many(
+        {"$or": [{"marsol_company": {"$exists": False}}, {"marsol_company": None}, {"marsol_company": ""}]},
+        {"$set": {"marsol_company": default_name}},
+    )
+    if u_res.modified_count:
+        logging.info("Tenant backfill: %s users → '%s'", u_res.modified_count, default_name)
+
+    # 3. Backfill records across tenant-aware collections
+    collections = ["companies", "tasks", "meetings", "sales_leads", "assemblies", "project_events", "notes", "files"]
+    for coll_name in collections:
+        coll = db[coll_name]
+        res = await coll.update_many(
+            {"$or": [{"marsol_company": {"$exists": False}}, {"marsol_company": None}, {"marsol_company": ""}]},
+            {"$set": {"marsol_company": default_name}},
+        )
+        if res.modified_count:
+            logging.info("Tenant backfill: %s %s → '%s'", res.modified_count, coll_name, default_name)
+
+
 @app.on_event("startup")
 async def startup_backfills():
     try:
         await _backfill_company_display_ids()
     except Exception as e:
         logging.warning("Company display_id backfill failed: %s", e)
+    try:
+        await _backfill_marsol_company_tenant()
+    except Exception as e:
+        logging.warning("Marsol company tenant backfill failed: %s", e)
 
 
 @app.on_event("shutdown")
