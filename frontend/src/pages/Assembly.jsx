@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import {
   Plus, Search, Loader2, Pencil, Trash2, X, Download,
@@ -260,7 +260,10 @@ function DetailTaskRow({ t }) {
 export default function Assembly() {
   const [assemblies, setAssemblies] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [users, setUsers] = useState([]);
   const [options, setOptions] = useState({ departments: [] });
+  const [marsolCompanies, setMarsolCompanies] = useState([]);
+  const [filterMarsol, setFilterMarsol] = useState('all');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -278,14 +281,18 @@ export default function Assembly() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [aRes, eRes, oRes] = await Promise.all([
+      const [aRes, eRes, oRes, uRes, mcRes] = await Promise.all([
         axios.get(`${API}/assemblies`, { headers }),
         axios.get(`${API}/employees`, { headers }),
         axios.get(`${API}/options/all`, { headers }),
+        axios.get(`${API}/settings/users`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/settings/marsol-companies`, { headers }).catch(() => ({ data: [] })),
       ]);
       setAssemblies(aRes.data);
       setEmployees(eRes.data);
       setOptions(oRes.data);
+      setUsers(uRes.data || []);
+      setMarsolCompanies(mcRes.data || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, []);
@@ -522,6 +529,7 @@ export default function Assembly() {
 
   const filtered = assemblies.filter(a => {
     if (filterDept !== 'all' && a.department !== filterDept) return false;
+    if (filterMarsol !== 'all' && (a.marsol_company || '') !== filterMarsol) return false;
     if (filterDateFrom && (a.created_at || '') < filterDateFrom) return false;
     if (filterDateTo && (a.created_at || '') > filterDateTo + 'T23:59:59') return false;
     if (searchTerm) {
@@ -537,7 +545,23 @@ export default function Assembly() {
   });
 
   const departments = options.departments || [];
-  const employeeNames = [...new Set(employees.map(e => `${e.first_name || ''} ${e.last_name || ''}`.trim()).filter(Boolean))];
+  // Combine HR employees + system users (deduped by name) so every active user
+  // — even those not yet in the HR roster — can be tagged in iclas tapşırıqları.
+  const employeeNames = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    const push = (nm) => {
+      const v = (nm || '').toString().trim();
+      if (!v) return;
+      const key = v.toLocaleLowerCase('az');
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(v);
+    };
+    employees.forEach(e => push(`${e.first_name || ''} ${e.last_name || ''}`.trim()));
+    users.forEach(u => { if ((u.status || 'Aktiv') === 'Aktiv') push(u.name); });
+    return out.sort((a, b) => a.localeCompare(b, 'az'));
+  }, [employees, users]);
 
   const getResponsibles = (a) => [...new Set([
     ...(a.agendas || []).flatMap(ag => (ag.tasks || []).flatMap(t => [...(t.responsible_persons || []), ...(t.assignees || [])])),
@@ -616,6 +640,13 @@ export default function Assembly() {
             <SelectContent>
               <SelectItem value="all">Bütün şöbələr</SelectItem>
               {departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterMarsol} onValueChange={setFilterMarsol}>
+            <SelectTrigger className="w-[160px] text-sm h-9" data-testid="filter-marsol-company"><SelectValue placeholder="Müəssisə" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Bütün müəssisələr</SelectItem>
+              {marsolCompanies.map(mc => <SelectItem key={mc.id} value={mc.name}>{mc.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} className="w-[140px] text-sm h-9" data-testid="filter-date-from" />

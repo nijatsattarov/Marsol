@@ -302,8 +302,10 @@ class TaskCreate(BaseModel):
     task_name: str
     department: Optional[str] = ""
     assignee: Optional[Union[str, List[str]]] = ""
-    responsible_person: Optional[str] = ""
+    responsible_person: Optional[Union[str, List[str]]] = ""
     priority: str  # Yüksək, Orta, Aşağı
+    difficulty: Optional[str] = ""  # Çətin / Orta / Asan
+    estimated_duration: Optional[str] = ""  # "2 saat", "3 gün", etc.
     start_date: Optional[str] = ""
     end_date: Optional[str] = ""
     related_object_type: Optional[str] = ""
@@ -1454,6 +1456,226 @@ async def delete_employee(employee_id: str, current_user: dict = Depends(check_p
         raise HTTPException(status_code=404, detail="Əməkdaş tapılmadı")
     return {"message": "Əməkdaş silindi"}
 
+# ==================== HR — KPI (TAPŞIRIQ HESABATI) ====================
+
+def _date_in_range(iso_str: str, start: Optional[str], end: Optional[str]) -> bool:
+    """Compare an ISO date string against optional YYYY-MM-DD bounds (inclusive)."""
+    if not iso_str:
+        return False
+    d = iso_str[:10]
+    if start and d < start:
+        return False
+    if end and d > end:
+        return False
+    return True
+
+
+@api_router.get("/hr/kpi")
+async def hr_kpi(
+    period: Optional[str] = "month",  # day | week | month | year | custom
+    start: Optional[str] = None,       # YYYY-MM-DD (used when period=custom)
+    end: Optional[str] = None,
+    department: Optional[str] = None,
+    marsol_company: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: dict = Depends(check_permission("hr", "read")),
+):
+    """Aggregated KPI report — per user / department / müəssisə task counts.
+
+    Returns three breakdowns sharing the same filter window:
+      - users:   [{name, department, marsol_company, total, completed, in_progress, pending, overdue, completion_rate}]
+      - departments: same shape grouped by department
+      - companies:   grouped by müəssisə
+      - totals: overall counts for the filtered window
+    """
+    from datetime import datetime as _dt, timedelta as _td
+
+    today = _dt.now(timezone.utc).date()
+    if period == "day":
+        s_date = today.isoformat()
+        e_date = today.isoformat()
+    elif period == "week":
+        s_date = (today - _td(days=today.weekday())).isoformat()
+        e_date = today.isoformat()
+    elif period == "month":
+        s_date = today.replace(day=1).isoformat()
+        e_date = today.isoformat()
+    elif period == "year":
+        s_date = today.replace(month=1, day=1).isoformat()
+        e_date = today.isoformat()
+    elif period == "all":
+        s_date = None
+        e_date = None
+    else:  # custom
+        s_date = start
+        e_date = end
+
+    # Load users keyed by name (so we can join task assignee/responsible)
+    users_db = await db.users.find({}, {"_id": 0, "name": 1, "department": 1, "marsol_company": 1, "status": 1}).to_list(1000)
+    user_by_name = {u["name"]: u for u in users_db if u.get("name")}
+
+    # Load tasks (admin = unscoped, others = apply_scope so KPI respects RBAC)
+    q = await apply_scope({}, current_user, "tasks")
+    tasks_all = await db.tasks.find(q, {"_id": 0}).to_list(20000)
+
+    # Filter by date window (created_at OR start_date — pick created_at)
+    def in_window(t):
+        if not s_date and not e_date:
+            return True
+        return _date_in_range(t.get("created_at") or "", s_date, e_date)
+
+    tasks_window = [t for t in tasks_all if in_window(t)]
+
+    if department and department != "all":
+        tasks_window = [t for t in tasks_window if (t.get("department") or "") == department]
+    if marsol_company and marsol_company != "all":
+        tasks_window = [t for t in tasks_window if (t.get("marsol_company") or "") == marsol_company]
+
+    def _stat_row():
+        return {"total": 0, "completed": 0, "in_progress": 0, "pending": 0, "overdue": 0}
+
+    today_iso = today.isoformat()
+
+    def _accumulate(bucket: dict, key: str, t: dict, meta: dict):
+        row = bucket.setdefault(key, {**_stat_row(), **meta})
+        row["total"] += 1
+        st = (t.get("status") or "").strip()
+        if st == "Tamamlandı":
+            row["completed"] += 1
+        elif st == "İcradadır":
+            row["in_progress"] += 1
+        else:
+            row["pending"] += 1
+        end_d = (t.get("end_date") or "")[:10]
+        if end_d and end_d < today_iso and st != "Tamamlandı":
+            row["overdue"] += 1
+
+    users_bucket: dict = {}
+    dept_bucket: dict = {}
+    company_bucket: dict = {}
+
+    for t in tasks_window:
+        # gather every distinct person tagged on the task
+        persons = set()
+        for nm in _as_name_list(t.get("assignee")):
+            if nm:
+                persons.add(nm.strip())
+        for nm in _as_name_list(t.get("responsible_person")):
+            if nm:
+                persons.add(nm.strip())
+        # Per-user breakdown
+        for p in persons:
+            u = user_by_name.get(p) or {}
+            meta = {
+                "name": p,
+                "department": u.get("department") or t.get("department") or "—",
+                "marsol_company": u.get("marsol_company") or t.get("marsol_company") or "—",
+            }
+            _accumulate(users_bucket, p, t, meta)
+        # Per-department & per-company breakdowns (task-level)
+        dep = (t.get("department") or "—").strip() or "—"
+        _accumulate(dept_bucket, dep, t, {"name": dep})
+        mc = (t.get("marsol_company") or "—").strip() or "—"
+        _accumulate(company_bucket, mc, t, {"name": mc})
+
+    def _finalize(bucket):
+        rows = list(bucket.values())
+        for r in rows:
+            r["completion_rate"] = round(r["completed"] * 100 / r["total"], 1) if r["total"] else 0
+        rows.sort(key=lambda x: (-x["total"], x["name"]))
+        return rows
+
+    users_rows = _finalize(users_bucket)
+    if search:
+        s = search.strip().lower()
+        users_rows = [r for r in users_rows if s in r["name"].lower() or s in r["department"].lower() or s in r["marsol_company"].lower()]
+
+    totals = _stat_row()
+    for t in tasks_window:
+        totals["total"] += 1
+        st = (t.get("status") or "").strip()
+        if st == "Tamamlandı":
+            totals["completed"] += 1
+        elif st == "İcradadır":
+            totals["in_progress"] += 1
+        else:
+            totals["pending"] += 1
+        end_d = (t.get("end_date") or "")[:10]
+        if end_d and end_d < today_iso and st != "Tamamlandı":
+            totals["overdue"] += 1
+    totals["completion_rate"] = round(totals["completed"] * 100 / totals["total"], 1) if totals["total"] else 0
+
+    return {
+        "period": period,
+        "start": s_date,
+        "end": e_date,
+        "totals": totals,
+        "users": users_rows,
+        "departments": _finalize(dept_bucket),
+        "companies": _finalize(company_bucket),
+    }
+
+
+@api_router.post("/tasks/dispatch-reminders")
+async def dispatch_task_reminders(current_user: dict = Depends(get_current_user)):
+    """Idempotent — creates in-app + push notifications for tasks whose deadline
+    is approaching (today/tomorrow) or already overdue. Skips tasks where a
+    reminder has already been dispatched today (tracked via `last_reminder_at`).
+    """
+    from datetime import datetime as _dt
+    today = _dt.now(timezone.utc).date()
+    today_iso = today.isoformat()
+    tomorrow_iso = (today + timedelta(days=1)).isoformat()
+
+    cur = db.tasks.find({"status": {"$ne": "Tamamlandı"}, "end_date": {"$nin": [None, ""]}}, {"_id": 0})
+    dispatched = 0
+    async for t in cur:
+        last = (t.get("last_reminder_at") or "")[:10]
+        if last == today_iso:
+            continue
+        end_d = (t.get("end_date") or "")[:10]
+        if not end_d:
+            continue
+        if end_d > tomorrow_iso:
+            continue  # not yet within reminder window
+        # Reminder window: due today, due tomorrow, or already overdue
+        if end_d < today_iso:
+            label = f"Gecikmiş ({(today - _dt.strptime(end_d, '%Y-%m-%d').date()).days} gün)"
+            push_title = "Tapşırıq gecikib"
+        elif end_d == today_iso:
+            label = "Bu gün bitir"
+            push_title = "Tapşırıq bu gün bitir"
+        else:
+            label = "Sabah bitir"
+            push_title = "Tapşırıq sabah bitir"
+
+        body = f"{t.get('task_name','')}{label}"
+        recipients = set()
+        for nm in _as_name_list(t.get("assignee")):
+            if nm:
+                recipients.add(nm)
+        for nm in _as_name_list(t.get("responsible_person")):
+            if nm:
+                recipients.add(nm)
+        for r_name in recipients:
+            await db.notifications.insert_one({
+                "id": str(uuid.uuid4()),
+                "type": "task_reminder",
+                "title": push_title,
+                "body": body,
+                "task_id": t["id"],
+                "task_code": t.get("task_code", ""),
+                "recipient_name": r_name,
+                "is_read": False,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+        if recipients:
+            _safe_push(list(recipients), push_title, body, link=f"/tasks?id={t['id']}", data={"type": "task_reminder", "task_id": t["id"]})
+        await db.tasks.update_one({"id": t["id"]}, {"$set": {"last_reminder_at": datetime.now(timezone.utc).isoformat()}})
+        dispatched += 1
+    return {"dispatched": dispatched}
+
+
 # ==================== ATTENDANCE (DAVAMİYYƏT) ====================
 
 ATTENDANCE_STATUSES = ["İşdə", "Gəlməyib", "Məzuniyyət", "Xəstəlik", "İcazəli", "Uzaq"]
@@ -2571,15 +2793,15 @@ async def create_task(task_data: TaskCreate, current_user: dict = Depends(check_
     await db.tasks.insert_one(task_doc)
     task_doc.pop("_id", None)
 
-    # In-app notification to assignee(s) + responsible_person (excluding the creator)
+    # In-app notification to assignee(s) + responsible_person(s) (excluding the creator)
     recipients = set()
     actor_name = current_user.get("name", "")
     for nm in _as_name_list(task_doc.get("assignee")):
         if nm and nm != actor_name:
             recipients.add(nm)
-    rp = (task_doc.get("responsible_person") or "").strip()
-    if rp and rp != actor_name:
-        recipients.add(rp)
+    for nm in _as_name_list(task_doc.get("responsible_person")):
+        if nm and nm != actor_name:
+            recipients.add(nm)
     notif_body = (
         f"Yeni tapşırıq sizə təyin olundu: {task_doc['task_name']} "
         f"(Prioritet: {task_doc.get('priority', '')}, "
@@ -2655,9 +2877,9 @@ async def update_task(task_id: str, task_data: dict, current_user: dict = Depend
         for nm in _as_name_list(task.get("assignee")):
             if nm and nm != actor:
                 recipients.add(nm)
-        rp = (task.get("responsible_person") or "").strip()
-        if rp and rp != actor:
-            recipients.add(rp)
+        for nm in _as_name_list(task.get("responsible_person")):
+            if nm and nm != actor:
+                recipients.add(nm)
         body = f"\"{task.get('task_name','')}\" tapşırığı yeniləndi: {', '.join(changes)}. Dəyişikliyi edən: {actor or '—'}"
         for r_name in recipients:
             await db.notifications.insert_one({
@@ -2752,16 +2974,18 @@ async def add_task_comment(task_id: str, payload: dict, current_user: dict = Dep
     await db.task_comments.insert_one(comment)
     comment.pop("_id", None)
 
-    # Notify other stakeholders (creator + assignee(s) + responsible_person)
+    # Notify other stakeholders (creator + assignee(s) + responsible_person(s))
     actor = current_user.get("name", "")
     recipients = set()
     for nm in _as_name_list(task.get("assignee")):
         if nm and nm != actor:
             recipients.add(nm)
-    for f in ("created_by", "responsible_person"):
-        n = (task.get(f) or "").strip()
-        if n and n != actor:
-            recipients.add(n)
+    for nm in _as_name_list(task.get("responsible_person")):
+        if nm and nm != actor:
+            recipients.add(nm)
+    cb = (task.get("created_by") or "").strip()
+    if cb and cb != actor:
+        recipients.add(cb)
     for r_name in recipients:
         await db.notifications.insert_one({
             "id": str(uuid.uuid4()),

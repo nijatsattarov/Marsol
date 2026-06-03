@@ -50,6 +50,7 @@ const salesSubItems = [
 const hrSubItems = [
   { path: '/hr', label: 'İşçilər', icon: Users2, module: 'hr' },
   { path: '/attendance', label: 'Davamiyyət', icon: FileCheck, module: 'hr' },
+  { path: '/hr/kpi', label: 'KPİ', icon: BarChart3, module: 'hr' },
 ];
 
 const financeSubItems = [

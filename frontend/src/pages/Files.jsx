@@ -48,6 +48,8 @@ const accentFor = (rt) => {
 
 export default function Files() {
   const [files, setFiles] = useState([]);
+  const [marsolCompanies, setMarsolCompanies] = useState([]);
+  const [filterMarsol, setFilterMarsol] = useState('all');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -64,8 +66,12 @@ export default function Files() {
   const fetchFiles = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await axios.get(`${API}/files`, { headers });
+      const [r, mc] = await Promise.all([
+        axios.get(`${API}/files`, { headers }),
+        axios.get(`${API}/settings/marsol-companies`, { headers }).catch(() => ({ data: [] })),
+      ]);
       setFiles(r.data || []);
+      setMarsolCompanies(mc.data || []);
     } catch (err) {
       console.error(err);
       toast.error('Faylları yükləmək alınmadı');
@@ -148,6 +154,7 @@ export default function Files() {
   };
 
   const filtered = files.filter(f => {
+    if (filterMarsol !== 'all' && (f.marsol_company || '') !== filterMarsol) return false;
     const q = search.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -174,9 +181,20 @@ export default function Files() {
 
       {/* Search */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3 mb-4">
-        <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Axtar (ad, təsvir, tag)..." className="pl-9 text-sm" data-testid="files-search" />
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Axtar (ad, təsvir, tag)..." className="pl-9 text-sm" data-testid="files-search" />
+          </div>
+          <select
+            value={filterMarsol}
+            onChange={(e) => setFilterMarsol(e.target.value)}
+            className="h-9 text-sm rounded-md border border-slate-200 px-2 bg-white"
+            data-testid="filter-marsol-company"
+          >
+            <option value="all">Bütün müəssisələr</option>
+            {marsolCompanies.map(mc => <option key={mc.id} value={mc.name}>{mc.name}</option>)}
+          </select>
         </div>
       </div>
 

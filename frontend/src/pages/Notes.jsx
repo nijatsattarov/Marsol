@@ -28,6 +28,8 @@ export default function Notes() {
   const [editing, setEditing] = useState(null); // null | 'new' | note
   const [form, setForm] = useState(emptyNote);
   const [tagInput, setTagInput] = useState('');
+  const [marsolCompanies, setMarsolCompanies] = useState([]);
+  const [filterMarsol, setFilterMarsol] = useState('all');
 
   const fetchNotes = useCallback(async () => {
     setLoading(true);
@@ -42,6 +44,8 @@ export default function Notes() {
       setTags(tagRes.data || []);
       const userRes = await axios.get(`${API}/settings/users`, { headers }).catch(() => ({ data: [] }));
       setUsers((userRes.data || []).filter(u => (u.status || 'Aktiv') === 'Aktiv'));
+      const mcRes = await axios.get(`${API}/settings/marsol-companies`, { headers }).catch(() => ({ data: [] }));
+      setMarsolCompanies(mcRes.data || []);
     } catch {
       toast.error('Qeydləri yükləmək alınmadı');
     } finally {
@@ -97,8 +101,11 @@ export default function Notes() {
   };
   const removeTag = (t) => setForm(prev => ({ ...prev, tags: prev.tags.filter(x => x !== t) }));
 
-  const pinnedNotes = useMemo(() => notes.filter(n => n.pinned), [notes]);
-  const otherNotes = useMemo(() => notes.filter(n => !n.pinned), [notes]);
+  const visibleNotes = useMemo(() => (
+    filterMarsol === 'all' ? notes : notes.filter(n => (n.marsol_company || '') === filterMarsol)
+  ), [notes, filterMarsol]);
+  const pinnedNotes = useMemo(() => visibleNotes.filter(n => n.pinned), [visibleNotes]);
+  const otherNotes = useMemo(() => visibleNotes.filter(n => !n.pinned), [visibleNotes]);
 
   return (
     <div className="p-3 sm:p-4 lg:p-6 max-w-[1600px] mx-auto" data-testid="notes-page">
@@ -131,6 +138,15 @@ export default function Notes() {
           >
             <Pin className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Sancılmış</span>
           </Button>
+          <select
+            value={filterMarsol}
+            onChange={(e) => setFilterMarsol(e.target.value)}
+            className="h-9 text-sm rounded-md border border-slate-200 px-2 bg-white"
+            data-testid="filter-marsol-company"
+          >
+            <option value="all">Bütün müəssisələr</option>
+            {marsolCompanies.map(mc => <option key={mc.id} value={mc.name}>{mc.name}</option>)}
+          </select>
           {activeTag && (
             <button type="button" onClick={() => setActiveTag('')} className="flex items-center gap-1 bg-[#9ACD32]/15 border border-[#9ACD32] text-[#3D4F6F] text-xs rounded-full px-2.5 py-1 hover:bg-[#9ACD32]/25" data-testid="active-tag-filter">
               <Hash className="w-3 h-3" />{activeTag}<X className="w-3 h-3" />

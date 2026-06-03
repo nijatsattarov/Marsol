@@ -3,7 +3,7 @@ import axios from 'axios';
 import { 
   Plus, Loader2, Calendar, Clock, User, CheckCircle2, Circle, CheckSquare, Square,
   MoreVertical, Pencil, Trash2, AlertCircle, Flag, Filter, Link2, X, MessageSquare, Send,
-  CalendarDays, List, ChevronLeft, ChevronRight
+  CalendarDays, List, ChevronLeft, ChevronRight, Building, Zap, Timer
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -23,6 +23,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const statuses = ['Gözləyir', 'İcrada', 'Tamamlandı', 'Ləğv edildi'];
 const priorities = ['Yüksək', 'Orta', 'Aşağı'];
+const difficulties = ['Çətin', 'Orta', 'Asan'];
 const relatedTypes = ['Layihələr', 'Görüşlər', 'İclas'];
 
 const getStatusColor = (status) => {
@@ -42,6 +43,31 @@ const getPriorityColor = (priority) => {
     case 'Aşağı': return 'text-green-500';
     default: return 'text-slate-500';
   }
+};
+
+const getDifficultyBadge = (d) => {
+  switch (d) {
+    case 'Çətin': return 'bg-rose-50 text-rose-700 border border-rose-200';
+    case 'Orta': return 'bg-amber-50 text-amber-700 border border-amber-200';
+    case 'Asan': return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+    default: return 'bg-slate-50 text-slate-600 border border-slate-200';
+  }
+};
+
+// Returns {overdue: bool, days: int, dueSoon: bool}
+// dueSoon = ≤2 days left (but not yet overdue)
+const getDueState = (task) => {
+  if (!task.end_date || task.status === 'Tamamlandı' || task.status === 'Ləğv edildi') {
+    return { overdue: false, days: 0, dueSoon: false };
+  }
+  const end = new Date(task.end_date + 'T00:00:00');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffMs = end.getTime() - today.getTime();
+  const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  if (days < 0) return { overdue: true, days: -days, dueSoon: false };
+  if (days <= 2) return { overdue: false, days, dueSoon: true };
+  return { overdue: false, days, dueSoon: false };
 };
 
 const getStatusIcon = (status) => {
@@ -66,7 +92,8 @@ export default function Tasks() {
   const [showModal, setShowModal] = useState(false);
   const [savingTask, setSavingTask] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
-  const [filters, setFilters] = useState({ status: 'all', priority: 'all', assignee: '', responsible_person: '', date_from: '', date_to: '' });
+  const [filters, setFilters] = useState({ status: 'all', priority: 'all', assignee: '', responsible_person: '', date_from: '', date_to: '', marsol_company: 'all' });
+  const [marsolCompanies, setMarsolCompanies] = useState([]);
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState('kanban'); // 'kanban' | 'calendar'
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -76,8 +103,9 @@ export default function Tasks() {
   const [selectedDay, setSelectedDay] = useState(null);
 
   const initialFormData = {
-    task_name: '', department: '', assignee: [], responsible_person: '',
-    priority: 'Orta', start_date: new Date().toISOString().split('T')[0],
+    task_name: '', department: '', assignee: [], responsible_person: [],
+    priority: 'Orta', difficulty: 'Orta', estimated_duration: '',
+    start_date: new Date().toISOString().split('T')[0],
     end_date: '', related_object_type: '', related_object_id: '', related_object: '',
     phase: '', status: 'Gözləyir', notes: '', subtasks: []
   };
@@ -93,18 +121,20 @@ export default function Tasks() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [tRes, eRes, oRes, aRes, uRes] = await Promise.all([
+      const [tRes, eRes, oRes, aRes, uRes, mcRes] = await Promise.all([
         axios.get(`${API}/tasks`, { headers }),
         axios.get(`${API}/employees`, { headers }),
         axios.get(`${API}/options/all`, { headers }),
         axios.get(`${API}/assemblies`, { headers }),
         axios.get(`${API}/settings/users`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/settings/marsol-companies`, { headers }).catch(() => ({ data: [] })),
       ]);
       setTasks(tRes.data);
       setEmployees(eRes.data);
       setOptions(oRes.data);
       setAssemblies(aRes.data);
       setUsers(uRes.data || []);
+      setMarsolCompanies(mcRes.data || []);
     } catch (error) { console.error('Error:', error); }
     finally { setLoading(false); }
   }, []);
@@ -169,10 +199,11 @@ export default function Tasks() {
     e.preventDefault();
     if (savingTask) return; // prevent double-submit (rapid double-click / Enter spam)
     const aArr = toAssigneeArray(formData.assignee);
+    const rArr = toAssigneeArray(formData.responsible_person);
     if (aArr.length === 0) { toast.error('Ən azı 1 icraçı əməkdaş seçin'); return; }
-    if (!formData.responsible_person?.trim()) { toast.error('Məsul şəxs məcburidir'); return; }
+    if (rArr.length === 0) { toast.error('Ən azı 1 məsul şəxs seçin'); return; }
     setSavingTask(true);
-    const payload = { ...formData, assignee: aArr };
+    const payload = { ...formData, assignee: aArr, responsible_person: rArr };
     try {
       if (editingTask) {
         const { data: updated } = await axios.put(`${API}/tasks/${editingTask.id}`, payload, { headers });
@@ -294,6 +325,7 @@ export default function Tasks() {
       ...initialFormData,
       ...task,
       assignee: toAssigneeArray(task.assignee),
+      responsible_person: toAssigneeArray(task.responsible_person),
     });
     setShowModal(true);
   };
@@ -347,17 +379,19 @@ export default function Tasks() {
     const me = normName(currentUserName);
     if (!me) return false;
     const aList = Array.isArray(t.assignee) ? t.assignee : (t.assignee ? [t.assignee] : []);
-    return aList.some(n => normName(n) === me) ||
-      normName(t.responsible_person) === me ||
-      normName(t.created_by) === me;
+    if (aList.some(n => normName(n) === me)) return true;
+    const rList = Array.isArray(t.responsible_person) ? t.responsible_person : (t.responsible_person ? [t.responsible_person] : []);
+    if (rList.some(n => normName(n) === me)) return true;
+    return normName(t.created_by) === me;
   };
 
-  // Display helper — turn assignee (string|array) into a comma-joined string
-  const assigneeDisplay = (t) => {
-    const a = t.assignee;
-    if (Array.isArray(a)) return a.filter(Boolean).join(', ');
-    return a || '';
+  // Display helper — turn assignee/responsible (string|array) into a comma-joined string
+  const personDisplay = (val) => {
+    if (Array.isArray(val)) return val.filter(Boolean).join(', ');
+    return val || '';
   };
+  const assigneeDisplay = (t) => personDisplay(t.assignee);
+  const responsibleDisplay = (t) => personDisplay(t.responsible_person);
 
   const toAssigneeArray = (val) => {
     if (Array.isArray(val)) return val.map(v => (v || '').toString().trim()).filter(Boolean);
@@ -365,11 +399,12 @@ export default function Tasks() {
     return [];
   };
 
-  // Filter by team scope — works with array or string assignee
+  // Filter by team scope — works with array or string for both fields
   const isTeamTask = (t) => {
     const aList = Array.isArray(t.assignee) ? t.assignee : (t.assignee ? [t.assignee] : []);
     if (aList.some(n => teamNames.has(n))) return true;
-    if (t.responsible_person && teamNames.has(t.responsible_person)) return true;
+    const rList = Array.isArray(t.responsible_person) ? t.responsible_person : (t.responsible_person ? [t.responsible_person] : []);
+    if (rList.some(n => teamNames.has(n))) return true;
     return false;
   };
 
@@ -383,7 +418,12 @@ export default function Tasks() {
       if (!aList.some(n => normName(n) === need)) return false;
     }
     if (filters.responsible_person) {
-      if (normName(t.responsible_person) !== normName(filters.responsible_person)) return false;
+      const need = normName(filters.responsible_person);
+      const rList = Array.isArray(t.responsible_person) ? t.responsible_person : (t.responsible_person ? [t.responsible_person] : []);
+      if (!rList.some(n => normName(n) === need)) return false;
+    }
+    if (filters.marsol_company && filters.marsol_company !== 'all') {
+      if ((t.marsol_company || '') !== filters.marsol_company) return false;
     }
     if (filters.date_from || filters.date_to) {
       const td = (t.end_date || t.start_date || '').slice(0, 10);
@@ -411,6 +451,7 @@ export default function Tasks() {
     !!filters.responsible_person,
     !!filters.date_from,
     !!filters.date_to,
+    filters.marsol_company && filters.marsol_company !== 'all',
   ].filter(Boolean).length;
 
   // ========== Calendar helpers ==========
@@ -605,11 +646,21 @@ export default function Tasks() {
             <Label className="text-xs">Tarixə qədər</Label>
             <DatePickerAz value={filters.date_to} onChange={(v) => setFilters({ ...filters, date_to: v })} testId="filter-date-to" />
           </div>
+          <div className="w-48">
+            <Label className="text-xs flex items-center gap-1"><Building className="w-3 h-3" />Müəssisə</Label>
+            <Select value={filters.marsol_company || 'all'} onValueChange={(v) => setFilters({ ...filters, marsol_company: v })}>
+              <SelectTrigger className="h-9 text-sm" data-testid="filter-marsol-company"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Hamısı</SelectItem>
+                {marsolCompanies.map(mc => <SelectItem key={mc.id} value={mc.name}>{mc.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
           {activeFilterCount > 0 && (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setFilters({ status: 'all', priority: 'all', assignee: '', responsible_person: '', date_from: '', date_to: '' })}
+              onClick={() => setFilters({ status: 'all', priority: 'all', assignee: '', responsible_person: '', date_from: '', date_to: '', marsol_company: 'all' })}
               className="text-xs h-9"
               data-testid="filter-reset-btn"
             >
@@ -689,10 +740,18 @@ export default function Tasks() {
                 const own = isOwnTask(task);
                 const subs = Array.isArray(task.subtasks) ? task.subtasks : [];
                 const doneCount = subs.filter(s => s?.done).length;
+                const due = getDueState(task);
+                const cardBg = due.overdue
+                  ? 'bg-gradient-to-br from-red-50 to-rose-100 border-red-400 ring-1 ring-red-300'
+                  : due.dueSoon
+                    ? 'bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-400 ring-1 ring-amber-300'
+                    : own
+                      ? 'bg-gradient-to-br from-[#FDFFEB] to-[#F4FBD7] border-[#9ACD32] ring-1 ring-[#9ACD32]/30'
+                      : 'bg-white border-slate-100';
                 return (
                 <div
                   key={task.id}
-                  className={`rounded-lg p-3 shadow-sm border cursor-pointer relative ${selectedIds.has(task.id) ? 'ring-2 ring-amber-400' : ''} ${own ? 'bg-gradient-to-br from-[#FDFFEB] to-[#F4FBD7] border-[#9ACD32] ring-1 ring-[#9ACD32]/30' : 'bg-white border-slate-100'}`}
+                  className={`rounded-lg p-3 shadow-sm border cursor-pointer relative ${selectedIds.has(task.id) ? 'ring-2 ring-amber-400' : ''} ${cardBg}`}
                   data-testid={`task-card-${task.id}`}
                   onClick={(e) => { if (e.target.closest('button,input,[role="menuitem"]')) return; openDetail(task); }}
                 >
@@ -734,9 +793,20 @@ export default function Tasks() {
                       </DropdownMenuContent>
                     </DropdownMenu>}
                   </div>
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <Flag className={`w-3.5 h-3.5 ${getPriorityColor(task.priority)}`} />
-                    <span className={`text-xs ${getPriorityColor(task.priority)}`}>{task.priority}</span>
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <span className={`text-xs flex items-center gap-1 ${getPriorityColor(task.priority)}`}>
+                      <Flag className="w-3.5 h-3.5" />{task.priority}
+                    </span>
+                    {task.difficulty && (
+                      <Badge className={`text-[10px] gap-0.5 ${getDifficultyBadge(task.difficulty)}`} data-testid={`task-difficulty-${task.id}`}>
+                        <Zap className="w-2.5 h-2.5" />{task.difficulty}
+                      </Badge>
+                    )}
+                    {task.estimated_duration && (
+                      <Badge className="text-[10px] bg-slate-50 text-slate-600 border border-slate-200 gap-0.5" data-testid={`task-duration-${task.id}`}>
+                        <Timer className="w-2.5 h-2.5" />{task.estimated_duration}
+                      </Badge>
+                    )}
                   </div>
                   {/* Left-aligned stack: Assignee, Responsible, Created date, Due date (highlighted) */}
                   <div className="space-y-1 mb-1.5">
@@ -744,8 +814,8 @@ export default function Tasks() {
                       <User className="w-3 h-3 shrink-0 text-slate-400" />
                       <span className="truncate">{assigneeDisplay(task) || '-'}</span>
                     </div>
-                    {task.responsible_person && (
-                      <p className="text-[10px] text-slate-400 pl-4">Məsul: {task.responsible_person}</p>
+                    {responsibleDisplay(task) && (
+                      <p className="text-[10px] text-slate-400 pl-4">Məsul: {responsibleDisplay(task)}</p>
                     )}
                     {task.created_by && (
                       <p className="text-[10px] text-slate-400 pl-4">Yaradan: <span className="text-[#3D4F6F] font-medium">{task.created_by}</span></p>
@@ -758,11 +828,21 @@ export default function Tasks() {
                     )}
                     {task.end_date && (
                       <div
-                        className="flex items-center gap-1.5 text-xs font-semibold text-rose-600 bg-rose-50 rounded px-1.5 py-0.5 w-fit"
+                        className={`flex items-center gap-1.5 text-xs font-semibold rounded px-1.5 py-0.5 w-fit ${
+                          due.overdue ? 'text-white bg-red-600' :
+                          due.dueSoon ? 'text-amber-900 bg-amber-200' :
+                          'text-rose-600 bg-rose-50'
+                        }`}
                         data-testid={`task-due-${task.id}`}
                       >
                         <Calendar className="w-3 h-3 shrink-0" />
-                        <span>Bitmə: {formatDate(task.end_date)}</span>
+                        <span>
+                          {due.overdue
+                            ? `Gecikib: ${formatDate(task.end_date)} (${due.days} gün)`
+                            : due.dueSoon
+                              ? `Bitir: ${formatDate(task.end_date)} (${due.days === 0 ? 'bu gün' : due.days + ' gün'})`
+                              : `Bitmə: ${formatDate(task.end_date)}`}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -922,7 +1002,7 @@ export default function Tasks() {
                     <h4 className="font-medium text-sm text-slate-800 mb-1">{t.task_name}</h4>
                     <div className="text-[11px] text-slate-500 space-y-0.5">
                       <div>İcraçı: {assigneeDisplay(t) || '—'}</div>
-                      {t.responsible_person && <div>Məsul: {t.responsible_person}</div>}
+                      {responsibleDisplay(t) && <div>Məsul: {responsibleDisplay(t)}</div>}
                       {t.created_by && <div>Yaradan: {t.created_by}</div>}
                     </div>
                   </button>
@@ -997,13 +1077,57 @@ export default function Tasks() {
                 )}
               </div>
               <div>
-                <Label className="text-xs">Məsul şəxs *</Label>
+                <Label className="text-xs">Məsul şəxslər * (birdən çox)</Label>
                 <SearchableSelect
-                  value={formData.responsible_person}
-                  onChange={(v) => setFormData({ ...formData, responsible_person: v })}
-                  options={assigneeOptions}
-                  placeholder="Ad-soyad yazaraq axtarın..."
+                  value=""
+                  onChange={(v) => {
+                    if (!v) return;
+                    const cur = toAssigneeArray(formData.responsible_person);
+                    if (cur.includes(v)) { toast.info(`${v} artıq seçilib`); return; }
+                    setFormData({ ...formData, responsible_person: [...cur, v] });
+                  }}
+                  options={assigneeOptions.filter(n => !toAssigneeArray(formData.responsible_person).includes(n))}
+                  placeholder="Ad-soyad yazaraq əlavə edin..."
                   testId="task-responsible-select"
+                />
+                {toAssigneeArray(formData.responsible_person).length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1.5" data-testid="task-responsible-chips">
+                    {toAssigneeArray(formData.responsible_person).map(nm => (
+                      <Badge key={nm} className="bg-amber-50 text-amber-700 border border-amber-200 text-[11px] gap-1 pr-1">
+                        <User className="w-2.5 h-2.5" />
+                        {nm}
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, responsible_person: toAssigneeArray(formData.responsible_person).filter(x => x !== nm) })}
+                          className="ml-0.5 hover:bg-red-100 rounded-full p-0.5"
+                          data-testid={`remove-responsible-${nm}`}
+                        >
+                          <X className="w-2.5 h-2.5 text-red-500" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs flex items-center gap-1"><Zap className="w-3 h-3" />Çətinlik dərəcəsi</Label>
+                <Select value={formData.difficulty || 'Orta'} onValueChange={(v) => setFormData({...formData, difficulty: v})}>
+                  <SelectTrigger className="h-9 text-sm" data-testid="task-difficulty-select"><SelectValue placeholder="Seç" /></SelectTrigger>
+                  <SelectContent>
+                    {difficulties.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs flex items-center gap-1"><Timer className="w-3 h-3" />Təxmini icra müddəti</Label>
+                <Input
+                  value={formData.estimated_duration || ''}
+                  onChange={(e) => setFormData({...formData, estimated_duration: e.target.value})}
+                  placeholder="məs: 2 saat / 3 gün"
+                  className="h-9 text-sm"
+                  data-testid="task-est-duration-input"
                 />
               </div>
             </div>
@@ -1134,7 +1258,10 @@ export default function Tasks() {
                 <div><span className="text-slate-400">Status:</span> <span className="font-semibold">{detailTask.status}</span></div>
                 <div><span className="text-slate-400">Prioritet:</span> <span className="font-semibold">{detailTask.priority}</span></div>
                 <div><span className="text-slate-400">İcraçı:</span> {assigneeDisplay(detailTask) || '—'}</div>
-                <div><span className="text-slate-400">Məsul:</span> {detailTask.responsible_person || '—'}</div>
+                <div><span className="text-slate-400">Məsul:</span> {responsibleDisplay(detailTask) || '—'}</div>
+                {detailTask.difficulty && <div><span className="text-slate-400">Çətinlik:</span> {detailTask.difficulty}</div>}
+                {detailTask.estimated_duration && <div><span className="text-slate-400">İcra müddəti:</span> {detailTask.estimated_duration}</div>}
+                {detailTask.marsol_company && <div><span className="text-slate-400">Müəssisə:</span> {detailTask.marsol_company}</div>}
                 <div><span className="text-slate-400">Yaradan:</span> {detailTask.created_by || '—'}{detailTask.creator_department ? <span className="text-slate-400"> ({detailTask.creator_department})</span> : null}</div>
                 <div><span className="text-slate-400">İcraçı şöbə:</span> {detailTask.department || '—'}</div>
                 <div><span className="text-slate-400">Bitmə:</span> {detailTask.end_date ? formatDate(detailTask.end_date) : '—'}</div>

@@ -45,6 +45,8 @@ export default function Meetings() {
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterMarsol, setFilterMarsol] = useState('all');
+  const [marsolCompanies, setMarsolCompanies] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Calendar view state
@@ -150,6 +152,7 @@ export default function Meetings() {
     if (filterType !== 'all' && m.meeting_type !== filterType) return false;
     if (filterDept !== 'all' && m.department !== filterDept) return false;
     if (filterEmployee !== 'all' && m.employee !== filterEmployee) return false;
+    if (filterMarsol !== 'all' && (m.marsol_company || '') !== filterMarsol) return false;
     if (filterDateFrom && m.date < filterDateFrom) return false;
     if (filterDateTo && m.date > filterDateTo) return false;
     if (searchTerm) {
@@ -393,6 +396,13 @@ export default function Meetings() {
             <SelectContent>
               <SelectItem value="all">Bütün əməkdaşlar</SelectItem>
               {employeeNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterMarsol} onValueChange={setFilterMarsol}>
+            <SelectTrigger className="w-[150px] text-sm h-9" data-testid="filter-marsol-company"><SelectValue placeholder="Müəssisə" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Bütün müəssisələr</SelectItem>
+              {marsolCompanies.map(mc => <SelectItem key={mc.id} value={mc.name}>{mc.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <div className="w-[150px]"><DatePickerAz value={filterDateFrom} onChange={setFilterDateFrom} placeholder="Tarix (başlanğıc)" testId="filter-date-from" /></div>

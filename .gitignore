@@ -485,3 +485,6 @@ frontend/node_modules/.cache/default-development/43.pack
 # Firebase Service Account (secret — never commit)
 backend/firebase-admin.json
 firebase-admin.json
+frontend/node_modules/.cache/default-development/13.pack
+frontend/node_modules/.cache/default-development/13.pack
+frontend/node_modules/.cache/default-development/13.pack
