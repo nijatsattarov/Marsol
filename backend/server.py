@@ -1516,7 +1516,11 @@ async def hr_kpi(
 
     # Load tasks (admin = unscoped, others = apply_scope so KPI respects RBAC)
     q = await apply_scope({}, current_user, "tasks")
-    tasks_all = await db.tasks.find(q, {"_id": 0}).to_list(20000)
+    tasks_active = await db.tasks.find(q, {"_id": 0}).to_list(20000)
+    # Archived tasks: still count toward stats so completed tasks moved into
+    # the archive are visible in KPI summaries.
+    tasks_archived = await db.tasks_archive.find(q, {"_id": 0}).to_list(20000)
+    tasks_all = list(tasks_active) + list(tasks_archived)
 
     # Filter by date window (created_at OR start_date — pick created_at)
     def in_window(t):
@@ -1532,51 +1536,97 @@ async def hr_kpi(
         tasks_window = [t for t in tasks_window if (t.get("marsol_company") or "") == marsol_company]
 
     def _stat_row():
-        return {"total": 0, "completed": 0, "in_progress": 0, "pending": 0, "overdue": 0}
+        return {
+            "total": 0, "completed": 0, "in_progress": 0, "pending": 0, "overdue": 0,
+            # Per-role splits (only meaningful for users_bucket)
+            "as_executor": 0, "as_executor_completed": 0,
+            "as_responsible": 0, "as_responsible_completed": 0,
+        }
 
     today_iso = today.isoformat()
 
-    def _accumulate(bucket: dict, key: str, t: dict, meta: dict):
-        row = bucket.setdefault(key, {**_stat_row(), **meta})
-        row["total"] += 1
+    def _status_buckets(t: dict):
         st = (t.get("status") or "").strip()
-        if st == "Tamamlandı":
-            row["completed"] += 1
-        elif st == "İcradadır":
-            row["in_progress"] += 1
-        else:
-            row["pending"] += 1
         end_d = (t.get("end_date") or "")[:10]
-        if end_d and end_d < today_iso and st != "Tamamlandı":
-            row["overdue"] += 1
+        overdue = bool(end_d and end_d < today_iso and st != "Tamamlandı")
+        if st == "Tamamlandı":
+            return {"completed": 1, "in_progress": 0, "pending": 0, "overdue": int(overdue)}
+        if st == "İcradadır" or st == "İcrada":
+            return {"completed": 0, "in_progress": 1, "pending": 0, "overdue": int(overdue)}
+        return {"completed": 0, "in_progress": 0, "pending": 1, "overdue": int(overdue)}
+
+    def _add(row, buckets):
+        row["total"] += 1
+        row["completed"] += buckets["completed"]
+        row["in_progress"] += buckets["in_progress"]
+        row["pending"] += buckets["pending"]
+        row["overdue"] += buckets["overdue"]
+
+    # ----- USERS BUCKET (normalized name → single row, separate role columns) -----
+    def _norm_name(s: str) -> str:
+        return (s or "").strip().lower()
+
+    # Build canonical-name map (lower-cased → original display name) to ensure
+    # we show ONE row per user, with the prettiest form of their name.
+    name_canon: dict = {}
+    name_meta: dict = {}
+    for u in users_db:
+        nm = (u.get("name") or "").strip()
+        if not nm:
+            continue
+        key = _norm_name(nm)
+        name_canon.setdefault(key, nm)
+        name_meta.setdefault(key, {
+            "department": u.get("department") or "—",
+            "marsol_company": u.get("marsol_company") or "—",
+        })
 
     users_bucket: dict = {}
+
+    def _ensure_user_row(name: str, dept_fallback: str = "—", mc_fallback: str = "—"):
+        key = _norm_name(name)
+        if not key:
+            return None, None
+        canon = name_canon.get(key, name.strip())
+        if key not in users_bucket:
+            meta = name_meta.get(key, {"department": dept_fallback, "marsol_company": mc_fallback})
+            users_bucket[key] = {**_stat_row(), "name": canon, "department": meta["department"], "marsol_company": meta["marsol_company"]}
+        return key, users_bucket[key]
+
     dept_bucket: dict = {}
     company_bucket: dict = {}
 
     for t in tasks_window:
-        # gather every distinct person tagged on the task
-        persons = set()
-        for nm in _as_name_list(t.get("assignee")):
-            if nm:
-                persons.add(nm.strip())
-        for nm in _as_name_list(t.get("responsible_person")):
-            if nm:
-                persons.add(nm.strip())
-        # Per-user breakdown
-        for p in persons:
-            u = user_by_name.get(p) or {}
-            meta = {
-                "name": p,
-                "department": u.get("department") or t.get("department") or "—",
-                "marsol_company": u.get("marsol_company") or t.get("marsol_company") or "—",
-            }
-            _accumulate(users_bucket, p, t, meta)
+        buckets = _status_buckets(t)
+        # Collect executors (assignee) and responsible separately
+        executors = {_norm_name(n) for n in _as_name_list(t.get("assignee")) if (n or "").strip()}
+        responsibles = {_norm_name(n) for n in _as_name_list(t.get("responsible_person")) if (n or "").strip()}
+
+        # Per-user breakdown — UNION (so user appears ONCE)
+        persons = executors | responsibles
+        for k in persons:
+            display = name_canon.get(k) or k
+            _, row = _ensure_user_row(display, t.get("department") or "—", t.get("marsol_company") or "—")
+            if not row:
+                continue
+            _add(row, buckets)
+            if k in executors:
+                row["as_executor"] += 1
+                row["as_executor_completed"] += buckets["completed"]
+            if k in responsibles:
+                row["as_responsible"] += 1
+                row["as_responsible_completed"] += buckets["completed"]
+
         # Per-department & per-company breakdowns (task-level)
         dep = (t.get("department") or "—").strip() or "—"
-        _accumulate(dept_bucket, dep, t, {"name": dep})
+        if dep not in dept_bucket:
+            dept_bucket[dep] = {**_stat_row(), "name": dep}
+        _add(dept_bucket[dep], buckets)
+
         mc = (t.get("marsol_company") or "—").strip() or "—"
-        _accumulate(company_bucket, mc, t, {"name": mc})
+        if mc not in company_bucket:
+            company_bucket[mc] = {**_stat_row(), "name": mc}
+        _add(company_bucket[mc], buckets)
 
     def _finalize(bucket):
         rows = list(bucket.values())
@@ -1592,17 +1642,8 @@ async def hr_kpi(
 
     totals = _stat_row()
     for t in tasks_window:
-        totals["total"] += 1
-        st = (t.get("status") or "").strip()
-        if st == "Tamamlandı":
-            totals["completed"] += 1
-        elif st == "İcradadır":
-            totals["in_progress"] += 1
-        else:
-            totals["pending"] += 1
-        end_d = (t.get("end_date") or "")[:10]
-        if end_d and end_d < today_iso and st != "Tamamlandı":
-            totals["overdue"] += 1
+        b = _status_buckets(t)
+        _add(totals, b)
     totals["completion_rate"] = round(totals["completed"] * 100 / totals["total"], 1) if totals["total"] else 0
 
     return {
@@ -2760,6 +2801,9 @@ async def get_tasks(
 
 @api_router.post("/tasks")
 async def create_task(task_data: TaskCreate, current_user: dict = Depends(check_permission("tasks", "write"))):
+    # İcraçı şöbəsi məcburi sahədir
+    if not (task_data.department or "").strip():
+        raise HTTPException(status_code=400, detail="İcraçı şöbə seçilməlidir")
     # Idempotency guard: if the SAME user submitted the SAME task name within the
     # last 10 seconds, return the existing record instead of inserting a duplicate.
     # Protects against double-clicks, retried POSTs (e.g. flaky 3G), and React
@@ -2871,6 +2915,13 @@ async def update_task(task_id: str, task_data: dict, current_user: dict = Depend
                 status_code=403,
                 detail="Yalnız tapşırığı yaradan və ya admin redaktə edə bilər"
             )
+
+    # Stamp completed_at the first time status flips to "Tamamlandı" so that
+    # the auto-archive job has a reliable date marker.
+    new_status = (update_data.get("status") or "").strip()
+    old_status = (existing.get("status") or "").strip()
+    if new_status == "Tamamlandı" and old_status != "Tamamlandı" and not existing.get("completed_at"):
+        update_data["completed_at"] = datetime.now(timezone.utc).isoformat()
 
     result = await db.tasks.update_one({"id": task_id}, {"$set": update_data})
     if result.matched_count == 0:
@@ -4709,6 +4760,84 @@ async def get_notification_settings():
 @api_router.get("/settings/notification-config")
 async def get_notification_config(current_user: dict = Depends(get_current_user)):
     return await get_notification_settings()
+
+# ==================== TASK AUTO-ARCHIVE SETTINGS ====================
+
+TASK_ARCHIVE_DEFAULT_DAYS = 30
+
+async def _get_task_archive_days() -> int:
+    doc = await db.app_config.find_one({"key": "task_archive_config"}, {"_id": 0})
+    if not doc:
+        return TASK_ARCHIVE_DEFAULT_DAYS
+    val = ((doc.get("values") or {}).get("auto_archive_days"))
+    try:
+        n = int(val)
+        return max(0, n)
+    except (TypeError, ValueError):
+        return TASK_ARCHIVE_DEFAULT_DAYS
+
+
+@api_router.get("/settings/task-archive-config")
+async def get_task_archive_config(current_user: dict = Depends(get_current_user)):
+    return {"auto_archive_days": await _get_task_archive_days()}
+
+
+@api_router.put("/settings/task-archive-config")
+async def update_task_archive_config(data: dict, current_user: dict = Depends(check_permission("settings", "write"))):
+    try:
+        days = max(0, int(data.get("auto_archive_days", TASK_ARCHIVE_DEFAULT_DAYS)))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="auto_archive_days tam ədəd olmalıdır")
+    await db.app_config.update_one(
+        {"key": "task_archive_config"},
+        {"$set": {"key": "task_archive_config", "values": {"auto_archive_days": days},
+                  "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"auto_archive_days": days}
+
+
+async def _auto_archive_completed_tasks() -> dict:
+    """Archive tasks where status=Tamamlandı AND the most recent of
+    (`completed_at` if present, otherwise `updated_at`, otherwise `end_date`,
+    otherwise `created_at`) is older than `auto_archive_days` days ago.
+    Returns {"archived": int}.
+    """
+    days = await _get_task_archive_days()
+    if days <= 0:
+        return {"archived": 0, "skipped_reason": "auto_archive disabled (days=0)"}
+    cutoff_dt = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff_iso = cutoff_dt.isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    candidates = await db.tasks.find({"status": "Tamamlandı"}, {"_id": 0}).to_list(20000)
+    to_archive = []
+    for t in candidates:
+        marker = (t.get("completed_at") or t.get("updated_at") or
+                  (t.get("end_date") or "") or t.get("created_at") or "")
+        # end_date is just YYYY-MM-DD (no time) — pad to full ISO for compare
+        if len(marker) == 10:
+            marker = marker + "T23:59:59+00:00"
+        if marker and marker < cutoff_iso:
+            to_archive.append(t)
+    if not to_archive:
+        return {"archived": 0}
+    archive_docs = []
+    for d in to_archive:
+        archive_docs.append({**d, "archive_id": str(uuid.uuid4()),
+                             "archived_at": now_iso, "archived_by": "system (auto)"})
+    if archive_docs:
+        await db.tasks_archive.insert_many(archive_docs)
+        ids = [d["id"] for d in to_archive]
+        await db.tasks.delete_many({"id": {"$in": ids}})
+    return {"archived": len(to_archive)}
+
+
+@api_router.post("/tasks/auto-archive")
+async def trigger_auto_archive(current_user: dict = Depends(check_permission("tasks", "write"))):
+    """Manual trigger for the auto-archive job (admin / write-capable user).
+    Returns the number of tasks moved into the archive."""
+    return await _auto_archive_completed_tasks()
+
 
 @api_router.put("/settings/notification-config")
 async def update_notification_config(data: dict, current_user: dict = Depends(check_permission("settings", "write"))):
@@ -9515,6 +9644,12 @@ async def startup_backfills():
         await _backfill_marsol_company_tenant()
     except Exception as e:
         logging.warning("Marsol company tenant backfill failed: %s", e)
+    try:
+        res = await _auto_archive_completed_tasks()
+        if res.get("archived"):
+            logging.info("Auto-archive at startup: %s completed tasks moved to archive", res.get("archived"))
+    except Exception as e:
+        logging.warning("Auto-archive at startup failed: %s", e)
 
 
 @app.on_event("shutdown")

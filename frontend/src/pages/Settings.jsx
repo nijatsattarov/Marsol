@@ -102,6 +102,7 @@ export default function Settings() {
   const [saleTypes, setSaleTypes] = useState([]);
   const [newSaleType, setNewSaleType] = useState('');
   const [warningDays, setWarningDays] = useState('10');
+  const [taskArchiveDays, setTaskArchiveDays] = useState(30);
   const [departments, setDepartments] = useState([]);
   const [notifyConfig, setNotifyConfig] = useState({
     membership_warning_days: 10,
@@ -203,6 +204,10 @@ export default function Settings() {
       try {
         const ncRes = await axios.get(`${API}/settings/notification-config`, { headers });
         setNotifyConfig(prev => ({ ...prev, ...(ncRes.data || {}) }));
+      } catch { /* defaults */ }
+      try {
+        const taRes = await axios.get(`${API}/settings/task-archive-config`, { headers });
+        setTaskArchiveDays(Number(taRes.data?.auto_archive_days ?? 30));
       } catch { /* defaults */ }
       setRoles(rolesRes.data || []);
       setForumFields(ffRes.data.fields || []);
@@ -1113,6 +1118,54 @@ export default function Settings() {
                   <p className="text-[11px] text-slate-500 mt-1">{help}</p>
                 </div>
               ))}
+            </div>
+
+            {/* Task auto-archive setting */}
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-[#3D4F6F]">Tapşırıq avtomatik arxivləşdirməsi</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Tamamlanmış tapşırıqlar göstərilən günlərdən sonra arxivə avtomatik köçürülür. <code>0</code> = avtomatik arxivləşdirmə söndürülüb.</p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const r = await axios.put(`${API}/settings/task-archive-config`, { auto_archive_days: Number(taskArchiveDays) }, { headers });
+                      setTaskArchiveDays(Number(r.data?.auto_archive_days ?? 0));
+                      toast.success('Avtomatik arxiv tənzimləməsi saxlandı');
+                    } catch (e) { toast.error(e?.response?.data?.detail || 'Xəta baş verdi'); }
+                  }}
+                  className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold"
+                  data-testid="save-archive-config-btn"
+                >Yadda saxla</Button>
+              </div>
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 flex flex-wrap items-end gap-3">
+                <div>
+                  <Label className="text-xs font-semibold text-[#3D4F6F]">Tamamlanmadan neçə gün sonra arxivlənsin</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="3650"
+                    value={taskArchiveDays}
+                    onChange={(e) => setTaskArchiveDays(parseInt(e.target.value || '0', 10))}
+                    className="text-sm w-32 mt-1"
+                    data-testid="task-archive-days-input"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const r = await axios.post(`${API}/tasks/auto-archive`, {}, { headers });
+                      toast.success(`Arxivə köçürüldü: ${r.data?.archived ?? 0} tapşırıq`);
+                    } catch (e) { toast.error(e?.response?.data?.detail || 'Xəta baş verdi'); }
+                  }}
+                  data-testid="run-auto-archive-btn"
+                >İndi işə sal</Button>
+                <p className="text-[11px] text-slate-500 max-w-md">Tövsiyə: 30 gün. Arxivlənmiş tapşırıqlar KPİ statistikasında {'\u00ABtamamlanmış\u00BB'} kimi say olaraq qalır.</p>
+              </div>
             </div>
 
             {/* Admin-only: reset all notifications system-wide */}

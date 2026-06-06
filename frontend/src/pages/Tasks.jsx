@@ -250,6 +250,7 @@ export default function Tasks() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (savingTask) return; // prevent double-submit (rapid double-click / Enter spam)
+    if (!(formData.department || '').trim()) { toast.error('İcraçı şöbə məcburidir'); return; }
     const aArr = toAssigneeArray(formData.assignee);
     const rArr = toAssigneeArray(formData.responsible_person);
     if (aArr.length === 0) { toast.error('Ən azı 1 icraçı əməkdaş seçin'); return; }
@@ -890,11 +891,6 @@ export default function Tasks() {
                             {getStatusIcon(s)}<span className="ml-2">{s}</span>
                           </DropdownMenuItem>
                         ))}
-                        {canDeleteTask(task) && (
-                          <DropdownMenuItem onClick={() => handleDelete(task.id)} className="text-red-600" data-testid={`task-delete-${task.id}`}>
-                            <Trash2 className="w-4 h-4 mr-2" />Arxivə köçür
-                          </DropdownMenuItem>
-                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>}
                   </div>
@@ -1130,7 +1126,7 @@ export default function Tasks() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs">İcraçı şöbə</Label>
+                <Label className="text-xs">İcraçı şöbə <span className="text-red-500">*</span></Label>
                 <Select
                   value={formData.department}
                   onValueChange={(v) => setFormData({ ...formData, department: v })}

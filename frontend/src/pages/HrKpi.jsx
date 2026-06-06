@@ -35,13 +35,27 @@ const StatCard = ({ icon: Icon, label, value, tone = 'slate' }) => {
   );
 };
 
-const SummaryRow = ({ name, sub, total, completed, in_progress, pending, overdue, completion_rate }) => (
+const SummaryRow = ({ name, sub, total, completed, in_progress, pending, overdue, completion_rate,
+                     as_executor, as_executor_completed, as_responsible, as_responsible_completed,
+                     showRoles = false }) => (
   <tr className="border-b last:border-0 hover:bg-slate-50">
     <td className="px-3 py-2 text-sm">
       <div className="font-medium text-slate-800">{name || '—'}</div>
       {sub && <div className="text-xs text-slate-500">{sub}</div>}
     </td>
-    <td className="px-3 py-2 text-sm text-center font-semibold text-slate-700">{total}</td>
+    {showRoles && (
+      <>
+        <td className="px-3 py-2 text-sm text-center">
+          <div className="font-semibold text-sky-700">{as_executor ?? 0}</div>
+          <div className="text-[10px] text-slate-400">✓ {as_executor_completed ?? 0}</div>
+        </td>
+        <td className="px-3 py-2 text-sm text-center">
+          <div className="font-semibold text-purple-700">{as_responsible ?? 0}</div>
+          <div className="text-[10px] text-slate-400">✓ {as_responsible_completed ?? 0}</div>
+        </td>
+      </>
+    )}
+    <td className="px-3 py-2 text-sm text-center font-bold text-slate-800">{total}</td>
     <td className="px-3 py-2 text-sm text-center text-emerald-700">{completed}</td>
     <td className="px-3 py-2 text-sm text-center text-blue-700">{in_progress}</td>
     <td className="px-3 py-2 text-sm text-center text-amber-700">{pending}</td>
@@ -211,7 +225,9 @@ export default function HrKpi() {
                   <thead className="bg-slate-50 border-b">
                     <tr>
                       <th className="px-3 py-2 text-xs font-semibold text-[#3D4F6F] text-left">İstifadəçi</th>
-                      <th className="px-3 py-2 text-xs font-semibold text-[#3D4F6F]">Ümumi</th>
+                      <th className="px-3 py-2 text-xs font-semibold text-sky-700" title="Bu istifadəçinin icraçı olduğu tapşırıqlar (✓ — tamamlanmış)">İcraçı</th>
+                      <th className="px-3 py-2 text-xs font-semibold text-purple-700" title="Bu istifadəçinin məsul şəxs olduğu tapşırıqlar (✓ — tamamlanmış)">Məsul</th>
+                      <th className="px-3 py-2 text-xs font-semibold text-[#3D4F6F]">Cəmi</th>
                       <th className="px-3 py-2 text-xs font-semibold text-[#3D4F6F]">Tamamlanıb</th>
                       <th className="px-3 py-2 text-xs font-semibold text-[#3D4F6F]">İcrada</th>
                       <th className="px-3 py-2 text-xs font-semibold text-[#3D4F6F]">Gözləyir</th>
@@ -221,9 +237,9 @@ export default function HrKpi() {
                   </thead>
                   <tbody>
                     {filteredUsers.length === 0 ? (
-                      <tr><td colSpan={7} className="text-center py-8 text-slate-400">Filterə uyğun nəticə yoxdur</td></tr>
+                      <tr><td colSpan={9} className="text-center py-8 text-slate-400">Filterə uyğun nəticə yoxdur</td></tr>
                     ) : filteredUsers.map(u => (
-                      <SummaryRow key={u.name} {...u} sub={`${u.department} · ${u.marsol_company}`} />
+                      <SummaryRow key={u.name} {...u} sub={`${u.department} · ${u.marsol_company}`} showRoles />
                     ))}
                   </tbody>
                 </table>
