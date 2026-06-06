@@ -1587,6 +1587,13 @@ async def hr_kpi(
         key = _norm_name(name)
         if not key:
             return None, None
+        # Skip persons that aren't a SYSTEM user — KPI should reflect only
+        # actual system users, not free-form names typed in task assignments.
+        # This eliminates the "duplicate name" rows that appeared because a
+        # user existed both as a system user AND in the HR employee roster
+        # under a slightly different formatting.
+        if key not in name_canon:
+            return None, None
         canon = name_canon.get(key, name.strip())
         if key not in users_bucket:
             meta = name_meta.get(key, {"department": dept_fallback, "marsol_company": mc_fallback})
@@ -1918,6 +1925,26 @@ async def attendance_system_sessions(
         totals[uid]["sessions"] += 1
         if row.get("is_open"):
             totals[uid]["has_open"] = True
+
+    # Make sure EVERY active system user appears in totals, even if they had
+    # zero sessions in the selected window. This lets HR see the full roster
+    # of users — "real active users" — not just those who logged in today.
+    active_users = await db.users.find(
+        {"status": {"$ne": "Bağlı"}},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "status": 1, "role": 1},
+    ).to_list(2000)
+    for u in active_users:
+        uid = u.get("id") or u.get("email") or ""
+        if not uid or uid in totals:
+            continue
+        totals[uid] = {
+            "user_id": uid,
+            "user_email": u.get("email", ""),
+            "user_name": u.get("name", ""),
+            "total_seconds": 0,
+            "sessions": 0,
+            "has_open": False,
+        }
     return {"sessions": out, "totals": list(totals.values())}
 
 # ==================== LEAVE REQUESTS (MƏZUNİYYƏT SORĞULARI) ====================
