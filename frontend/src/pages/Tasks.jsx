@@ -83,6 +83,8 @@ const getStatusIcon = (status) => {
 export default function Tasks() {
   const [tasks, setTasks] = useState([]);
   const [archivedTasks, setArchivedTasks] = useState([]);
+  const [archiveSelectedIds, setArchiveSelectedIds] = useState(new Set());
+  const [deletingArchive, setDeletingArchive] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [users, setUsers] = useState([]);
@@ -160,6 +162,55 @@ export default function Tasks() {
         window.location.reload();
       })
       .catch(err => toast.error(err.response?.data?.detail || 'Bərpa olunmadı'));
+  };
+
+  const toggleArchiveSelection = (archiveId) => {
+    setArchiveSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(archiveId)) next.delete(archiveId); else next.add(archiveId);
+      return next;
+    });
+  };
+
+  const toggleArchiveSelectAll = () => {
+    if (archiveSelectedIds.size === archivedTasks.length && archivedTasks.length > 0) {
+      setArchiveSelectedIds(new Set());
+    } else {
+      setArchiveSelectedIds(new Set(archivedTasks.map(t => t.archive_id)));
+    }
+  };
+
+  const deleteArchivedTask = (archiveId) => {
+    if (!window.confirm('Bu tapşırığı arxivdən birdəfəlik silmək istəyirsinizmi?')) return;
+    axios.delete(`${API}/tasks/archive/${archiveId}`, { headers })
+      .then(() => {
+        toast.success('Arxiv qeydi silindi');
+        setArchivedTasks(prev => prev.filter(t => t.archive_id !== archiveId));
+        setArchiveSelectedIds(prev => {
+          const next = new Set(prev);
+          next.delete(archiveId);
+          return next;
+        });
+      })
+      .catch(err => toast.error(err.response?.data?.detail || 'Silinmədi'));
+  };
+
+  const bulkDeleteArchived = async () => {
+    const ids = Array.from(archiveSelectedIds);
+    if (!ids.length) { toast.error('Heç bir qeyd seçilməyib'); return; }
+    if (!window.confirm(`${ids.length} arxiv qeydini birdəfəlik silmək istəyirsinizmi?`)) return;
+    setDeletingArchive(true);
+    try {
+      const r = await axios.post(`${API}/tasks/archive/bulk-delete`, { archive_ids: ids }, { headers });
+      const { deleted = 0, skipped = 0 } = r.data || {};
+      toast.success(`${deleted} qeyd silindi${skipped > 0 ? ` · ${skipped} icazəsiz ötürüldü` : ''}`);
+      setArchivedTasks(prev => prev.filter(t => !ids.includes(t.archive_id) || (r.data.skipped_ids || []).includes(t.archive_id)));
+      setArchiveSelectedIds(new Set(r.data.skipped_ids || []));
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Silinmədi');
+    } finally {
+      setDeletingArchive(false);
+    }
   };
 
   const allPeople = useMemo(() => {
@@ -679,9 +730,23 @@ export default function Tasks() {
       {/* Archive panel */}
       {showArchive && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4" data-testid="task-archive-panel">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
             <h3 className="font-semibold text-amber-800 text-sm">Arxivlənmiş tapşırıqlar ({archivedTasks.length})</h3>
-            <Button variant="ghost" size="sm" onClick={() => setShowArchive(false)} className="h-6 text-amber-700">Bağla</Button>
+            <div className="flex items-center gap-2">
+              {archiveSelectedIds.size > 0 && (
+                <Button
+                  size="sm"
+                  onClick={bulkDeleteArchived}
+                  disabled={deletingArchive}
+                  className="h-7 text-xs bg-rose-600 hover:bg-rose-700 text-white"
+                  data-testid="archive-bulk-delete-btn"
+                >
+                  {deletingArchive ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Trash2 className="w-3 h-3 mr-1" />}
+                  Seçilənləri sil ({archiveSelectedIds.size})
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={() => setShowArchive(false)} className="h-7 text-amber-700">Bağla</Button>
+            </div>
           </div>
           {archivedTasks.length === 0 ? (
             <p className="text-xs text-amber-700">Arxivdə tapşırıq yoxdur.</p>
@@ -690,6 +755,15 @@ export default function Tasks() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-amber-200">
+                    <th className="px-2 py-1.5 w-8">
+                      <input
+                        type="checkbox"
+                        checked={archiveSelectedIds.size === archivedTasks.length && archivedTasks.length > 0}
+                        onChange={toggleArchiveSelectAll}
+                        className="w-3.5 h-3.5 accent-amber-600 cursor-pointer"
+                        data-testid="archive-select-all"
+                      />
+                    </th>
                     <th className="text-left px-2 py-1.5 text-amber-800">Tapşırıq</th>
                     <th className="text-left px-2 py-1.5 text-amber-800">İcraçı</th>
                     <th className="text-left px-2 py-1.5 text-amber-800">Yaradıcı</th>
@@ -700,7 +774,16 @@ export default function Tasks() {
                 </thead>
                 <tbody>
                   {archivedTasks.map(t => (
-                    <tr key={t.archive_id} className="border-b border-amber-100 hover:bg-amber-100/50" data-testid={`archive-row-${t.archive_id}`}>
+                    <tr key={t.archive_id} className={`border-b border-amber-100 hover:bg-amber-100/50 ${archiveSelectedIds.has(t.archive_id) ? 'bg-amber-100' : ''}`} data-testid={`archive-row-${t.archive_id}`}>
+                      <td className="px-2 py-1.5">
+                        <input
+                          type="checkbox"
+                          checked={archiveSelectedIds.has(t.archive_id)}
+                          onChange={() => toggleArchiveSelection(t.archive_id)}
+                          className="w-3.5 h-3.5 accent-amber-600 cursor-pointer"
+                          data-testid={`archive-select-${t.archive_id}`}
+                        />
+                      </td>
                       <td className="px-2 py-1.5 font-medium text-slate-800">
                         {t.task_code && <span className="font-mono text-[10px] text-slate-400 mr-1">{t.task_code}</span>}
                         {t.task_name}
@@ -710,13 +793,23 @@ export default function Tasks() {
                       <td className="px-2 py-1.5 text-slate-600">{formatDate(t.archived_at)}</td>
                       <td className="px-2 py-1.5 text-slate-600">{t.archived_by || '-'}</td>
                       <td className="px-2 py-1.5 text-right">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => restoreArchivedTask(t.archive_id)}
-                          className="h-6 text-xs text-emerald-700 hover:bg-emerald-50"
-                          data-testid={`restore-task-${t.archive_id}`}
-                        >Bərpa et</Button>
+                        <div className="inline-flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => restoreArchivedTask(t.archive_id)}
+                            className="h-6 text-xs text-emerald-700 hover:bg-emerald-50"
+                            data-testid={`restore-task-${t.archive_id}`}
+                          >Bərpa et</Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => deleteArchivedTask(t.archive_id)}
+                            className="h-6 text-xs text-rose-700 hover:bg-rose-50 px-2"
+                            data-testid={`delete-archive-${t.archive_id}`}
+                            title="Birdəfəlik sil"
+                          ><Trash2 className="w-3 h-3" /></Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
