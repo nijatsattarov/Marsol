@@ -733,7 +733,7 @@ export default function Tasks() {
           <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
             <h3 className="font-semibold text-amber-800 text-sm">Arxivlənmiş tapşırıqlar ({archivedTasks.length})</h3>
             <div className="flex items-center gap-2">
-              {archiveSelectedIds.size > 0 && (
+              {currentUserRole === 'admin' && archiveSelectedIds.size > 0 && (
                 <Button
                   size="sm"
                   onClick={bulkDeleteArchived}
@@ -755,15 +755,17 @@ export default function Tasks() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-amber-200">
-                    <th className="px-2 py-1.5 w-8">
-                      <input
-                        type="checkbox"
-                        checked={archiveSelectedIds.size === archivedTasks.length && archivedTasks.length > 0}
-                        onChange={toggleArchiveSelectAll}
-                        className="w-3.5 h-3.5 accent-amber-600 cursor-pointer"
-                        data-testid="archive-select-all"
-                      />
-                    </th>
+                    {currentUserRole === 'admin' && (
+                      <th className="px-2 py-1.5 w-8">
+                        <input
+                          type="checkbox"
+                          checked={archiveSelectedIds.size === archivedTasks.length && archivedTasks.length > 0}
+                          onChange={toggleArchiveSelectAll}
+                          className="w-3.5 h-3.5 accent-amber-600 cursor-pointer"
+                          data-testid="archive-select-all"
+                        />
+                      </th>
+                    )}
                     <th className="text-left px-2 py-1.5 text-amber-800">Tapşırıq</th>
                     <th className="text-left px-2 py-1.5 text-amber-800">İcraçı</th>
                     <th className="text-left px-2 py-1.5 text-amber-800">Yaradıcı</th>
@@ -775,15 +777,17 @@ export default function Tasks() {
                 <tbody>
                   {archivedTasks.map(t => (
                     <tr key={t.archive_id} className={`border-b border-amber-100 hover:bg-amber-100/50 ${archiveSelectedIds.has(t.archive_id) ? 'bg-amber-100' : ''}`} data-testid={`archive-row-${t.archive_id}`}>
-                      <td className="px-2 py-1.5">
-                        <input
-                          type="checkbox"
-                          checked={archiveSelectedIds.has(t.archive_id)}
-                          onChange={() => toggleArchiveSelection(t.archive_id)}
-                          className="w-3.5 h-3.5 accent-amber-600 cursor-pointer"
-                          data-testid={`archive-select-${t.archive_id}`}
-                        />
-                      </td>
+                      {currentUserRole === 'admin' && (
+                        <td className="px-2 py-1.5">
+                          <input
+                            type="checkbox"
+                            checked={archiveSelectedIds.has(t.archive_id)}
+                            onChange={() => toggleArchiveSelection(t.archive_id)}
+                            className="w-3.5 h-3.5 accent-amber-600 cursor-pointer"
+                            data-testid={`archive-select-${t.archive_id}`}
+                          />
+                        </td>
+                      )}
                       <td className="px-2 py-1.5 font-medium text-slate-800">
                         {t.task_code && <span className="font-mono text-[10px] text-slate-400 mr-1">{t.task_code}</span>}
                         {t.task_name}
@@ -801,14 +805,16 @@ export default function Tasks() {
                             className="h-6 text-xs text-emerald-700 hover:bg-emerald-50"
                             data-testid={`restore-task-${t.archive_id}`}
                           >Bərpa et</Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => deleteArchivedTask(t.archive_id)}
-                            className="h-6 text-xs text-rose-700 hover:bg-rose-50 px-2"
-                            data-testid={`delete-archive-${t.archive_id}`}
-                            title="Birdəfəlik sil"
-                          ><Trash2 className="w-3 h-3" /></Button>
+                          {currentUserRole === 'admin' && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => deleteArchivedTask(t.archive_id)}
+                              className="h-6 text-xs text-rose-700 hover:bg-rose-50 px-2"
+                              data-testid={`delete-archive-${t.archive_id}`}
+                              title="Birdəfəlik sil"
+                            ><Trash2 className="w-3 h-3" /></Button>
+                          )}
                         </div>
                       </td>
                     </tr>

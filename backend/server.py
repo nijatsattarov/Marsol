@@ -3068,41 +3068,26 @@ async def restore_archived_task(archive_id: str, current_user: dict = Depends(ch
 
 @api_router.delete("/tasks/archive/{archive_id}")
 async def delete_archived_task(archive_id: str, current_user: dict = Depends(check_permission("tasks", "write"))):
-    """Permanently delete a single archived task. Admin or original creator only."""
+    """Permanently delete a single archived task. Admin only."""
+    if (current_user.get("role") or "").lower() != "admin":
+        raise HTTPException(status_code=403, detail="Yalnız admin arxivdən silə bilər")
     archived = await db.tasks_archive.find_one({"archive_id": archive_id}, {"_id": 0})
     if not archived:
         raise HTTPException(status_code=404, detail="Arxiv qeydi tapılmadı")
-    is_admin = (current_user.get("role") or "").lower() == "admin"
-    creator = (archived.get("created_by") or "").strip()
-    me = (current_user.get("name") or "").strip()
-    if not is_admin and creator and creator != me:
-        raise HTTPException(status_code=403, detail="Yalnız tapşırığı yaradan və ya admin silə bilər")
     await db.tasks_archive.delete_one({"archive_id": archive_id})
     return {"message": "Arxiv qeydi silindi", "archive_id": archive_id}
 
 
 @api_router.post("/tasks/archive/bulk-delete")
 async def bulk_delete_archived_tasks(data: dict, current_user: dict = Depends(check_permission("tasks", "write"))):
-    """Permanently delete multiple archived tasks at once. For each item the
-    caller must be admin or the original creator — entries the caller cannot
-    delete are skipped (reported in `skipped`)."""
+    """Permanently delete multiple archived tasks at once. Admin only."""
+    if (current_user.get("role") or "").lower() != "admin":
+        raise HTTPException(status_code=403, detail="Yalnız admin arxivdən silə bilər")
     archive_ids = data.get("archive_ids") or []
     if not isinstance(archive_ids, list) or not archive_ids:
         raise HTTPException(status_code=400, detail="archive_ids siyahısı boş ola bilməz")
-    is_admin = (current_user.get("role") or "").lower() == "admin"
-    me = (current_user.get("name") or "").strip()
-    deletable: List[str] = []
-    skipped: List[str] = []
-    cursor = db.tasks_archive.find({"archive_id": {"$in": archive_ids}}, {"_id": 0, "archive_id": 1, "created_by": 1})
-    async for doc in cursor:
-        creator = (doc.get("created_by") or "").strip()
-        if is_admin or not creator or creator == me:
-            deletable.append(doc["archive_id"])
-        else:
-            skipped.append(doc["archive_id"])
-    if deletable:
-        await db.tasks_archive.delete_many({"archive_id": {"$in": deletable}})
-    return {"deleted": len(deletable), "skipped": len(skipped), "skipped_ids": skipped}
+    result = await db.tasks_archive.delete_many({"archive_id": {"$in": archive_ids}})
+    return {"deleted": result.deleted_count, "skipped": 0, "skipped_ids": []}
 
 # ==================== MEETINGS (GÖRÜŞLƏR) ====================
 
