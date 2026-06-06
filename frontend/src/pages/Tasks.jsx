@@ -3,7 +3,7 @@ import axios from 'axios';
 import { 
   Plus, Loader2, Calendar, Clock, User, CheckCircle2, Circle, CheckSquare, Square,
   MoreVertical, Pencil, Trash2, AlertCircle, Flag, Filter, Link2, X, MessageSquare, Send,
-  CalendarDays, List, ChevronLeft, ChevronRight, Building, Zap, Timer
+  CalendarDays, List, ChevronLeft, ChevronRight, Building, Zap, Timer, StickyNote
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -145,20 +145,21 @@ export default function Tasks() {
     try {
       const res = await axios.get(`${API}/tasks/archive`, { headers });
       setArchivedTasks(res.data || []);
-    } catch (_e) { toast.error('Arxiv yüklənmədi'); }
+    } catch (_e) {
+      toast.error('Arxiv yüklənmədi');
+    }
   }, []);
 
   useEffect(() => { if (showArchive) fetchArchive(); }, [showArchive, fetchArchive]);
 
-  const restoreArchivedTask = async (archiveId) => {
-    try {
-      await axios.post(`${API}/tasks/archive/${archiveId}/restore`, {}, { headers });
-      toast.success('Tapşırıq bərpa olundu');
-      setArchivedTasks(prev => prev.filter(t => t.archive_id !== archiveId));
-      fetchData();
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Bərpa olunmadı');
-    }
+
+  const restoreArchivedTask = (archiveId) => {
+    axios.post(`${API}/tasks/archive/${archiveId}/restore`, {}, { headers })
+      .then(() => {
+        toast.success('Tapşırıq bərpa olundu');
+        window.location.reload();
+      })
+      .catch(err => toast.error(err.response?.data?.detail || 'Bərpa olunmadı'));
   };
 
   const allPeople = useMemo(() => {
@@ -256,7 +257,7 @@ export default function Tasks() {
     try {
       const r = await axios.get(`${API}/tasks/${task.id}/comments`, { headers });
       setComments(r.data || []);
-    } catch (_) {}
+    } catch (_) { /* ignore comments load failure */ }
   };
 
   const submitComment = async () => {
@@ -307,6 +308,11 @@ export default function Tasks() {
     const creator = (task.created_by || '').trim();
     return !creator || creator === currentUserName;
   };
+
+  // Only the creator or admin can fully EDIT a task. Assignees / responsible
+  // persons can only update status (handled separately) — they cannot edit
+  // task name, dates, priority, etc. through the form.
+  const canEditTask = (task) => canDeleteTask(task);
 
   const handleDelete = async (id) => {
     if (!window.confirm('Bu tapşırığı arxivə köçürmək istədiyinizə əminsiniz?')) return;
@@ -779,7 +785,7 @@ export default function Tasks() {
                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0"><MoreVertical className="w-3.5 h-3.5" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleEdit(task)}><Pencil className="w-4 h-4 mr-2" />Redaktə</DropdownMenuItem>
+                        {canEditTask(task) && <DropdownMenuItem onClick={() => handleEdit(task)} data-testid={`task-edit-${task.id}`}><Pencil className="w-4 h-4 mr-2" />Redaktə</DropdownMenuItem>}
                         {statuses.filter(s => s !== task.status).map(s => (
                           <DropdownMenuItem key={s} onClick={() => handleStatusChange(task.id, s)}>
                             {getStatusIcon(s)}<span className="ml-2">{s}</span>
@@ -1266,6 +1272,50 @@ export default function Tasks() {
                 <div><span className="text-slate-400">İcraçı şöbə:</span> {detailTask.department || '—'}</div>
                 <div><span className="text-slate-400">Bitmə:</span> {detailTask.end_date ? formatDate(detailTask.end_date) : '—'}</div>
               </div>
+
+              {/* Mərhələlər / Subtasks (checklist) */}
+              {Array.isArray(detailTask.subtasks) && detailTask.subtasks.length > 0 && (
+                <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/40" data-testid="detail-subtasks">
+                  <Label className="text-xs font-semibold text-[#3D4F6F] flex items-center gap-1 mb-2">
+                    <CheckSquare className="w-3 h-3" />Mərhələlər ({detailTask.subtasks.filter(s => s?.done).length}/{detailTask.subtasks.length})
+                  </Label>
+                  <div className="space-y-1.5">
+                    {detailTask.subtasks.map((st, i) => {
+                      const allowedToToggle = canEditTask(detailTask) || isOwnTask(detailTask);
+                      return (
+                        <div key={i} className="flex items-center gap-2 bg-white border border-slate-100 rounded px-2 py-1.5">
+                          <button
+                            type="button"
+                            disabled={!allowedToToggle}
+                            onClick={async () => {
+                              const next = detailTask.subtasks.map((x, idx) => idx === i ? { ...x, done: !x.done } : x);
+                              setDetailTask({ ...detailTask, subtasks: next });
+                              setTasks(prev => prev.map(t => t.id === detailTask.id ? { ...t, subtasks: next } : t));
+                              try { await axios.put(`${API}/tasks/${detailTask.id}`, { subtasks: next }, { headers }); }
+                              catch { toast.error('Saxlanılmadı'); }
+                            }}
+                            className={allowedToToggle ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}
+                            data-testid={`detail-subtask-toggle-${i}`}
+                          >
+                            {st.done ? <CheckSquare className="w-4 h-4 text-emerald-600" /> : <Square className="w-4 h-4 text-slate-400" />}
+                          </button>
+                          <span className={`text-sm flex-1 ${st.done ? 'line-through text-slate-400' : 'text-slate-700'}`}>{st.title || '—'}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Qeydlər (notes from task creation) */}
+              {detailTask.notes && (
+                <div className="border border-amber-200 rounded-lg p-3 bg-amber-50/40" data-testid="detail-notes">
+                  <Label className="text-xs font-semibold text-amber-700 flex items-center gap-1 mb-1.5">
+                    <StickyNote className="w-3 h-3" />Qeydlər
+                  </Label>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{detailTask.notes}</p>
+                </div>
+              )}
 
               {/* Nəticə (Result) */}
               <div className="bg-emerald-50/50 border border-emerald-100 rounded-lg p-3">

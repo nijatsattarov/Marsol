@@ -2853,6 +2853,25 @@ async def update_task(task_id: str, task_data: dict, current_user: dict = Depend
         raise HTTPException(status_code=404, detail="Tapşırıq tapılmadı")
     await assert_scope_ownership(current_user, "tasks", existing)
     update_data = {k: v for k, v in task_data.items() if v is not None}
+
+    # ---------------------------------------------------------------------
+    # RBAC: Yalnız tapşırığı YARADAN və ya admin TAM redaktə edə bilər.
+    # Assignee/Responsible (təyin olunan şəxs) yalnız "status", "subtasks"
+    # (checklist toggle) və "result" (nəticə mətni) sahələrini yeniləyə bilər.
+    # ---------------------------------------------------------------------
+    me = (current_user.get("name") or "").strip()
+    is_admin = (current_user.get("role") or "").lower() == "admin"
+    creator = (existing.get("created_by") or "").strip()
+    is_creator = creator and creator == me
+    ASSIGNEE_ALLOWED_FIELDS = {"status", "subtasks", "result"}
+    if not is_admin and not is_creator:
+        forbidden = [k for k in update_data.keys() if k not in ASSIGNEE_ALLOWED_FIELDS]
+        if forbidden:
+            raise HTTPException(
+                status_code=403,
+                detail="Yalnız tapşırığı yaradan və ya admin redaktə edə bilər"
+            )
+
     result = await db.tasks.update_one({"id": task_id}, {"$set": update_data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Tapşırıq tapılmadı")
