@@ -1,0 +1,387 @@
+import { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
+import {
+  FileText, Plus, Upload, Download, Loader2, Pencil, Trash2, X,
+  Building2, Hash, User as UserIcon, Calendar, Calculator, FileUp
+} from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Textarea } from '../components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { Badge } from '../components/ui/badge';
+import { Toaster, toast } from 'sonner';
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+const emptyAddendum = () => ({
+  parent_contract_number: '', parent_contract_date: '',
+  sifarisci_company: '', sifarisci_voen: '', sifarisci_authorized: '',
+  exhibition_name: '', exhibition_start: '', exhibition_end: '',
+  exhibition_location: 'Bakı Ekspo Mərkəzi',
+  services: [{ name: '', description: '' }],
+  pricing: { price_net: 0, vat_enabled: true, vat_rate: 18 },
+});
+
+const computeTotal = (p) => {
+  const net = Number(p?.price_net || 0);
+  const vat = p?.vat_enabled ? net * (Number(p?.vat_rate || 18) / 100) : 0;
+  return { net, vat: Math.round(vat * 100) / 100, total: Math.round((net + vat) * 100) / 100 };
+};
+
+export default function Contracts() {
+  const [contracts, setContracts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState(emptyAddendum());
+  const [editing, setEditing] = useState(null);
+  const [extracting, setExtracting] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const token = localStorage.getItem('token');
+  const headers = { Authorization: `Bearer ${token}` };
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await axios.get(`${API}/contracts`, { headers });
+      setContracts(r.data || []);
+    } catch (e) {
+      console.error(e);
+      toast.error('Müqavilələr yüklənmədi');
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.docx')) {
+      toast.error('Yalnız .docx faylı qəbul edilir');
+      return;
+    }
+    setExtracting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const r = await axios.post(`${API}/contracts/extract`, fd, {
+        headers: { ...headers, 'Content-Type': 'multipart/form-data' },
+      });
+      setForm(prev => ({
+        ...prev,
+        parent_contract_number: r.data.contract_number || '',
+        sifarisci_company: r.data.sifarisci_company || '',
+        sifarisci_voen: r.data.sifarisci_voen || '',
+        sifarisci_authorized: r.data.sifarisci_authorized || '',
+      }));
+      toast.success('Müqavilə məlumatları çıxarıldı');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Çıxarma alınmadı');
+    } finally {
+      setExtracting(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleServiceChange = (idx, field, value) => {
+    setForm(prev => ({
+      ...prev,
+      services: prev.services.map((s, i) => i === idx ? { ...s, [field]: value } : s),
+    }));
+  };
+
+  const addService = () => setForm(p => ({ ...p, services: [...p.services, { name: '', description: '' }] }));
+  const removeService = (idx) => setForm(p => ({ ...p, services: p.services.filter((_, i) => i !== idx) }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.sifarisci_company.trim()) { toast.error('Sifarişçi şirkət adı məcburidir'); return; }
+    if (saving) return;
+    setSaving(true);
+    try {
+      let saved;
+      if (editing) {
+        saved = (await axios.put(`${API}/contracts/${editing.id}`, form, { headers })).data;
+        toast.success('Müqavilə yeniləndi');
+      } else {
+        saved = (await axios.post(`${API}/contracts/addendum`, form, { headers })).data;
+        toast.success('Əlavə müqavilə yaradıldı');
+      }
+      setShowModal(false);
+      setForm(emptyAddendum());
+      setEditing(null);
+      fetchData();
+      // Trigger download
+      try {
+        const blobRes = await axios.get(`${API}/contracts/${saved.id}/download`, { headers, responseType: 'blob' });
+        const url = URL.createObjectURL(blobRes.data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Elave_${(saved.parent_contract_number || 'muqavile').replace('/', '-')}_N${saved.addendum_number || 1}.docx`;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+      } catch { /* silent */ }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Saxlanılmadı');
+    } finally { setSaving(false); }
+  };
+
+  const handleDownload = async (c) => {
+    try {
+      const r = await axios.get(`${API}/contracts/${c.id}/download`, { headers, responseType: 'blob' });
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Elave_${(c.parent_contract_number || 'muqavile').replace('/', '-')}_N${c.addendum_number || 1}.docx`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error('Yüklənmədi');
+    }
+  };
+
+  const handleEdit = (c) => {
+    setEditing(c);
+    setForm({
+      parent_contract_number: c.parent_contract_number || '',
+      parent_contract_date: c.parent_contract_date || '',
+      sifarisci_company: c.sifarisci_company || '',
+      sifarisci_voen: c.sifarisci_voen || '',
+      sifarisci_authorized: c.sifarisci_authorized || '',
+      exhibition_name: c.exhibition_name || '',
+      exhibition_start: c.exhibition_start || '',
+      exhibition_end: c.exhibition_end || '',
+      exhibition_location: c.exhibition_location || 'Bakı Ekspo Mərkəzi',
+      services: c.services?.length ? c.services : [{ name: '', description: '' }],
+      pricing: c.pricing || { price_net: 0, vat_enabled: true, vat_rate: 18 },
+    });
+    setShowModal(true);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Müqavilə silinsin?')) return;
+    try {
+      await axios.delete(`${API}/contracts/${id}`, { headers });
+      toast.success('Silindi');
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Silinmədi');
+    }
+  };
+
+  const { net, vat, total } = computeTotal(form.pricing);
+
+  return (
+    <div className="p-4 sm:p-6 max-w-[1500px] mx-auto" data-testid="contracts-page">
+      <Toaster position="top-right" />
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold flex items-center gap-2" style={{ color: '#3D4F6F' }}>
+            <FileText className="w-6 h-6" />Müqavilə Redaktoru
+          </h1>
+          <p className="text-slate-500 text-sm mt-1">Müqaviləyə əlavələri köhnə müqaviləyə əsasən avtomatik generasiya edin</p>
+        </div>
+        <Button
+          onClick={() => { setEditing(null); setForm(emptyAddendum()); setShowModal(true); }}
+          className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold"
+          data-testid="new-addendum-btn"
+        ><Plus className="w-4 h-4 mr-1" />Yeni Əlavə Müqavilə</Button>
+      </div>
+
+      {/* Contracts list */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center py-12 text-slate-400 gap-2"><Loader2 className="w-5 h-5 animate-spin" />Yüklənir...</div>
+        ) : contracts.length === 0 ? (
+          <div className="text-center py-12 text-slate-400">
+            <FileText className="w-12 h-12 mx-auto mb-2 opacity-40" />
+            <p className="text-sm">Hələ heç bir müqavilə yoxdur</p>
+            <p className="text-xs mt-1">Yeni Əlavə Müqavilə yaratmaq üçün yuxarıdakı düyməni klikləyin</p>
+          </div>
+        ) : (
+          <table className="w-full" data-testid="contracts-table">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="px-3 py-2 text-xs font-semibold text-[#3D4F6F] text-left">№</th>
+                <th className="px-3 py-2 text-xs font-semibold text-[#3D4F6F] text-left">Əsas müqavilə</th>
+                <th className="px-3 py-2 text-xs font-semibold text-[#3D4F6F] text-left">Sifarişçi</th>
+                <th className="px-3 py-2 text-xs font-semibold text-[#3D4F6F] text-left">VÖEN</th>
+                <th className="px-3 py-2 text-xs font-semibold text-[#3D4F6F] text-left">Sərgi</th>
+                <th className="px-3 py-2 text-xs font-semibold text-[#3D4F6F] text-right">Məbləğ</th>
+                <th className="px-3 py-2 text-xs font-semibold text-[#3D4F6F] text-left">Tarix</th>
+                <th className="px-3 py-2 text-xs font-semibold text-[#3D4F6F] text-right">Əməliyyat</th>
+              </tr>
+            </thead>
+            <tbody>
+              {contracts.map(c => {
+                const ct = computeTotal(c.pricing);
+                return (
+                  <tr key={c.id} className="border-b last:border-0 hover:bg-slate-50" data-testid={`contract-row-${c.id}`}>
+                    <td className="px-3 py-2 text-sm">
+                      <Badge className="bg-amber-50 text-amber-700 border border-amber-200">Əlavə №{c.addendum_number}</Badge>
+                    </td>
+                    <td className="px-3 py-2 text-sm font-mono text-slate-700">{c.parent_contract_number || '—'}</td>
+                    <td className="px-3 py-2 text-sm text-slate-800 font-medium">{c.sifarisci_company || '—'}</td>
+                    <td className="px-3 py-2 text-sm text-slate-600 font-mono">{c.sifarisci_voen || '—'}</td>
+                    <td className="px-3 py-2 text-sm text-slate-600">{c.exhibition_name || '—'}</td>
+                    <td className="px-3 py-2 text-sm text-right font-semibold text-slate-800">{ct.total.toFixed(2)} AZN</td>
+                    <td className="px-3 py-2 text-sm text-slate-500">{(c.addendum_date || '').slice(0, 10)}</td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="inline-flex gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => handleDownload(c)} className="h-7 text-xs text-emerald-700 hover:bg-emerald-50" data-testid={`download-${c.id}`} title="Word yüklə">
+                          <Download className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleEdit(c)} className="h-7 text-xs text-blue-700 hover:bg-blue-50" data-testid={`edit-${c.id}`} title="Redaktə">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleDelete(c.id)} className="h-7 text-xs text-rose-700 hover:bg-rose-50" data-testid={`delete-${c.id}`} title="Sil">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Modal */}
+      <Dialog open={showModal} onOpenChange={setShowModal}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="addendum-modal">
+          <DialogHeader>
+            <DialogTitle className="text-[#3D4F6F]">{editing ? 'Müqaviləyə Əlavəni Redaktə Et' : 'Yeni Əlavə Müqavilə'}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Upload existing contract */}
+            {!editing && (
+              <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 bg-slate-50">
+                <Label className="text-xs font-semibold text-[#3D4F6F] flex items-center gap-1 mb-2">
+                  <FileUp className="w-3.5 h-3.5" />1. Köhnə (əsas) müqaviləni seç (DOCX) — sahələr avtomatik dolacaq
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input type="file" accept=".docx" onChange={handleFileUpload} disabled={extracting} className="text-sm" data-testid="parent-contract-file" />
+                  {extracting && <Loader2 className="w-4 h-4 animate-spin text-slate-500" />}
+                </div>
+              </div>
+            )}
+
+            {/* Sifarişçi */}
+            <div>
+              <Label className="text-xs font-semibold text-[#3D4F6F] mb-2 flex items-center gap-1">
+                <Building2 className="w-3.5 h-3.5" />2. Sifarişçi məlumatları (köhnə müqavilədən gəlir)
+              </Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Şirkət adı <span className="text-red-500">*</span></Label>
+                  <Input value={form.sifarisci_company} onChange={(e) => setForm({ ...form, sifarisci_company: e.target.value })} className="text-sm" data-testid="sifarisci-company" />
+                </div>
+                <div>
+                  <Label className="text-xs">VÖEN</Label>
+                  <Input value={form.sifarisci_voen} onChange={(e) => setForm({ ...form, sifarisci_voen: e.target.value })} className="text-sm font-mono" data-testid="sifarisci-voen" />
+                </div>
+                <div>
+                  <Label className="text-xs">Səlahiyyətli şəxs</Label>
+                  <Input value={form.sifarisci_authorized} onChange={(e) => setForm({ ...form, sifarisci_authorized: e.target.value })} className="text-sm" data-testid="sifarisci-authorized" />
+                </div>
+                <div>
+                  <Label className="text-xs">Əsas müqavilə №</Label>
+                  <Input value={form.parent_contract_number} onChange={(e) => setForm({ ...form, parent_contract_number: e.target.value })} className="text-sm font-mono" data-testid="parent-number" />
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs">Əsas müqavilə tarixi</Label>
+                  <Input type="date" value={form.parent_contract_date} onChange={(e) => setForm({ ...form, parent_contract_date: e.target.value })} className="text-sm w-48" data-testid="parent-date" />
+                </div>
+              </div>
+            </div>
+
+            {/* Exhibition */}
+            <div>
+              <Label className="text-xs font-semibold text-[#3D4F6F] mb-2 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5" />3. Sərgi / Tədbir məlumatları
+              </Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <Label className="text-xs">Sərgi adı</Label>
+                  <Input value={form.exhibition_name} onChange={(e) => setForm({ ...form, exhibition_name: e.target.value })} placeholder="məs: 8-ci Yerli Şirkətlərin Tanıtım Sərgisi" className="text-sm" data-testid="exhibition-name" />
+                </div>
+                <div>
+                  <Label className="text-xs">Başlama tarixi</Label>
+                  <Input type="date" value={form.exhibition_start} onChange={(e) => setForm({ ...form, exhibition_start: e.target.value })} className="text-sm" data-testid="exhibition-start" />
+                </div>
+                <div>
+                  <Label className="text-xs">Bitmə tarixi</Label>
+                  <Input type="date" value={form.exhibition_end} onChange={(e) => setForm({ ...form, exhibition_end: e.target.value })} className="text-sm" data-testid="exhibition-end" />
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs">Yer</Label>
+                  <Input value={form.exhibition_location} onChange={(e) => setForm({ ...form, exhibition_location: e.target.value })} className="text-sm" data-testid="exhibition-location" />
+                </div>
+              </div>
+            </div>
+
+            {/* Services */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-xs font-semibold text-[#3D4F6F]">4. Xidmətlər</Label>
+                <Button type="button" size="sm" variant="outline" onClick={addService} className="h-7 text-xs"><Plus className="w-3 h-3 mr-1" />Xidmət əlavə et</Button>
+              </div>
+              <div className="space-y-2">
+                {form.services.map((s, i) => (
+                  <div key={i} className="grid grid-cols-[1fr_2fr_auto] gap-2 items-start">
+                    <Input value={s.name} onChange={(e) => handleServiceChange(i, 'name', e.target.value)} placeholder="Xidmət adı" className="text-sm" data-testid={`service-name-${i}`} />
+                    <Textarea value={s.description} onChange={(e) => handleServiceChange(i, 'description', e.target.value)} placeholder="Təsviri" rows={1} className="text-sm" data-testid={`service-desc-${i}`} />
+                    {form.services.length > 1 && (
+                      <Button type="button" size="sm" variant="ghost" onClick={() => removeService(i)} className="h-9 text-rose-600 hover:bg-rose-50"><X className="w-4 h-4" /></Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Pricing */}
+            <div>
+              <Label className="text-xs font-semibold text-[#3D4F6F] mb-2 flex items-center gap-1">
+                <Calculator className="w-3.5 h-3.5" />5. Qiymət
+              </Label>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+                <div className="grid grid-cols-3 gap-3 items-end">
+                  <div>
+                    <Label className="text-xs">Qiymət (ƏDV-siz, AZN)</Label>
+                    <Input type="number" min="0" step="0.01" value={form.pricing.price_net}
+                      onChange={(e) => setForm({ ...form, pricing: { ...form.pricing, price_net: parseFloat(e.target.value || '0') } })}
+                      className="text-sm font-mono" data-testid="price-net" />
+                  </div>
+                  <div className="flex items-center gap-2 pb-2">
+                    <input type="checkbox" checked={form.pricing.vat_enabled}
+                      onChange={(e) => setForm({ ...form, pricing: { ...form.pricing, vat_enabled: e.target.checked } })}
+                      className="w-4 h-4 accent-emerald-600" id="vat-toggle" data-testid="vat-toggle" />
+                    <Label htmlFor="vat-toggle" className="text-sm cursor-pointer">ƏDV tətbiq et (+18%)</Label>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-slate-500">ƏDV məbləği</Label>
+                    <div className="text-sm font-mono text-slate-700 py-2">{vat.toFixed(2)} AZN</div>
+                  </div>
+                </div>
+                <div className="border-t pt-2 flex justify-between items-center">
+                  <Label className="text-sm font-semibold text-[#3D4F6F]">Yekun məbləğ (avtomatik hesablanır):</Label>
+                  <div className="text-xl font-bold text-emerald-700" data-testid="total-amount">{total.toFixed(2)} AZN</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <Button type="button" variant="outline" onClick={() => { setShowModal(false); setEditing(null); }}>Ləğv et</Button>
+              <Button type="submit" disabled={saving} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="save-addendum-btn">
+                {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Download className="w-4 h-4 mr-1" />}
+                {editing ? 'Yenilə və Yüklə' : 'Yarat və Yüklə'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

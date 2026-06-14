@@ -1724,8 +1724,123 @@ async def dispatch_task_reminders(current_user: dict = Depends(get_current_user)
     return {"dispatched": dispatched}
 
 
-# ==================== ATTENDANCE (DAVAMİYYƏT) ====================
+# ==================== MÜQAVİLƏ REDAKTORU (CONTRACTS) ====================
 
+from fastapi import UploadFile, File
+from fastapi.responses import StreamingResponse
+import contract_service
+
+
+@api_router.post("/contracts/extract")
+async def contracts_extract_fields(file: UploadFile = File(...),
+                                    current_user: dict = Depends(get_current_user)):
+    """Upload an EXISTING (parent) service contract DOCX and auto-extract its
+    structured fields (contract number, company, VÖEN, authorized person)."""
+    if not (file.filename or "").lower().endswith(".docx"):
+        raise HTTPException(status_code=400, detail="Yalnız .docx faylı qəbul edilir")
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Fayl 10 MB-dan böyükdür")
+    try:
+        fields = contract_service.extract_contract_fields(content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"DOCX oxunmadı: {e}")
+    return fields
+
+
+@api_router.get("/contracts")
+async def list_contracts(current_user: dict = Depends(check_permission("finance", "read"))):
+    q = await apply_scope({}, current_user, "files")
+    out = await db.contracts.find(q, {"_id": 0, "generated_docx": 0}).sort("created_at", -1).to_list(1000)
+    return out
+
+
+@api_router.get("/contracts/{contract_id}")
+async def get_contract(contract_id: str, current_user: dict = Depends(check_permission("finance", "read"))):
+    c = await db.contracts.find_one({"id": contract_id}, {"_id": 0, "generated_docx": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Müqavilə tapılmadı")
+    return c
+
+
+@api_router.post("/contracts/addendum")
+async def create_addendum(data: dict, current_user: dict = Depends(check_permission("finance", "write"))):
+    if not (data.get("sifarisci_company") or "").strip():
+        raise HTTPException(status_code=400, detail="Sifarişçi şirkət adı məcburidir")
+    parent_no = (data.get("parent_contract_number") or "").strip()
+    existing = await db.contracts.count_documents({
+        "type": "addendum", "parent_contract_number": parent_no,
+    })
+    addendum_number = str(existing + 1)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "type": "addendum",
+        "addendum_number": addendum_number,
+        "parent_contract_number": parent_no,
+        "parent_contract_date": (data.get("parent_contract_date") or "").strip(),
+        "addendum_date": (data.get("addendum_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")),
+        "sifarisci_company": (data.get("sifarisci_company") or "").strip(),
+        "sifarisci_voen": (data.get("sifarisci_voen") or "").strip(),
+        "sifarisci_authorized": (data.get("sifarisci_authorized") or "").strip(),
+        "exhibition_name": (data.get("exhibition_name") or "").strip(),
+        "exhibition_start": (data.get("exhibition_start") or "").strip(),
+        "exhibition_end": (data.get("exhibition_end") or "").strip(),
+        "exhibition_location": (data.get("exhibition_location") or "Bakı Ekspo Mərkəzi").strip(),
+        "services": data.get("services") or [],
+        "pricing": data.get("pricing") or {"price_net": 0, "vat_enabled": True, "vat_rate": 18},
+        "status": "draft",
+        "created_by": current_user.get("name", ""),
+        "marsol_company": (current_user.get("marsol_company") or "").strip(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    docx_bytes = contract_service.generate_addendum_docx(doc)
+    await db.contracts.insert_one({**doc, "generated_docx": docx_bytes})
+    return doc
+
+
+@api_router.put("/contracts/{contract_id}")
+async def update_contract(contract_id: str, data: dict,
+                          current_user: dict = Depends(check_permission("finance", "write"))):
+    existing = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Müqavilə tapılmadı")
+    update_data = {k: v for k, v in data.items() if v is not None and k not in ("id", "generated_docx")}
+    merged = {**existing, **update_data}
+    update_data["generated_docx"] = contract_service.generate_addendum_docx(merged)
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.contracts.update_one({"id": contract_id}, {"$set": update_data})
+    out = await db.contracts.find_one({"id": contract_id}, {"_id": 0, "generated_docx": 0})
+    return out
+
+
+@api_router.delete("/contracts/{contract_id}")
+async def delete_contract(contract_id: str,
+                          current_user: dict = Depends(check_permission("finance", "write"))):
+    res = await db.contracts.delete_one({"id": contract_id})
+    if not res.deleted_count:
+        raise HTTPException(status_code=404, detail="Müqavilə tapılmadı")
+    return {"message": "Silindi"}
+
+
+@api_router.get("/contracts/{contract_id}/download")
+async def download_contract(contract_id: str,
+                            current_user: dict = Depends(check_permission("finance", "read"))):
+    c = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Müqavilə tapılmadı")
+    blob = c.get("generated_docx")
+    if not blob:
+        blob = contract_service.generate_addendum_docx(c)
+    safe_name = (c.get("parent_contract_number") or "muqavile").replace("/", "-")
+    filename = f"Elave_{safe_name}_N{c.get('addendum_number', '1')}.docx"
+    return StreamingResponse(
+        io.BytesIO(blob),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ==================== ATTENDANCE (DAVAMİYYƏT) ====================
 ATTENDANCE_STATUSES = ["İşdə", "Gəlməyib", "Məzuniyyət", "Xəstəlik", "İcazəli", "Uzaq"]
 
 @api_router.get("/attendance")

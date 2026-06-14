@@ -7,6 +7,7 @@ import Companies from "./pages/Companies";
 import HR from "./pages/HR";
 import Attendance from "./pages/Attendance";
 import HrKpi from "./pages/HrKpi";
+import Contracts from "./pages/Contracts";
 import Finance from "./pages/Finance";
 import Inventory from "./pages/Inventory";
 import Barter from "./pages/Barter";
@@ -85,6 +86,7 @@ function App() {
             <Route path="companies" element={<Companies />} />
             <Route path="hr" element={<HR />} />
             <Route path="hr/kpi" element={<HrKpi />} />
+            <Route path="finance/contracts" element={<Contracts />} />
             <Route path="attendance" element={<Attendance />} />
             <Route path="finance" element={<Finance />} />
             <Route path="finance/inventory" element={<Inventory />} />
