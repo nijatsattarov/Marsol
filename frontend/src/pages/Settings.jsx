@@ -1273,7 +1273,7 @@ export default function Settings() {
               <Button size="sm" onClick={() => {
                 setEditingRole(null);
                 const defaultPerms = {};
-                ['dashboard','companies','hr','sales','members','obligations','finance','organization','meetings','assembly','tasks','marketing','projects','reports','messages','files','notes','sms','settings','notifications'].forEach(m => defaultPerms[m] = 'none');
+                ['dashboard','companies','hr','sales','members','obligations','finance','contracts','organization','meetings','assembly','tasks','marketing','projects','reports','messages','files','notes','sms','settings','notifications'].forEach(m => defaultPerms[m] = 'none');
                 setRoleForm({ name: '', permissions: defaultPerms, scopes: {} });
                 setShowRoleModal(true);
               }} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125]" data-testid="add-role-btn">
@@ -1345,7 +1345,7 @@ export default function Settings() {
                         {[
                           ['dashboard', 'İdarə Paneli'], ['companies', 'Şirkət Məlumatları'], ['hr', 'İnsan Resursları'],
                           ['sales', 'Satış (Şirkət Bazası)'], ['members', 'Üzvlər'], ['obligations', 'Öhdəliklər'],
-                          ['finance', 'Maliyyə'], ['organization', 'Fəaliyyətlər / Təşkilatçılıq'], ['meetings', 'Görüşlər'],
+                          ['finance', 'Maliyyə'], ['contracts', 'Müqavilə Redaktoru'], ['organization', 'Fəaliyyətlər / Təşkilatçılıq'], ['meetings', 'Görüşlər'],
                           ['assembly', 'İclaslar'], ['tasks', 'Tapşırıqlar'], ['marketing', 'Marketinq'],
                           ['projects', 'Layihələr'], ['reports', 'Hesabatlar'], ['messages', 'Mesajlar'],
                           ['files', 'Fayllar'], ['notes', 'Qeydlər'], ['sms', 'SMS'], ['settings', 'Tənzimləmələr'],
@@ -1393,6 +1393,7 @@ export default function Settings() {
                           ['members', 'Üzvlər'],
                           ['obligations', 'Öhdəliklər'],
                           ['finance', 'Maliyyə'],
+                          ['contracts', 'Müqavilə Redaktoru'],
                           ['organization', 'Fəaliyyətlər / Təşkilatçılıq'],
                           ['meetings', 'Görüşlər'],
                           ['assembly', 'İclaslar'],

@@ -57,7 +57,7 @@ const hrSubItems = [
 const financeSubItems = [
   { path: '/finance', label: 'Mühasibat', icon: Wallet, module: 'finance' },
   { path: '/finance/inventory', label: 'İnventar', icon: Package, module: 'finance' },
-  { path: '/finance/contracts', label: 'Müqavilə Redaktoru', icon: FileText, module: 'finance' },
+  { path: '/finance/contracts', label: 'Müqavilə Redaktoru', icon: FileText, module: 'contracts' },
   { path: '/barter', label: 'Barter', icon: ArrowLeftRight, module: 'finance' },
 ];
 

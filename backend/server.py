@@ -368,7 +368,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 MODULES = [
     "dashboard", "companies", "hr", "sales", "members", "obligations",
-    "finance", "organization", "meetings", "assembly", "tasks",
+    "finance", "contracts", "organization", "meetings", "assembly", "tasks",
     "marketing", "projects", "reports", "messages", "files", "notes",
     "settings", "notifications", "sms"
 ]
