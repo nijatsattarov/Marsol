@@ -127,6 +127,26 @@ MARSOL_DEFAULT = {
 }
 
 
+# Standart sərgi paketinə daxil olan xidmətlər. Bu siyahı statikdir və
+# istifadəçi tərəfindən UI-də dəyişdirilə bilməz — Marsol Group-un standart
+# sərgi iştirakı paketinə uyğun olaraq müqavilədə həmişə eyni cədvəl çıxır.
+STANDARD_SERVICES: List[str] = [
+    "Arxa və yan divarlar, şirkətin adı ilə lövhə, 1 masa, 2 stul, zibil qutusu, 3 yuvalı elektrik uzadıcı, xalça döşəmə;",
+    "Sərgi üçün çap ediləcək 2000 tiraj kataloqda 1(bir) səhifə reklam (A5).",
+    "Sertifikat",
+    "Sərgi foye hissəsində 6x4 metr ölçülü monitorda vaxtaşırı şirkətinizin loqosunun yayımlanması",
+    "“Brendwall” da Sifarişçiyə məxsus loqo",
+    "Marsolexpo.az saytında şirkətiniz üçün ayrılmış bölmədə məlumatlarınızın bir illik yerləşdirilməsi",
+    "“Sərgidə biz də varıq” posterinin tərəfimizdən tərtib olunması;",
+    "Sərgi günlərində təşkil olunan B2B və B2G görüşlərdə iştirak imkanı;",
+    "Coffee Break zonasında təqdim olunan xidmətlərdən ödənişsiz istifadə (ancaq stend iştirakçıları üçün)",
+    "Sərgi sonrası axşam ziyafətinə bir nəfərə dəvətnamə",
+    "Axşam ziyafətində “Brendwall” da loqo",
+    "Sərgi müddətində, vaxtaşırı kampaniya və endirimlərin səsləndirilməsi;",
+    "Sərgi iştirakçısı şirkət rəhbərlərilə sərgi öncəsi təşkil edilən görüşlərdə iştirak imkanı;",
+]
+
+
 def _fmt_money(value: float) -> str:
     """`12345.6` → `12 345.60` (Azerbaijani-style thousand separator with space)."""
     try:
@@ -197,8 +217,6 @@ def generate_addendum_docx(data: Dict) -> bytes:
     ex_end = data.get("exhibition_end") or "__.__.20__"
     ex_loc = data.get("exhibition_location") or "Bakı Ekspo Mərkəzi"
 
-    services = data.get("services") or []
-
     doc = Document()
     # Page margins (cm)
     for section in doc.sections:
@@ -246,23 +264,21 @@ def generate_addendum_docx(data: Dict) -> bytes:
         f"ödənilməsi öhdəliyini öz üzərinə götürür."
     )
 
-    # --- Section III: Services table ---
+    # --- Section III: Services table (statik — Marsol standart paketi) ---
     _add_paragraph(doc, "III. GÖSTƏRİLƏCƏK XİDMƏTLƏR", bold=True, size=12)
 
-    if services:
-        tbl = doc.add_table(rows=1, cols=2)
-        tbl.style = "Table Grid"
-        hdr = tbl.rows[0].cells
-        for run in hdr[0].paragraphs[0].runs:
-            run.text = ""
-        h1 = hdr[0].paragraphs[0].add_run("Xidmət adı")
-        _set_font(h1, bold=True)
-        h2 = hdr[1].paragraphs[0].add_run("Təsviri")
-        _set_font(h2, bold=True)
-        for svc in services:
-            row = tbl.add_row().cells
-            row[0].text = svc.get("name", "")
-            row[1].text = svc.get("description", "")
+    tbl = doc.add_table(rows=0, cols=1)
+    tbl.style = "Table Grid"
+    for svc in STANDARD_SERVICES:
+        row = tbl.add_row().cells
+        cell = row[0]
+        # Override default cell paragraph rather than `cell.text = ...` so we
+        # can control font + alignment exactly.
+        cell.text = ""
+        p = cell.paragraphs[0]
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        run = p.add_run(svc)
+        _set_font(run, size=11)
 
     doc.add_paragraph()
 

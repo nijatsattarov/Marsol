@@ -1749,14 +1749,14 @@ async def contracts_extract_fields(file: UploadFile = File(...),
 
 
 @api_router.get("/contracts")
-async def list_contracts(current_user: dict = Depends(check_permission("finance", "read"))):
+async def list_contracts(current_user: dict = Depends(check_permission("contracts", "read"))):
     q = await apply_scope({}, current_user, "files")
     out = await db.contracts.find(q, {"_id": 0, "generated_docx": 0}).sort("created_at", -1).to_list(1000)
     return out
 
 
 @api_router.get("/contracts/{contract_id}")
-async def get_contract(contract_id: str, current_user: dict = Depends(check_permission("finance", "read"))):
+async def get_contract(contract_id: str, current_user: dict = Depends(check_permission("contracts", "read"))):
     c = await db.contracts.find_one({"id": contract_id}, {"_id": 0, "generated_docx": 0})
     if not c:
         raise HTTPException(status_code=404, detail="Müqavilə tapılmadı")
@@ -1764,7 +1764,7 @@ async def get_contract(contract_id: str, current_user: dict = Depends(check_perm
 
 
 @api_router.post("/contracts/addendum")
-async def create_addendum(data: dict, current_user: dict = Depends(check_permission("finance", "write"))):
+async def create_addendum(data: dict, current_user: dict = Depends(check_permission("contracts", "write"))):
     if not (data.get("sifarisci_company") or "").strip():
         raise HTTPException(status_code=400, detail="Sifarişçi şirkət adı məcburidir")
     parent_no = (data.get("parent_contract_number") or "").strip()
@@ -1800,7 +1800,7 @@ async def create_addendum(data: dict, current_user: dict = Depends(check_permiss
 
 @api_router.put("/contracts/{contract_id}")
 async def update_contract(contract_id: str, data: dict,
-                          current_user: dict = Depends(check_permission("finance", "write"))):
+                          current_user: dict = Depends(check_permission("contracts", "write"))):
     existing = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Müqavilə tapılmadı")
@@ -1815,7 +1815,7 @@ async def update_contract(contract_id: str, data: dict,
 
 @api_router.delete("/contracts/{contract_id}")
 async def delete_contract(contract_id: str,
-                          current_user: dict = Depends(check_permission("finance", "write"))):
+                          current_user: dict = Depends(check_permission("contracts", "write"))):
     res = await db.contracts.delete_one({"id": contract_id})
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Müqavilə tapılmadı")
@@ -1824,7 +1824,7 @@ async def delete_contract(contract_id: str,
 
 @api_router.get("/contracts/{contract_id}/download")
 async def download_contract(contract_id: str,
-                            current_user: dict = Depends(check_permission("finance", "read"))):
+                            current_user: dict = Depends(check_permission("contracts", "read"))):
     c = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
     if not c:
         raise HTTPException(status_code=404, detail="Müqavilə tapılmadı")

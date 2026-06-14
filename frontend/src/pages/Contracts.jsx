@@ -7,19 +7,33 @@ import {
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Textarea } from '../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import { Toaster, toast } from 'sonner';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+const STANDARD_SERVICES = [
+  'Arxa və yan divarlar, şirkətin adı ilə lövhə, 1 masa, 2 stul, zibil qutusu, 3 yuvalı elektrik uzadıcı, xalça döşəmə;',
+  'Sərgi üçün çap ediləcək 2000 tiraj kataloqda 1(bir) səhifə reklam (A5).',
+  'Sertifikat',
+  'Sərgi foye hissəsində 6x4 metr ölçülü monitorda vaxtaşırı şirkətinizin loqosunun yayımlanması',
+  '“Brendwall” da Sifarişçiyə məxsus loqo',
+  'Marsolexpo.az saytında şirkətiniz üçün ayrılmış bölmədə məlumatlarınızın bir illik yerləşdirilməsi',
+  '“Sərgidə biz də varıq” posterinin tərəfimizdən tərtib olunması;',
+  'Sərgi günlərində təşkil olunan B2B və B2G görüşlərdə iştirak imkanı;',
+  'Coffee Break zonasında təqdim olunan xidmətlərdən ödənişsiz istifadə (ancaq stend iştirakçıları üçün)',
+  'Sərgi sonrası axşam ziyafətinə bir nəfərə dəvətnamə',
+  'Axşam ziyafətində “Brendwall” da loqo',
+  'Sərgi müddətində, vaxtaşırı kampaniya və endirimlərin səsləndirilməsi;',
+  'Sərgi iştirakçısı şirkət rəhbərlərilə sərgi öncəsi təşkil edilən görüşlərdə iştirak imkanı;',
+];
+
 const emptyAddendum = () => ({
   parent_contract_number: '', parent_contract_date: '',
   sifarisci_company: '', sifarisci_voen: '', sifarisci_authorized: '',
   exhibition_name: '', exhibition_start: '', exhibition_end: '',
   exhibition_location: 'Bakı Ekspo Mərkəzi',
-  services: [{ name: '', description: '' }],
   pricing: { price_net: 0, vat_enabled: true, vat_rate: 18 },
 });
 
@@ -84,16 +98,6 @@ export default function Contracts() {
     }
   };
 
-  const handleServiceChange = (idx, field, value) => {
-    setForm(prev => ({
-      ...prev,
-      services: prev.services.map((s, i) => i === idx ? { ...s, [field]: value } : s),
-    }));
-  };
-
-  const addService = () => setForm(p => ({ ...p, services: [...p.services, { name: '', description: '' }] }));
-  const removeService = (idx) => setForm(p => ({ ...p, services: p.services.filter((_, i) => i !== idx) }));
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.sifarisci_company.trim()) { toast.error('Sifarişçi şirkət adı məcburidir'); return; }
@@ -153,7 +157,6 @@ export default function Contracts() {
       exhibition_start: c.exhibition_start || '',
       exhibition_end: c.exhibition_end || '',
       exhibition_location: c.exhibition_location || 'Bakı Ekspo Mərkəzi',
-      services: c.services?.length ? c.services : [{ name: '', description: '' }],
       pricing: c.pricing || { price_net: 0, vat_enabled: true, vat_rate: 18 },
     });
     setShowModal(true);
@@ -322,22 +325,23 @@ export default function Contracts() {
               </div>
             </div>
 
-            {/* Services */}
+            {/* Services — STATIK (Marsol standart paket) */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label className="text-xs font-semibold text-[#3D4F6F]">4. Xidmətlər</Label>
-                <Button type="button" size="sm" variant="outline" onClick={addService} className="h-7 text-xs"><Plus className="w-3 h-3 mr-1" />Xidmət əlavə et</Button>
-              </div>
-              <div className="space-y-2">
-                {form.services.map((s, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_2fr_auto] gap-2 items-start">
-                    <Input value={s.name} onChange={(e) => handleServiceChange(i, 'name', e.target.value)} placeholder="Xidmət adı" className="text-sm" data-testid={`service-name-${i}`} />
-                    <Textarea value={s.description} onChange={(e) => handleServiceChange(i, 'description', e.target.value)} placeholder="Təsviri" rows={1} className="text-sm" data-testid={`service-desc-${i}`} />
-                    {form.services.length > 1 && (
-                      <Button type="button" size="sm" variant="ghost" onClick={() => removeService(i)} className="h-9 text-rose-600 hover:bg-rose-50"><X className="w-4 h-4" /></Button>
-                    )}
-                  </div>
-                ))}
+              <Label className="text-xs font-semibold text-[#3D4F6F] mb-2 block">
+                4. Xidmətlər <span className="text-slate-400 font-normal">(standart paket — dəyişdirilə bilməz)</span>
+              </Label>
+              <div className="border border-slate-200 rounded-lg overflow-hidden" data-testid="services-static-preview">
+                <div className="bg-slate-50 px-3 py-2 text-[11px] font-semibold text-[#3D4F6F] border-b border-slate-200">
+                  Müqavilədə cədvəl şəklində göstəriləcək xidmətlər
+                </div>
+                <ol className="divide-y divide-slate-100 text-[12px] text-slate-700">
+                  {STANDARD_SERVICES.map((s, i) => (
+                    <li key={i} className="flex gap-2 px-3 py-2">
+                      <span className="text-slate-400 font-mono w-5 shrink-0">{i + 1}.</span>
+                      <span className="leading-relaxed">{s}</span>
+                    </li>
+                  ))}
+                </ol>
               </div>
             </div>
 

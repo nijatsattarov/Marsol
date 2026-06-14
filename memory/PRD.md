@@ -9,7 +9,8 @@ Marsol Group üçün B2B Networking şirkəti (500+ üzv) üçün hərtərəfli 
 - Integrations: Cloudinary, Resend, OpenAI (gpt-4o-mini), Firebase Cloud Messaging, python-docx
 
 ## Recently Completed (2026-02)
-- Müqavilə Redaktoru üçün ayrıca **`contracts` modul icazəsi** (Settings → Rollar modalında ayrı sətr; admin və mövcud Mühasib rolu üçün avtomatik write backfill)
+- Müqavilə Redaktoru: **Xidmətlər bölümü artıq statikdir** — Marsol-un 13 standart sərgi xidməti DOCX-də 1 sütunlu Table Grid kimi düzgün cədvəl şəklində render olunur. UI-də dinamik input-lar silindi, yalnız oxunan preview qaldı.
+- Müqavilə Redaktoru üçün ayrıca **`contracts` modul icazəsi** (backend API-də də artıq `check_permission("contracts", ...)`; Settings → Rollar modalında ayrı sətr; admin və mövcud Mühasib rolu üçün avtomatik write backfill)
 - Finance > Müqavilə Redaktoru: DOCX parse, VÖEN/Şirkət avtomatik çıxarış, Əlavə Müqavilə (Addendum) DOCX generasiya, ƏDV avtomatik hesablanma
 - HR KPI tab (executor/responsible üzrə tapşırıq statistikası)
 - Tasks: multi-assignee, çətinlik, estimated duration, overdue rəng, RBAC (yalnız creator/admin tam redaktə), Auto-Archive (gün sayı Tənzimləmələrdən), bulk delete (admin)
