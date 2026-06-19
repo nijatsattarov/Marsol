@@ -18,8 +18,8 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from docx import Document
-from docx.shared import Pt, Cm
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH  # noqa: F401  (used indirectly)
 
 
 # ----------------------------------------------------------------------------
@@ -31,6 +31,8 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 _CONTRACT_NUM_RE = re.compile(r"№\s*([A-Za-zƏəĞğİıÖöÜüÇçŞş0-9\-/_]+)", re.UNICODE)
 _VOEN_RE = re.compile(r"V[ÖöO]EN\s*[:\-]?\s*(\d{8,12})", re.IGNORECASE | re.UNICODE)
 _DIRECTOR_RE = re.compile(r"direktoru\s+([A-Za-zƏəĞğİıÖöÜüÇçŞş\s\.'-]+?)\s+şəxs", re.UNICODE)
+# Contract date — first occurrence of `DD.MM.YYYY` near the top of the doc.
+_DATE_RE = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b")
 # Company names usually appear wrapped in “ ” or " " with the legal-form
 # suffix (MMC, QSC, ASC, MMC-si). We grab the bit inside the guillemets.
 _COMPANY_RE = re.compile(r"[“\"„]\s*([A-Za-zƏəĞğİıÖöÜüÇçŞş0-9\s\.&\-]+?)\s*[”\"“]\s*(?:QSC|MMC|ASC|Məhdud|Qapalı|Açıq)", re.UNICODE)
@@ -63,6 +65,18 @@ def extract_contract_fields(file_bytes: bytes) -> Dict[str, str]:
     m = _CONTRACT_NUM_RE.search(text)
     if m:
         contract_number = m.group(1).strip()
+
+    # Contract date — pick the FIRST DD.MM.YYYY occurrence (header date).
+    # Returned in ISO format (YYYY-MM-DD) so it slots straight into a
+    # `<input type="date">` on the frontend.
+    contract_date_iso = ""
+    dm = _DATE_RE.search(text)
+    if dm:
+        try:
+            dd, mm, yy = int(dm.group(1)), int(dm.group(2)), int(dm.group(3))
+            contract_date_iso = f"{yy:04d}-{mm:02d}-{dd:02d}"
+        except ValueError:
+            contract_date_iso = ""
 
     # Find ALL VÖEN matches (usually 2: Sifarişçi + İcraçı). Marsol's VÖEN is
     # known to be 2004204701, so we use it to determine which side is which.
@@ -98,6 +112,7 @@ def extract_contract_fields(file_bytes: bytes) -> Dict[str, str]:
 
     return {
         "contract_number": contract_number,
+        "contract_date": contract_date_iso,
         "sifarisci_company": sifarisci_company,
         "sifarisci_voen": sifarisci_voen,
         "sifarisci_authorized": sifarisci_authorized,
@@ -156,6 +171,15 @@ def _fmt_date_az(iso_date: str) -> str:
         return dt.strftime("%d.%m.%Y")
     except (ValueError, TypeError):
         return iso_date
+
+
+def _fmt_money(value) -> str:
+    """`12345.6` → `12 345.60` (AZ-style space thousand separator)."""
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return ""
+    return f"{n:,.2f}".replace(",", " ")
 
 
 _AZ_MONTHS = {
@@ -253,6 +277,9 @@ def generate_addendum_docx(data: Dict) -> bytes:
 
     ex_range = _exhibition_range_az(data.get("exhibition_start"),
                                     data.get("exhibition_end"))
+    # If user didn't supply exhibition dates, keep the static template text
+    # as-is (don't overwrite "23 iyun - 26 iyun 2027-ci il" with underscores).
+    skip_exhibition = not (data.get("exhibition_start") and data.get("exhibition_end"))
 
     # Suffix for parent contract date (e.g. "-cı il")
     p_year = None
@@ -314,8 +341,8 @@ def generate_addendum_docx(data: Dict) -> bytes:
             f"səlahiyyətli şəxs – {sif_auth}" if sif_auth
             else "səlahiyyətli şəxs – __________"
         ),
-        # Exhibition date range (P15)
-        "23 iyun - 26 iyun 2027-ci il": ex_range,
+        # Exhibition date range (P15) — only replaced when user supplied dates
+        **({} if skip_exhibition else {"23 iyun - 26 iyun 2027-ci il": ex_range}),
     }
 
     # --- Replace inside paragraphs ---
@@ -345,6 +372,47 @@ def generate_addendum_docx(data: Dict) -> bytes:
                 _set_cell_text(sig_tbl.rows[3].cells[1], sif_auth)
         except (IndexError, KeyError):
             pass
+
+    # --- Insert pricing table right AFTER the services table ---
+    # The template ships without a pricing breakdown table; we always append
+    # one (Stend №, Xidmətin adı, Ölçü vahidi, Qiymət, ƏDV, Yekun məbləğ)
+    # so that the Sifarişçi sees the figures inline with the addendum.
+    pricing = data.get("pricing", {}) or {}
+    price_net = float(pricing.get("price_net") or 0)
+    vat_enabled = bool(pricing.get("vat_enabled", True))
+    vat_rate = float(pricing.get("vat_rate") or 18) if vat_enabled else 0
+    vat_amount = round(price_net * vat_rate / 100, 2) if vat_enabled else 0.0
+    total = round(price_net + vat_amount, 2)
+    stand_no = (data.get("stand_number") or "").strip()
+    service_label = (data.get("service_label") or "Sərgidə iştirak").strip()
+    unit_label = (data.get("unit_label") or "x/h").strip()
+
+    if len(doc.tables) >= 1:
+        services_tbl = doc.tables[0]
+        # Build new 2-row, 6-col table at the end, then move it to be a
+        # sibling immediately after the services table.
+        price_tbl = doc.add_table(rows=2, cols=6)
+        price_tbl.style = "Table Grid"
+        headers = ["Stend №", "Xidmətin adı", "Ölçü vahidi",
+                   "Qiymət", "ƏDV", "Yekun məbləğ"]
+        for i, h in enumerate(headers):
+            _set_cell_text(price_tbl.rows[0].cells[i], h, bold=True, size=11)
+        data_row = [
+            stand_no or "",
+            service_label,
+            unit_label,
+            _fmt_money(price_net) if price_net else "",
+            (_fmt_money(vat_amount) if vat_enabled and vat_amount else "-"),
+            _fmt_money(total) if total else "",
+        ]
+        for i, v in enumerate(data_row):
+            _set_cell_text(price_tbl.rows[1].cells[i], v, size=11)
+
+        # Move price table to right after services table in document order
+        svc_xml = services_tbl._element
+        price_xml = price_tbl._element
+        price_xml.getparent().remove(price_xml)
+        svc_xml.addnext(price_xml)
 
     out = io.BytesIO()
     doc.save(out)

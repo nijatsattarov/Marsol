@@ -1782,6 +1782,7 @@ async def create_addendum(data: dict, current_user: dict = Depends(check_permiss
         "sifarisci_company": (data.get("sifarisci_company") or "").strip(),
         "sifarisci_voen": (data.get("sifarisci_voen") or "").strip(),
         "sifarisci_authorized": (data.get("sifarisci_authorized") or "").strip(),
+        "stand_number": (data.get("stand_number") or "").strip(),
         "exhibition_name": (data.get("exhibition_name") or "").strip(),
         "exhibition_start": (data.get("exhibition_start") or "").strip(),
         "exhibition_end": (data.get("exhibition_end") or "").strip(),

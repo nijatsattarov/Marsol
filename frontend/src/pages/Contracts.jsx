@@ -32,8 +32,8 @@ const STANDARD_SERVICES = [
 const emptyAddendum = () => ({
   parent_contract_number: '', parent_contract_date: '',
   sifarisci_company: '', sifarisci_voen: '', sifarisci_authorized: '',
-  exhibition_name: '', exhibition_start: '', exhibition_end: '',
-  exhibition_location: 'Bakı Ekspo Mərkəzi',
+  addendum_date: new Date().toISOString().slice(0, 10),
+  stand_number: '',
   pricing: { price_net: 0, vat_enabled: true, vat_rate: 18 },
 });
 
@@ -85,6 +85,7 @@ export default function Contracts() {
       setForm(prev => ({
         ...prev,
         parent_contract_number: r.data.contract_number || '',
+        parent_contract_date: r.data.contract_date || '',
         sifarisci_company: r.data.sifarisci_company || '',
         sifarisci_voen: r.data.sifarisci_voen || '',
         sifarisci_authorized: r.data.sifarisci_authorized || '',
@@ -153,10 +154,8 @@ export default function Contracts() {
       sifarisci_company: c.sifarisci_company || '',
       sifarisci_voen: c.sifarisci_voen || '',
       sifarisci_authorized: c.sifarisci_authorized || '',
-      exhibition_name: c.exhibition_name || '',
-      exhibition_start: c.exhibition_start || '',
-      exhibition_end: c.exhibition_end || '',
-      exhibition_location: c.exhibition_location || 'Bakı Ekspo Mərkəzi',
+      addendum_date: c.addendum_date || new Date().toISOString().slice(0, 10),
+      stand_number: c.stand_number || '',
       pricing: c.pricing || { price_net: 0, vat_enabled: true, vat_rate: 18 },
     });
     setShowModal(true);
@@ -300,27 +299,21 @@ export default function Contracts() {
               </div>
             </div>
 
-            {/* Exhibition */}
+            {/* Exhibition — sadəcə stend nömrəsi və yer (sərgi adı və tarixləri
+                şablonda statik qalır, hər il yeni şablon yüklənir) */}
             <div>
               <Label className="text-xs font-semibold text-[#3D4F6F] mb-2 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5" />3. Sərgi / Tədbir məlumatları
+                <Calendar className="w-3.5 h-3.5" />3. Bu il müqavilə bağlanma tarixi və Stend
               </Label>
               <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <Label className="text-xs">Sərgi adı</Label>
-                  <Input value={form.exhibition_name} onChange={(e) => setForm({ ...form, exhibition_name: e.target.value })} placeholder="məs: 8-ci Yerli Şirkətlərin Tanıtım Sərgisi" className="text-sm" data-testid="exhibition-name" />
+                <div>
+                  <Label className="text-xs">Bu il müqavilə bağlanma tarixi <span className="text-red-500">*</span></Label>
+                  <Input type="date" value={form.addendum_date} onChange={(e) => setForm({ ...form, addendum_date: e.target.value })} className="text-sm" data-testid="addendum-date" />
+                  <span className="text-[10px] text-slate-500 mt-1 block">("Bakı şəhəri" sətrində göstərilir</span>
                 </div>
                 <div>
-                  <Label className="text-xs">Başlama tarixi</Label>
-                  <Input type="date" value={form.exhibition_start} onChange={(e) => setForm({ ...form, exhibition_start: e.target.value })} className="text-sm" data-testid="exhibition-start" />
-                </div>
-                <div>
-                  <Label className="text-xs">Bitmə tarixi</Label>
-                  <Input type="date" value={form.exhibition_end} onChange={(e) => setForm({ ...form, exhibition_end: e.target.value })} className="text-sm" data-testid="exhibition-end" />
-                </div>
-                <div className="col-span-2">
-                  <Label className="text-xs">Yer</Label>
-                  <Input value={form.exhibition_location} onChange={(e) => setForm({ ...form, exhibition_location: e.target.value })} className="text-sm" data-testid="exhibition-location" />
+                  <Label className="text-xs">Stend №</Label>
+                  <Input value={form.stand_number} onChange={(e) => setForm({ ...form, stand_number: e.target.value })} placeholder="məs: A12" className="text-sm font-mono" data-testid="stand-number" />
                 </div>
               </div>
             </div>

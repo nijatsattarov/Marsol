@@ -9,9 +9,10 @@ Marsol Group üçün B2B Networking şirkəti (500+ üzv) üçün hərtərəfli 
 - Integrations: Cloudinary, Resend, OpenAI (gpt-4o-mini), Firebase Cloud Messaging, python-docx
 
 ## Recently Completed (2026-02)
-- Müqavilə Redaktoru — **şablon-əsaslı generasiya**: İstifadəçinin atdığı son `Əlavə Müqaviləsi` DOCX şablon kimi `/app/backend/templates/addendum_template.docx`-da saxlanılır. Sistem yalnız boş xanaları doldurur (parent müqavilə №/tarix, Sifarişçi şirkət/VÖEN/səlahiyyətli şəxs, sərgi tarixləri, əlavə №/tarix). Yazılar, şriftlər, maddələr, kursivlər, 13-sətirli xidmət cədvəli, imza bloku — heç biri dəyişməz. Hüquqi forma (QSC/ASC/MMC) avtomatik aşkarlanır ki, dublikat "Məhdud Məsuliyyətli Cəmiyyəti" yazılmasın.
-- Müqavilə Redaktoru: Xidmətlər artıq statikdir (13 standart Marsol xidməti)
-- Müqavilə Redaktoru üçün ayrıca **`contracts` modul icazəsi**
+- Müqavilə Redaktoru forması sadələşdirildi: Sərgi adı / Başlama / Bitmə tarixi sahələri silindi. Bunun yerinə: **"Bu il müqavilə bağlanma tarixi"** ("Bakı şəhəri" sətrində istifadə olunur) və **"Stend №"** sahələri əlavə olundu.
+- Müqavilə Redaktoru DOCX-də xidmət cədvəlindən sonra avtomatik **6 sütunlu qiymət cədvəli** (Stend №, Xidmətin adı, Ölçü vahidi, Qiymət, ƏDV, Yekun məbləğ) yaranır və formdakı dəyərlərlə dolur.
+- Köhnə müqavilədən **tarix avtomatik çıxarılır** (parse-docx regex). Köhnə müqavilə yükləndikdə "Əsas müqavilə tarixi" sahəsi avtomatik dolur.
+- Müqavilə Redaktoru — şablon-əsaslı generasiya: bütün şrift/maddə/cədvəl şablondan götürülür; yalnız placeholder-lər doldurulur
 - HR KPI tab (executor/responsible üzrə tapşırıq statistikası)
 - Tasks: multi-assignee, çətinlik, estimated duration, overdue rəng, RBAC (yalnız creator/admin tam redaktə), Auto-Archive (gün sayı Tənzimləmələrdən), bulk delete (admin)
 - Multi-tenancy (Müəssisə) data isolation across Tasks/Meetings/Files/Assembly/Notes
