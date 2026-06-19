@@ -90,7 +90,16 @@ export default function Contracts() {
         sifarisci_voen: r.data.sifarisci_voen || '',
         sifarisci_authorized: r.data.sifarisci_authorized || '',
       }));
-      toast.success('Müqavilə məlumatları çıxarıldı');
+      const missing = [];
+      if (!r.data.contract_number) missing.push('Müqavilə №');
+      if (!r.data.contract_date) missing.push('Əsas müqavilə tarixi');
+      if (!r.data.sifarisci_company) missing.push('Şirkət adı');
+      if (!r.data.sifarisci_voen) missing.push('VÖEN');
+      if (missing.length) {
+        toast.warning(`Bəzi sahələr tapılmadı: ${missing.join(', ')}. Əl ilə doldurun.`);
+      } else {
+        toast.success('Müqavilə məlumatları tam çıxarıldı');
+      }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Çıxarma alınmadı');
     } finally {

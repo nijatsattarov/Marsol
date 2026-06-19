@@ -31,7 +31,9 @@ from docx.oxml.ns import qn
 # Patterns are intentionally permissive — Azerbaijani contract numbering can
 # look like "№ TS001/26", "№TS001-26", "№ MA-2025/14" etc.
 _CONTRACT_NUM_RE = re.compile(r"№\s*([A-Za-zƏəĞğİıÖöÜüÇçŞş0-9\-/_]+)", re.UNICODE)
-_VOEN_RE = re.compile(r"V[ÖöO]EN\s*[:\-]?\s*(\d{8,12})", re.IGNORECASE | re.UNICODE)
+# Match VÖEN/VOEN with ANY dash-like or colon separator (hyphen, en-dash,
+# em-dash, minus, full-width hyphen).
+_VOEN_RE = re.compile(r"V[ÖöO]EN[\s:\-–—‒−]*(\d{8,12})", re.IGNORECASE | re.UNICODE)
 _DIRECTOR_RE = re.compile(r"direktoru\s+([A-Za-zƏəĞğİıÖöÜüÇçŞş\s\.'-]+?)\s+şəxs", re.UNICODE)
 # Contract date — handles DD.MM.YYYY (with optional separators / suffix)
 # and `D ay YYYY` style ("14 iyul 2025", "«14» iyul 2025-ci il").
@@ -45,9 +47,14 @@ _AZ_DATE_RE = re.compile(
     + "|".join(_AZ_MONTH_TOKENS.keys())
     + r")\s+(\d{4})", re.IGNORECASE
 )
-# Company names usually appear wrapped in “ ” or " " with the legal-form
-# suffix (MMC, QSC, ASC, MMC-si). We grab the bit inside the guillemets.
-_COMPANY_RE = re.compile(r"[“\"„]\s*([A-Za-zƏəĞğİıÖöÜüÇçŞş0-9\s\.&\-]+?)\s*[”\"“]\s*(?:QSC|MMC|ASC|Məhdud|Qapalı|Açıq)", re.UNICODE)
+# Company names usually appear wrapped in “ ” / " " / « » with the legal-form
+# suffix (MMC, QSC, ASC, "Məhdud Məsuliyyətli Cəmiyyəti", ...). We grab the
+# bit inside the guillemets.
+_COMPANY_RE = re.compile(
+    r"[“\"„«]\s*([A-Za-zƏəĞğİıÖöÜüÇçŞş0-9\s\.&\-]+?)\s*[”\"“»]\s*"
+    r"(?:QSC|MMC|ASC|Məhdud|Qapalı|Açıq|Limited)",
+    re.UNICODE | re.IGNORECASE
+)
 
 
 def _read_docx_text(file_bytes: bytes) -> str:
