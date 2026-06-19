@@ -147,214 +147,204 @@ STANDARD_SERVICES: List[str] = [
 ]
 
 
-def _fmt_money(value: float) -> str:
-    """`12345.6` → `12 345.60` (Azerbaijani-style thousand separator with space)."""
+def _fmt_date_az(iso_date: str) -> str:
+    """`2025-07-14` → `14.07.2025`. Empty / invalid → '__.__.____'."""
+    if not iso_date:
+        return "__.__.____"
     try:
-        n = float(value)
-    except (TypeError, ValueError):
-        return "0.00"
-    s = f"{n:,.2f}"  # 12,345.60
-    return s.replace(",", " ")
+        dt = datetime.strptime(iso_date[:10], "%Y-%m-%d")
+        return dt.strftime("%d.%m.%Y")
+    except (ValueError, TypeError):
+        return iso_date
 
 
-def _set_font(run, size: int = 11, bold: bool = False):
+_AZ_MONTHS = {
+    1: "yanvar", 2: "fevral", 3: "mart", 4: "aprel", 5: "may", 6: "iyun",
+    7: "iyul", 8: "avqust", 9: "sentyabr", 10: "oktyabr", 11: "noyabr", 12: "dekabr",
+}
+
+
+def _az_year_suffix(year: int) -> str:
+    """Azerbaijani ordinal suffix for a year, e.g. 2025 -> 'ci', 2026 -> 'cı'."""
+    return {0: "cu", 1: "ci", 2: "ci", 3: "cü", 4: "cü",
+            5: "ci", 6: "cı", 7: "ci", 8: "ci", 9: "cu"}.get(year % 10, "cı")
+
+
+def _exhibition_range_az(start_iso: str, end_iso: str) -> str:
+    """Return 'DD month - DD month YYYY-cI il' style range."""
+    if not start_iso or not end_iso:
+        return "__ ____ - __ ____ 202_-cı il"
+    try:
+        s = datetime.strptime(start_iso[:10], "%Y-%m-%d")
+        e = datetime.strptime(end_iso[:10], "%Y-%m-%d")
+    except ValueError:
+        return f"{start_iso} - {end_iso}"
+    suffix = _az_year_suffix(e.year)
+    if s.year == e.year and s.month == e.month:
+        return f"{s.day} - {e.day} {_AZ_MONTHS[e.month]} {e.year}-{suffix} il"
+    if s.year == e.year:
+        return f"{s.day} {_AZ_MONTHS[s.month]} - {e.day} {_AZ_MONTHS[e.month]} {e.year}-{suffix} il"
+    return f"{s.day} {_AZ_MONTHS[s.month]} {s.year} - {e.day} {_AZ_MONTHS[e.month]} {e.year}-{suffix} il"
+
+
+def _replace_in_paragraph(paragraph, replacements: Dict[str, str]) -> None:
+    """In-place replace text in a paragraph while preserving run formatting.
+
+    Strategy: iterate over runs. For each placeholder, find the first run that
+    contains it and rewrite that run's text. Handles single-run placeholders
+    (which is the case for our template). For cross-run placeholders we fall
+    back to concatenating + writing to first run (loses inner formatting but
+    keeps the paragraph style).
+    """
+    for old, new in replacements.items():
+        # Fast path: any single run contains the placeholder
+        hit = False
+        for run in paragraph.runs:
+            if old in run.text:
+                run.text = run.text.replace(old, new)
+                hit = True
+                break  # only replace first occurrence per call
+        if hit:
+            continue
+        # Slow path: placeholder split across runs — flatten paragraph text
+        full = "".join(r.text for r in paragraph.runs)
+        if old in full:
+            new_full = full.replace(old, new, 1)
+            if paragraph.runs:
+                paragraph.runs[0].text = new_full
+                for r in paragraph.runs[1:]:
+                    r.text = ""
+
+
+def _set_cell_text(cell, text: str, *, bold: bool = False, size: int = 12) -> None:
+    """Replace cell content with a single Times New Roman run."""
+    cell.text = ""
+    p = cell.paragraphs[0]
+    run = p.add_run(text)
     run.font.name = "Times New Roman"
     run.font.size = Pt(size)
     run.bold = bold
 
 
-def _add_paragraph(doc: Document, text: str, *, bold: bool = False, size: int = 11,
-                   align: int = WD_ALIGN_PARAGRAPH.JUSTIFY) -> None:
-    p = doc.add_paragraph()
-    p.alignment = align
-    run = p.add_run(text)
-    _set_font(run, size=size, bold=bold)
-
-
 def generate_addendum_docx(data: Dict) -> bytes:
-    """Build a Müqavilə Əlavə DOCX in memory and return its raw bytes.
+    """Generate the addendum DOCX by filling the Marsol template.
 
-    `data` is a dict shaped roughly like:
-      {
-        "addendum_number": "1",
-        "addendum_date": "2027-05-15",
-        "parent_contract_number": "TS001/26",
-        "parent_contract_date": "2025-07-14",
-        "sifarisci_company": "VİBROSTONE QSC",
-        "sifarisci_voen": "1003013391",
-        "sifarisci_authorized": "Nüsrət Dəmirov",
-        "exhibition_name": "8-ci Yerli Şirkətlərin Tanıtım Sərgisi",
-        "exhibition_start": "2027-06-23",
-        "exhibition_end": "2027-06-26",
-        "exhibition_location": "Bakı Ekspo Mərkəzi",
-        "services": [{"name":"Stend təchizatı","description":"Arxa və yan divarlar..."}],
-        "pricing": {
-            "price_net": 1000.0,
-            "vat_enabled": True,
-            "vat_rate": 18,
-            "vat_amount": 180.0,
-            "total": 1180.0,
-        },
-      }
+    Only the empty placeholder cells (parent contract no/date, addendum no/date,
+    Sifarişçi company / VÖEN / authorized person, exhibition dates) are
+    replaced. ALL other text, fonts, tables, services list and signature block
+    layout come straight from the user-supplied template at
+    `/app/backend/templates/addendum_template.docx`.
     """
-    pricing = data.get("pricing", {}) or {}
-    price_net = float(pricing.get("price_net") or 0)
-    vat_enabled = bool(pricing.get("vat_enabled", True))
-    vat_rate = float(pricing.get("vat_rate") or 18) if vat_enabled else 0
-    vat_amount = round(price_net * vat_rate / 100, 2) if vat_enabled else 0.0
-    total = round(price_net + vat_amount, 2)
+    import os
 
-    addendum_no = data.get("addendum_number") or "1"
-    addendum_date = data.get("addendum_date") or datetime.now().strftime("%Y-%m-%d")
-    parent_no = data.get("parent_contract_number") or "____"
-    parent_date = data.get("parent_contract_date") or "__.__.20__"
-    sif_co = data.get("sifarisci_company") or "_____________"
-    sif_voen = data.get("sifarisci_voen") or "____________"
-    sif_auth = data.get("sifarisci_authorized") or "_____________"
+    template_path = os.path.join(os.path.dirname(__file__), "templates",
+                                 "addendum_template.docx")
+    doc = Document(template_path)
 
-    ex_name = data.get("exhibition_name") or "________"
-    ex_start = data.get("exhibition_start") or "__.__.20__"
-    ex_end = data.get("exhibition_end") or "__.__.20__"
-    ex_loc = data.get("exhibition_location") or "Bakı Ekspo Mərkəzi"
+    # --- Build replacement values ---
+    addendum_no = (data.get("addendum_number") or "1").strip()
+    addendum_date = _fmt_date_az(data.get("addendum_date")
+                                 or datetime.now().strftime("%Y-%m-%d"))
+    parent_no = (data.get("parent_contract_number") or "____").strip()
+    parent_date = _fmt_date_az(data.get("parent_contract_date"))
+    sif_co = (data.get("sifarisci_company") or "").strip()
+    sif_voen = (data.get("sifarisci_voen") or "").strip()
+    sif_auth = (data.get("sifarisci_authorized") or "").strip()
 
-    doc = Document()
-    # Page margins (cm)
-    for section in doc.sections:
-        section.top_margin = Cm(2)
-        section.bottom_margin = Cm(2)
-        section.left_margin = Cm(2.5)
-        section.right_margin = Cm(2)
+    ex_range = _exhibition_range_az(data.get("exhibition_start"),
+                                    data.get("exhibition_end"))
 
-    # --- Header ---
-    _add_paragraph(doc, f"{parent_no} №-li Xidmət Müqaviləsinə əlavə №{addendum_no}",
-                   bold=True, size=13, align=WD_ALIGN_PARAGRAPH.CENTER)
-    _add_paragraph(doc, "XİDMƏT MÜQAVİLƏSİNƏ ƏLAVƏ", bold=True, size=14,
-                   align=WD_ALIGN_PARAGRAPH.CENTER)
-    _add_paragraph(doc, f"Bakı şəhəri, {addendum_date}", size=11,
-                   align=WD_ALIGN_PARAGRAPH.CENTER)
-    doc.add_paragraph()
+    # Suffix for parent contract date (e.g. "-cı il")
+    p_year = None
+    try:
+        p_year = datetime.strptime((data.get("parent_contract_date") or "")[:10],
+                                   "%Y-%m-%d").year
+    except (ValueError, TypeError):
+        p_year = None
+    p_year_suffix = _az_year_suffix(p_year) if p_year else "cı"
+    parent_date_full = (f"{parent_date}-{p_year_suffix} il"
+                        if p_year else "__.___.202_-cı il")
+    parent_num_full = f"{parent_no} №-li" if parent_no and parent_no != "____" \
+        else "_____ №-li"
 
-    # --- Parties ---
-    _add_paragraph(
-        doc,
-        f"Bu Əlavə, {parent_date} tarixli {parent_no} №-li Xidmət Müqaviləsinə əsasən hazırlanmışdır.",
+    # Suffix for addendum date
+    a_year = None
+    try:
+        a_year = datetime.strptime((data.get("addendum_date") or "")[:10],
+                                   "%Y-%m-%d").year
+    except (ValueError, TypeError):
+        a_year = None
+    a_year_suffix = _az_year_suffix(a_year) if a_year else "cı"
+    addendum_date_full = (f"{addendum_date}-{a_year_suffix} il"
+                          if a_year else "__.___. 202_-cı il")
+
+    # Sifarişçi şirkət adı: template-də placeholder-dan sonra "Məhdud
+    # Məsuliyyətli Cəmiyyəti" sabit yazılır. Əgər istifadəçinin daxil etdiyi
+    # şirkət adı artıq hüquqi forma daşıyırsa (QSC, ASC, MMC, MMC-si və s.),
+    # template-də sonradan gələn " Məhdud Məsuliyyətli Cəmiyyəti" ifadəsini
+    # də siləcəyik. Bunu daha geniş placeholder ilə birdəfəlik əvəz edirik.
+    has_legal_form = bool(re.search(
+        r"\b(MMC|QSC|ASC|HM|FH|ÖC|MM[CV]|Məhdud|Açıq|Qapalı)\b",
+        sif_co or "", re.IGNORECASE
+    ))
+    sif_company_full = (
+        f"«{sif_co}»" if has_legal_form and sif_co
+        else (f"«{sif_co}» Məhdud Məsuliyyətli Cəmiyyəti" if sif_co
+              else "“__________ ” Məhdud Məsuliyyətli Cəmiyyəti")
     )
 
-    _add_paragraph(doc, "Birinci Tərəf (İcraçı):", bold=True)
-    _add_paragraph(doc, f"Şirkət adı: «{MARSOL_DEFAULT['full_name']}»")
-    _add_paragraph(doc, f"VÖEN: {MARSOL_DEFAULT['voen']}")
-    _add_paragraph(doc, f"Səlahiyyətli şəxs: {MARSOL_DEFAULT['authorized']}")
+    # The template uses these EXACT placeholder strings (copied from the
+    # final version sent by the user). They must match byte-for-byte.
+    replacements = {
+        # Parent contract reference – appears multiple times
+        "__.___.202_-cı il": parent_date_full,
+        "_____ №-li": parent_num_full,
+        # Addendum number (header)
+        "ƏLAVƏ №___": f"ƏLAVƏ №{addendum_no}",
+        # Addendum date (in P3, note the extra space before "202_")
+        "__.___. 202_-cı il": addendum_date_full,
+        # Sifarişçi company name (P9 — the full phrase including the legal
+        # form so that companies like QSC/ASC don't get a duplicate suffix).
+        # NOTE: template has TWO spaces between `”` and `Məhdud`.
+        "“__________ ”  Məhdud Məsuliyyətli Cəmiyyəti": sif_company_full,
+        # Sifarişçi VÖEN (P10)
+        "VÖEN – ____________": f"VÖEN – {sif_voen}" if sif_voen else "VÖEN – ____________",
+        # Sifarişçi authorized person (P11)
+        "səlahiyyətli şəxs – __________": (
+            f"səlahiyyətli şəxs – {sif_auth}" if sif_auth
+            else "səlahiyyətli şəxs – __________"
+        ),
+        # Exhibition date range (P15)
+        "23 iyun - 26 iyun 2027-ci il": ex_range,
+    }
 
-    _add_paragraph(doc, "İkinci Tərəf (Sifarişçi):", bold=True)
-    _add_paragraph(doc, f"Şirkət adı: «{sif_co}»")
-    _add_paragraph(doc, f"VÖEN: {sif_voen}")
-    _add_paragraph(doc, f"Səlahiyyətli şəxs: {sif_auth}")
+    # --- Replace inside paragraphs ---
+    for p in doc.paragraphs:
+        _replace_in_paragraph(p, replacements)
 
-    doc.add_paragraph()
+    # --- Replace inside table cells (some placeholders may live in tables) ---
+    for tbl in doc.tables:
+        for row in tbl.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    _replace_in_paragraph(p, replacements)
 
-    # --- Section II: Razılaşmalar ---
-    _add_paragraph(doc, "II. RAZILAŞMALAR", bold=True, size=12)
-    _add_paragraph(
-        doc,
-        f"Tərəflər razılaşırlar ki, «İcraçı» {ex_start} – {ex_end} tarixlərində "
-        f"{ex_loc}-də keçiriləcək {ex_name}-də «Sifarişçi»nin iştirakı üçün "
-        f"{parent_date} tarixli {parent_no} №-li Xidmət Müqaviləsində nəzərdə "
-        f"tutulmuş şərtlərlə aşağıdakı xidmətləri göstərir; «Sifarişçi» isə "
-        f"göstərilmiş xidmətlərin müqabilində xidmət haqqının vaxtında "
-        f"ödənilməsi öhdəliyini öz üzərinə götürür."
-    )
-
-    # --- Section III: Services table (statik — Marsol standart paketi) ---
-    _add_paragraph(doc, "III. GÖSTƏRİLƏCƏK XİDMƏTLƏR", bold=True, size=12)
-
-    tbl = doc.add_table(rows=0, cols=1)
-    tbl.style = "Table Grid"
-    for svc in STANDARD_SERVICES:
-        row = tbl.add_row().cells
-        cell = row[0]
-        # Override default cell paragraph rather than `cell.text = ...` so we
-        # can control font + alignment exactly.
-        cell.text = ""
-        p = cell.paragraphs[0]
-        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        run = p.add_run(svc)
-        _set_font(run, size=11)
-
-    doc.add_paragraph()
-
-    # --- Section IV: Pricing table ---
-    _add_paragraph(doc, "IV. QİYMƏT VƏ ÖDƏNİŞ", bold=True, size=12)
-    price_tbl = doc.add_table(rows=1, cols=2)
-    price_tbl.style = "Table Grid"
-    rows = [
-        ("Qiymət (ƏDV-siz)", f"{_fmt_money(price_net)} AZN"),
-    ]
-    if vat_enabled:
-        rows.append((f"ƏDV ({vat_rate:g}%)", f"{_fmt_money(vat_amount)} AZN"))
-    else:
-        rows.append(("ƏDV", "Tətbiq edilmir"))
-    rows.append(("Yekun məbləğ", f"{_fmt_money(total)} AZN"))
-
-    hdr = price_tbl.rows[0].cells
-    h1 = hdr[0].paragraphs[0].add_run("Maddə")
-    _set_font(h1, bold=True)
-    h2 = hdr[1].paragraphs[0].add_run("Məbləğ")
-    _set_font(h2, bold=True)
-    for k, v in rows:
-        r = price_tbl.add_row().cells
-        r[0].text = k
-        r[1].text = v
-        # Bold the total row
-        if k == "Yekun məbləğ":
-            for c in r:
-                for p in c.paragraphs:
-                    for run in p.runs:
-                        _set_font(run, bold=True)
-
-    doc.add_paragraph()
-
-    # --- Section V: Legal status ---
-    _add_paragraph(doc, "V. ƏLAVƏNİN HÜQUQİ STATUSU", bold=True, size=12)
-    _add_paragraph(
-        doc,
-        f"Tərəflər razılaşırlar ki, hazırkı Əlavə {parent_date} tarixli {parent_no} "
-        f"№-li Xidmət Müqaviləsinin ayrılmaz tərkib hissəsi olmaqla Müqavilənin "
-        f"şərh edilməsində əsas götürülür."
-    )
-    _add_paragraph(
-        doc,
-        "Hazırkı Əlavəyə hər hansı əlavələr və ya düzəlişlər yalnız imzalandıqdan "
-        "və möhürləndikdən sonra hüquqi qüvvəyə malikdir."
-    )
-    _add_paragraph(
-        doc,
-        "Hazırkı Əlavə Azərbaycan dilində, eyni hüquqi qüvvəyə malik 2 (iki) "
-        "nüsxədə tərtib edilmişdir, nüsxələrdən biri Sifarişçidə, digəri isə "
-        "İcraçıda saxlanılır."
-    )
-
-    doc.add_paragraph()
-
-    # --- Signatures ---
-    _add_paragraph(doc, "TƏRƏFLƏRİN İMZALARI", bold=True, size=12, align=WD_ALIGN_PARAGRAPH.CENTER)
-    sig_tbl = doc.add_table(rows=1, cols=2)
-    sig_tbl.style = "Table Grid"
-    sif_cell = sig_tbl.rows[0].cells[0]
-    icr_cell = sig_tbl.rows[0].cells[1]
-
-    def _add_sig_block(cell, title, company, voen, person):
-        cell.text = ""
-        p = cell.paragraphs[0]
-        r = p.add_run(title); _set_font(r, bold=True); p.add_run("\n")
-        r = cell.add_paragraph().add_run(f"Şirkət: «{company}»"); _set_font(r)
-        r = cell.add_paragraph().add_run(f"VÖEN: {voen}"); _set_font(r)
-        r = cell.add_paragraph().add_run(f"Səlahiyyətli şəxs: {person}"); _set_font(r)
-        cell.add_paragraph("_______________________")
-        r = cell.add_paragraph().add_run("İmza / Möhür"); _set_font(r)
-
-    _add_sig_block(sif_cell, "Sifarişçi", sif_co, sif_voen, sif_auth)
-    _add_sig_block(icr_cell, "İcraçı", MARSOL_DEFAULT["full_name"],
-                   MARSOL_DEFAULT["voen"], MARSOL_DEFAULT["authorized"])
+    # --- Fill Sifarişçi column in the signature table (Table 1) ---
+    if len(doc.tables) >= 2:
+        sig_tbl = doc.tables[1]
+        # Expected layout (3 cols): [label, Sifarişçi value, İcraçı value]
+        # R0: header, R1: company, R2: VÖEN, R3: səlahiyyətli şəxs,
+        # R4: İmza, R5: Möhür
+        try:
+            if sif_co:
+                _set_cell_text(sig_tbl.rows[1].cells[1],
+                               f"«{sif_co}»", bold=True)
+            if sif_voen:
+                _set_cell_text(sig_tbl.rows[2].cells[1], sif_voen)
+            if sif_auth:
+                _set_cell_text(sig_tbl.rows[3].cells[1], sif_auth)
+        except (IndexError, KeyError):
+            pass
 
     out = io.BytesIO()
     doc.save(out)

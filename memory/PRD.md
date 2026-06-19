@@ -9,9 +9,9 @@ Marsol Group üçün B2B Networking şirkəti (500+ üzv) üçün hərtərəfli 
 - Integrations: Cloudinary, Resend, OpenAI (gpt-4o-mini), Firebase Cloud Messaging, python-docx
 
 ## Recently Completed (2026-02)
-- Müqavilə Redaktoru: **Xidmətlər bölümü artıq statikdir** — Marsol-un 13 standart sərgi xidməti DOCX-də 1 sütunlu Table Grid kimi düzgün cədvəl şəklində render olunur. UI-də dinamik input-lar silindi, yalnız oxunan preview qaldı.
-- Müqavilə Redaktoru üçün ayrıca **`contracts` modul icazəsi** (backend API-də də artıq `check_permission("contracts", ...)`; Settings → Rollar modalında ayrı sətr; admin və mövcud Mühasib rolu üçün avtomatik write backfill)
-- Finance > Müqavilə Redaktoru: DOCX parse, VÖEN/Şirkət avtomatik çıxarış, Əlavə Müqavilə (Addendum) DOCX generasiya, ƏDV avtomatik hesablanma
+- Müqavilə Redaktoru — **şablon-əsaslı generasiya**: İstifadəçinin atdığı son `Əlavə Müqaviləsi` DOCX şablon kimi `/app/backend/templates/addendum_template.docx`-da saxlanılır. Sistem yalnız boş xanaları doldurur (parent müqavilə №/tarix, Sifarişçi şirkət/VÖEN/səlahiyyətli şəxs, sərgi tarixləri, əlavə №/tarix). Yazılar, şriftlər, maddələr, kursivlər, 13-sətirli xidmət cədvəli, imza bloku — heç biri dəyişməz. Hüquqi forma (QSC/ASC/MMC) avtomatik aşkarlanır ki, dublikat "Məhdud Məsuliyyətli Cəmiyyəti" yazılmasın.
+- Müqavilə Redaktoru: Xidmətlər artıq statikdir (13 standart Marsol xidməti)
+- Müqavilə Redaktoru üçün ayrıca **`contracts` modul icazəsi**
 - HR KPI tab (executor/responsible üzrə tapşırıq statistikası)
 - Tasks: multi-assignee, çətinlik, estimated duration, overdue rəng, RBAC (yalnız creator/admin tam redaktə), Auto-Archive (gün sayı Tənzimləmələrdən), bulk delete (admin)
 - Multi-tenancy (Müəssisə) data isolation across Tasks/Meetings/Files/Assembly/Notes
