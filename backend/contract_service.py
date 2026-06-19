@@ -20,6 +20,8 @@ from typing import Dict, List, Optional
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH  # noqa: F401  (used indirectly)
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 
 # ----------------------------------------------------------------------------
@@ -31,8 +33,18 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH  # noqa: F401  (used indirectly)
 _CONTRACT_NUM_RE = re.compile(r"№\s*([A-Za-zƏəĞğİıÖöÜüÇçŞş0-9\-/_]+)", re.UNICODE)
 _VOEN_RE = re.compile(r"V[ÖöO]EN\s*[:\-]?\s*(\d{8,12})", re.IGNORECASE | re.UNICODE)
 _DIRECTOR_RE = re.compile(r"direktoru\s+([A-Za-zƏəĞğİıÖöÜüÇçŞş\s\.'-]+?)\s+şəxs", re.UNICODE)
-# Contract date — first occurrence of `DD.MM.YYYY` near the top of the doc.
-_DATE_RE = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b")
+# Contract date — handles DD.MM.YYYY (with optional separators / suffix)
+# and `D ay YYYY` style ("14 iyul 2025", "«14» iyul 2025-ci il").
+_DATE_RE = re.compile(r"\b(\d{1,2})[.\s/](\d{1,2})[.\s/](\d{4})\b")
+_AZ_MONTH_TOKENS = {
+    "yanvar": 1, "fevral": 2, "mart": 3, "aprel": 4, "may": 5, "iyun": 6,
+    "iyul": 7, "avqust": 8, "sentyabr": 9, "oktyabr": 10, "noyabr": 11, "dekabr": 12,
+}
+_AZ_DATE_RE = re.compile(
+    r"[«\"']?(\d{1,2})[»\"']?\s+("
+    + "|".join(_AZ_MONTH_TOKENS.keys())
+    + r")\s+(\d{4})", re.IGNORECASE
+)
 # Company names usually appear wrapped in “ ” or " " with the legal-form
 # suffix (MMC, QSC, ASC, MMC-si). We grab the bit inside the guillemets.
 _COMPANY_RE = re.compile(r"[“\"„]\s*([A-Za-zƏəĞğİıÖöÜüÇçŞş0-9\s\.&\-]+?)\s*[”\"“]\s*(?:QSC|MMC|ASC|Məhdud|Qapalı|Açıq)", re.UNICODE)
@@ -70,13 +82,28 @@ def extract_contract_fields(file_bytes: bytes) -> Dict[str, str]:
     # Returned in ISO format (YYYY-MM-DD) so it slots straight into a
     # `<input type="date">` on the frontend.
     contract_date_iso = ""
-    dm = _DATE_RE.search(text)
-    if dm:
+    # Skip dates that look like placeholders ("01.01.0000", etc.) by requiring
+    # a recent year (>= 2015) which all real Marsol contracts have.
+    for dm in _DATE_RE.finditer(text):
         try:
             dd, mm, yy = int(dm.group(1)), int(dm.group(2)), int(dm.group(3))
-            contract_date_iso = f"{yy:04d}-{mm:02d}-{dd:02d}"
+            if 1 <= dd <= 31 and 1 <= mm <= 12 and 2015 <= yy <= 2099:
+                contract_date_iso = f"{yy:04d}-{mm:02d}-{dd:02d}"
+                break
         except ValueError:
-            contract_date_iso = ""
+            continue
+    # Fallback: try `14 iyul 2025` Azerbaijani-month form
+    if not contract_date_iso:
+        adm = _AZ_DATE_RE.search(text)
+        if adm:
+            try:
+                dd = int(adm.group(1))
+                mm = _AZ_MONTH_TOKENS[adm.group(2).lower()]
+                yy = int(adm.group(3))
+                if 2015 <= yy <= 2099:
+                    contract_date_iso = f"{yy:04d}-{mm:02d}-{dd:02d}"
+            except (ValueError, KeyError):
+                pass
 
     # Find ALL VÖEN matches (usually 2: Sifarişçi + İcraçı). Marsol's VÖEN is
     # known to be 2004204701, so we use it to determine which side is which.
@@ -174,12 +201,62 @@ def _fmt_date_az(iso_date: str) -> str:
 
 
 def _fmt_money(value) -> str:
-    """`12345.6` → `12 345.60` (AZ-style space thousand separator)."""
+    """`12345.6` → `12 345.00` (AZ-style space thousand separator)."""
     try:
         n = float(value)
     except (TypeError, ValueError):
         return ""
     return f"{n:,.2f}".replace(",", " ")
+
+
+# --- Azerbaijani number → words (for "Məbləğ yazı ilə") ---------------------
+_AZ_ONES = ["", "bir", "iki", "üç", "dörd", "beş", "altı", "yeddi", "səkkiz", "doqquz"]
+_AZ_TENS = ["", "on", "iyirmi", "otuz", "qırx", "əlli", "altmış", "yetmiş",
+            "səksən", "doxsan"]
+
+
+def _az_int_to_words(n: int) -> str:
+    """Convert an integer (0..999 999 999) to Azerbaijani words."""
+    if n == 0:
+        return "sıfır"
+    if n < 0:
+        return "mənfi " + _az_int_to_words(-n)
+
+    def _under_thousand(x: int) -> str:
+        parts = []
+        h, rem = divmod(x, 100)
+        if h:
+            parts.append("yüz" if h == 1 else f"{_AZ_ONES[h]} yüz")
+        t, o = divmod(rem, 10)
+        if t:
+            parts.append(_AZ_TENS[t])
+        if o:
+            parts.append(_AZ_ONES[o])
+        return " ".join(parts)
+
+    parts = []
+    millions, rem = divmod(n, 1_000_000)
+    if millions:
+        parts.append(_under_thousand(millions) + " milyon")
+    thousands, rem = divmod(rem, 1000)
+    if thousands:
+        parts.append(("min" if thousands == 1 else _under_thousand(thousands) + " min"))
+    if rem:
+        parts.append(_under_thousand(rem))
+    return " ".join(parts).strip()
+
+
+def _az_money_in_words(amount) -> str:
+    """`9440.00` → `doqquz min dörd yüz qırx manat 00 qəpik`."""
+    try:
+        a = float(amount)
+    except (TypeError, ValueError):
+        return ""
+    if a <= 0:
+        return "sıfır manat 00 qəpik"
+    manat = int(a)
+    qepik = int(round((a - manat) * 100))
+    return f"{_az_int_to_words(manat)} manat {qepik:02d} qəpik"
 
 
 _AZ_MONTHS = {
@@ -373,10 +450,10 @@ def generate_addendum_docx(data: Dict) -> bytes:
         except (IndexError, KeyError):
             pass
 
-    # --- Insert pricing table right AFTER the services table ---
-    # The template ships without a pricing breakdown table; we always append
-    # one (Stend №, Xidmətin adı, Ölçü vahidi, Qiymət, ƏDV, Yekun məbləğ)
-    # so that the Sifarişçi sees the figures inline with the addendum.
+    # --- Insert pricing table + "Məbləğ yazı ilə" line right AFTER the
+    # services table. The template that the user provided does not contain
+    # these elements, so we synthesize them every time. Only ONE pricing
+    # table is added (no duplicates).
     pricing = data.get("pricing", {}) or {}
     price_net = float(pricing.get("price_net") or 0)
     vat_enabled = bool(pricing.get("vat_enabled", True))
@@ -389,21 +466,30 @@ def generate_addendum_docx(data: Dict) -> bytes:
 
     if len(doc.tables) >= 1:
         services_tbl = doc.tables[0]
-        # Build new 2-row, 6-col table at the end, then move it to be a
-        # sibling immediately after the services table.
+
+        # 1) Pricing table — 2 rows × 6 cols, gray header row
         price_tbl = doc.add_table(rows=2, cols=6)
         price_tbl.style = "Table Grid"
         headers = ["Stend №", "Xidmətin adı", "Ölçü vahidi",
                    "Qiymət", "ƏDV", "Yekun məbləğ"]
         for i, h in enumerate(headers):
-            _set_cell_text(price_tbl.rows[0].cells[i], h, bold=True, size=11)
+            cell = price_tbl.rows[0].cells[i]
+            _set_cell_text(cell, h, bold=True, size=11)
+            # Apply gray shading (D9D9D9) to header cell
+            tc_pr = cell._tc.get_or_add_tcPr()
+            shd = OxmlElement("w:shd")
+            shd.set(qn("w:val"), "clear")
+            shd.set(qn("w:color"), "auto")
+            shd.set(qn("w:fill"), "D9D9D9")
+            tc_pr.append(shd)
+
         data_row = [
             stand_no or "",
             service_label,
             unit_label,
             _fmt_money(price_net) if price_net else "",
             (_fmt_money(vat_amount) if vat_enabled and vat_amount else "-"),
-            _fmt_money(total) if total else "",
+            _fmt_money(total) if total else "-",
         ]
         for i, v in enumerate(data_row):
             _set_cell_text(price_tbl.rows[1].cells[i], v, size=11)
@@ -413,6 +499,41 @@ def generate_addendum_docx(data: Dict) -> bytes:
         price_xml = price_tbl._element
         price_xml.getparent().remove(price_xml)
         svc_xml.addnext(price_xml)
+
+        # 2) "Məbləğ yazı ilə:" paragraph immediately after the price table
+        money_para = OxmlElement("w:p")
+        # Paragraph properties (left-aligned, normal spacing)
+        p_pr = OxmlElement("w:pPr")
+        spacing = OxmlElement("w:spacing")
+        spacing.set(qn("w:before"), "120")
+        spacing.set(qn("w:after"), "120")
+        p_pr.append(spacing)
+        money_para.append(p_pr)
+
+        def _add_run(parent, text: str, *, bold: bool = False):
+            run = OxmlElement("w:r")
+            r_pr = OxmlElement("w:rPr")
+            r_fonts = OxmlElement("w:rFonts")
+            for attr in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
+                r_fonts.set(qn(attr), "Times New Roman")
+            r_pr.append(r_fonts)
+            sz = OxmlElement("w:sz"); sz.set(qn("w:val"), "24"); r_pr.append(sz)
+            szcs = OxmlElement("w:szCs"); szcs.set(qn("w:val"), "24"); r_pr.append(szcs)
+            if bold:
+                b = OxmlElement("w:b"); r_pr.append(b)
+                bcs = OxmlElement("w:bCs"); r_pr.append(bcs)
+            run.append(r_pr)
+            t = OxmlElement("w:t")
+            t.set(qn("xml:space"), "preserve")
+            t.text = text
+            run.append(t)
+            parent.append(run)
+
+        in_words = _az_money_in_words(total) if total else "sıfır manat 00 qəpik"
+        _add_run(money_para, "Məbləğ yazı ilə: ", bold=True)
+        _add_run(money_para, in_words)
+
+        price_xml.addnext(money_para)
 
     out = io.BytesIO()
     doc.save(out)
