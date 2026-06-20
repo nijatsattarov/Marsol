@@ -577,20 +577,19 @@ def _apply_marsol_header(ws) -> None:
         return
     try:
         img = XLImage(MARSOL_HEADER_PATH)
-        # Source image is 672×396 px (ratio ≈ 1.70). Scale to ~700×412 so
-        # it spans columns A..G of the invoice sheet without distortion.
-        img.width = 700
-        img.height = 412
+        # Source image is a wide banner (~1315×240, ratio ≈ 5.48). Scale to
+        # ~700 px wide so it spans the full A..G width without distortion.
+        img.width = 720
+        img.height = 132
         img.anchor = "A1"
         ws.add_image(img)
     except (FileNotFoundError, OSError):
         return
 
-    # Reserve vertical space for the image (≈ 412 px ≈ 22 row units).
-    # We use 6 rows of equal-ish height so the existing layout (HESAB-FAKTURA
-    # at row 8) stays untouched.
-    for r in range(1, 7):
-        ws.row_dimensions[r].height = 70
+    # Reserve enough vertical space (≈ 132 px ≈ 7 rows × 22 px). We use
+    # rows 1-5 here so the HESAB-FAKTURA title at row 8 stays untouched.
+    for r in range(1, 6):
+        ws.row_dimensions[r].height = 28
 
 
 def generate_invoice_xlsx(data: Dict) -> bytes:
