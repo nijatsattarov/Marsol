@@ -1783,6 +1783,8 @@ async def create_addendum(data: dict, current_user: dict = Depends(check_permiss
         "sifarisci_voen": (data.get("sifarisci_voen") or "").strip(),
         "sifarisci_authorized": (data.get("sifarisci_authorized") or "").strip(),
         "stand_number": (data.get("stand_number") or "").strip(),
+        "stand_width": float(data.get("stand_width") or 0),
+        "stand_length": float(data.get("stand_length") or 0),
         "exhibition_name": (data.get("exhibition_name") or "").strip(),
         "exhibition_start": (data.get("exhibition_start") or "").strip(),
         "exhibition_end": (data.get("exhibition_end") or "").strip(),
@@ -1854,6 +1856,23 @@ async def download_invoice(contract_id: str,
     return StreamingResponse(
         io.BytesIO(blob),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@api_router.get("/contracts/{contract_id}/stand-plan")
+async def download_stand_plan(contract_id: str,
+                              current_user: dict = Depends(check_permission("contracts", "read"))):
+    """Generate and stream the Stand Placement Plan (DOCX) for this contract."""
+    c = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Müqavilə tapılmadı")
+    blob = contract_service.generate_stand_plan_docx(c)
+    safe_name = (c.get("parent_contract_number") or "muqavile").replace("/", "-")
+    filename = f"StendPlan_{safe_name}.docx"
+    return StreamingResponse(
+        io.BytesIO(blob),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

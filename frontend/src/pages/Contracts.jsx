@@ -34,6 +34,8 @@ const emptyAddendum = () => ({
   sifarisci_company: '', sifarisci_voen: '', sifarisci_authorized: '',
   addendum_date: new Date().toISOString().slice(0, 10),
   stand_number: '',
+  stand_width: 0,
+  stand_length: 0,
   pricing: { price_net: 0, vat_enabled: true, vat_rate: 18 },
 });
 
@@ -169,6 +171,20 @@ export default function Contracts() {
     }
   };
 
+  const handleDownloadStandPlan = async (c) => {
+    try {
+      const r = await axios.get(`${API}/contracts/${c.id}/stand-plan`, { headers, responseType: 'blob' });
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `StendPlan_${(c.parent_contract_number || 'muqavile').replace('/', '-')}.docx`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error('Stend Planı yüklənmədi');
+    }
+  };
+
   const handleEdit = (c) => {
     setEditing(c);
     setForm({
@@ -179,6 +195,8 @@ export default function Contracts() {
       sifarisci_authorized: c.sifarisci_authorized || '',
       addendum_date: c.addendum_date || new Date().toISOString().slice(0, 10),
       stand_number: c.stand_number || '',
+      stand_width: c.stand_width || 0,
+      stand_length: c.stand_length || 0,
       pricing: c.pricing || { price_net: 0, vat_enabled: true, vat_rate: 18 },
     });
     setShowModal(true);
@@ -260,6 +278,9 @@ export default function Contracts() {
                         <Button size="sm" variant="ghost" onClick={() => handleDownloadInvoice(c)} className="h-7 text-xs text-indigo-700 hover:bg-indigo-50 font-semibold" data-testid={`invoice-${c.id}`} title="Hesab Faktura (Excel) yüklə">
                           <span className="text-[10px]">HF</span>
                         </Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleDownloadStandPlan(c)} className="h-7 text-xs text-amber-700 hover:bg-amber-50 font-semibold" data-testid={`stand-plan-${c.id}`} title="Stend Yerləşim Planı (Word) yüklə">
+                          <span className="text-[10px]">Plan</span>
+                        </Button>
                         <Button size="sm" variant="ghost" onClick={() => handleEdit(c)} className="h-7 text-xs text-blue-700 hover:bg-blue-50" data-testid={`edit-${c.id}`} title="Redaktə">
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>
@@ -331,15 +352,29 @@ export default function Contracts() {
               <Label className="text-xs font-semibold text-[#3D4F6F] mb-2 flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5" />3. Bu il müqavilə bağlanma tarixi və Stend
               </Label>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-3 md:col-span-1">
                   <Label className="text-xs">Bu il müqavilə bağlanma tarixi <span className="text-red-500">*</span></Label>
                   <Input type="date" value={form.addendum_date} onChange={(e) => setForm({ ...form, addendum_date: e.target.value })} className="text-sm" data-testid="addendum-date" />
-                  <span className="text-[10px] text-slate-500 mt-1 block">("Bakı şəhəri" sətrində göstərilir</span>
+                  <span className="text-[10px] text-slate-500 mt-1 block">("Bakı şəhəri" sətrində göstərilir)</span>
                 </div>
                 <div>
                   <Label className="text-xs">Stend №</Label>
-                  <Input value={form.stand_number} onChange={(e) => setForm({ ...form, stand_number: e.target.value })} placeholder="məs: A12" className="text-sm font-mono" data-testid="stand-number" />
+                  <Input value={form.stand_number} onChange={(e) => setForm({ ...form, stand_number: e.target.value })} placeholder="məs: 50" className="text-sm font-mono" data-testid="stand-number" />
+                </div>
+                <div className="grid grid-cols-3 gap-2 col-span-3 md:col-span-1">
+                  <div>
+                    <Label className="text-xs">En (m)</Label>
+                    <Input type="number" step="0.1" min="0" value={form.stand_width || ''} onChange={(e) => setForm({ ...form, stand_width: parseFloat(e.target.value) || 0 })} className="text-sm font-mono" data-testid="stand-width" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Uzunluq (m)</Label>
+                    <Input type="number" step="0.1" min="0" value={form.stand_length || ''} onChange={(e) => setForm({ ...form, stand_length: parseFloat(e.target.value) || 0 })} className="text-sm font-mono" data-testid="stand-length" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Sahə (m²)</Label>
+                    <Input value={((form.stand_width || 0) * (form.stand_length || 0)).toFixed(2)} readOnly tabIndex={-1} className="text-sm font-mono bg-slate-50" data-testid="stand-area" />
+                  </div>
                 </div>
               </div>
             </div>

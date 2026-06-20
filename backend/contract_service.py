@@ -661,3 +661,88 @@ def generate_invoice_xlsx(data: Dict) -> bytes:
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
+
+
+# ----------------------------------------------------------------------------
+# STAND PLAN (STEND YERLƏŞİM PLANI) — DOCX GENERATION
+# ----------------------------------------------------------------------------
+
+STAND_PLAN_TEMPLATE_PATH = os.path.join(
+    os.path.dirname(__file__), "templates", "stand_plan_template.docx"
+)
+
+
+def generate_stand_plan_docx(data: Dict) -> bytes:
+    """Build the stand-placement plan DOCX based on the addendum data.
+
+    The template at `STAND_PLAN_TEMPLATE_PATH` contains:
+      • P0 — Title (static)
+      • P3 — `Stend № <N>  en –<W> m ; uzunluq – <L> m ;  ümumi sahə - <A> m²`
+      • Table R0 C0 — `"<Company>"MMC / Sahibkar: <Owner Name>     M.`
+      • Table R0 C1 — Marsol / Direktor: Bilal Qasımlı (static)
+
+    We replace the customer-specific placeholders while keeping all
+    formatting (fonts, table, alignment, image, etc.) intact.
+    """
+    doc = Document(STAND_PLAN_TEMPLATE_PATH)
+
+    sif_co = (data.get("sifarisci_company") or "").strip()
+    sif_owner = (data.get("sifarisci_authorized") or "").strip()
+    stand_no = (data.get("stand_number") or "").strip()
+
+    # Numeric fields (stand width/length in metres) — area = w × l
+    try:
+        width = float(data.get("stand_width") or 0)
+    except (TypeError, ValueError):
+        width = 0.0
+    try:
+        length = float(data.get("stand_length") or 0)
+    except (TypeError, ValueError):
+        length = 0.0
+    area = round(width * length, 2)
+
+    # Format numbers without trailing ".0" if integer
+    def _num(x: float) -> str:
+        return f"{int(x)}" if x and float(x).is_integer() else f"{x:g}"
+
+    # --- Replace P3 (the line with stand number / dimensions / area) ---
+    # Old text: "Stend № 70  en –6 m ; uzunluq – 8 m ;  ümumi sahə - 48 m² "
+    new_p3 = (
+        f"Stend № {stand_no or '___'}  "
+        f"en –{_num(width) if width else '___'} m ; "
+        f"uzunluq – {_num(length) if length else '___'} m ; "
+        f" ümumi sahə - {_num(area) if area else '___'} m² "
+    )
+    for p in doc.paragraphs:
+        if "Stend №" in p.text and ("en –" in p.text or "ümumi sahə" in p.text):
+            if p.runs:
+                p.runs[0].text = new_p3
+                for r in p.runs[1:]:
+                    r.text = ""
+            break
+
+    # --- Replace Sifarişçi cell (R0 C0 in Table 0) ---
+    if doc.tables:
+        cell = doc.tables[0].rows[0].cells[0]
+        full = "\n".join(p.text for p in cell.paragraphs)
+        # Original: `“PROMO EXPO”MMC / Sahibkar: Araz Mahmudov      M.`
+        # New:      `“<COMPANY>”MMC / Sahibkar: <OWNER>             M.`
+        new_text = f"“{sif_co or '__________'}” / Sahibkar: {sif_owner or '__________'}     M."
+        # Replace text in the first paragraph + first run while keeping format
+        first_p = cell.paragraphs[0]
+        if first_p.runs:
+            first_p.runs[0].text = new_text
+            for r in first_p.runs[1:]:
+                r.text = ""
+        else:
+            first_p.text = new_text
+        # Clear remaining paragraphs (template originally only had 1)
+        for extra_p in cell.paragraphs[1:]:
+            if extra_p.runs:
+                for r in extra_p.runs:
+                    r.text = ""
+        del full  # noqa
+
+    out = io.BytesIO()
+    doc.save(out)
+    return out.getvalue()

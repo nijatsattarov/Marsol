@@ -9,7 +9,8 @@ Marsol Group üçün B2B Networking şirkəti (500+ üzv) üçün hərtərəfli 
 - Integrations: Cloudinary, Resend, OpenAI (gpt-4o-mini), Firebase Cloud Messaging, python-docx
 
 ## Recently Completed (2026-02)
-- **Hesab Faktura başlığı şəkil kimi**: İstifadəçinin göndərdiyi başlıq skrini (`marsol_header.png`, 672×396) artıq bir bütöv şəkil kimi A1-ə anchor olunaraq embed olunur (700×412px). Logo və ünvan/telefon yazılarının üst-üstə düşməsi (overlap) problemi həll olundu. Heç bir hüceyrəyə əlavə mətn yazılmır, sətirlər 1-6 hündürlüyü 70 vahid təyin olundu.
+- **Stend Yerləşim Planı (DOCX)**: 3-cü sənəd növü əlavə olundu. `/app/backend/templates/stand_plan_template.docx` şablonu istifadə olunur. Sistem yalnız Şirkət adı, Sahibkar adı, Stend №, En, Uzunluq və avtomatik hesablanmış sahə (en × uzunluq) sahələrini doldurur. API endpoint: `GET /api/contracts/{id}/stand-plan`. Frontend-də cədvəlin yanında "Plan" düyməsi.
+- Forma yenilikləri: **En (m)**, **Uzunluq (m)** və avtomatik hesablanan **Sahə (m²)** sahələri. m² readonly-dir, hər dəyişiklikdə real vaxtda yenilənir.
 - Hesab Faktura (XLSX) generasiyası: yalnız müştəri-spesifik xanalar doldurulur
 - Müqavilə Redaktoru DOCX: qiymət cədvəli artıq boz başlıqlı, "Məbləğ yazı ilə:" sətri avtomatik əlavə olunur
 - Tarix regex genişləndirildi: `DD.MM.YYYY`, `DD/MM/YYYY`, "14 iyul 2025", "«14» iyul 2025-ci il" formatları dəstəklənir. Yalnız real (2015-2099) tarixlər çıxarılır.
