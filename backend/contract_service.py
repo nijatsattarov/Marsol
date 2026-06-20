@@ -24,6 +24,8 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH  # noqa: F401  (used indirectly)
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from openpyxl import load_workbook
+from openpyxl.drawing.image import Image as XLImage
+from openpyxl.styles import Alignment, Font, PatternFill
 
 
 # ----------------------------------------------------------------------------
@@ -556,6 +558,77 @@ def generate_addendum_docx(data: Dict) -> bytes:
 INVOICE_TEMPLATE_PATH = os.path.join(
     os.path.dirname(__file__), "templates", "invoice_template.xlsx"
 )
+MARSOL_LOGO_PATH = os.path.join(
+    os.path.dirname(__file__), "templates", "marsol_logo.png"
+)
+
+
+def _apply_marsol_header(ws) -> None:
+    """Stamp the Marsol branding header onto the top of the invoice sheet.
+
+    Layout (rows 1-6):
+      * Logo image anchored at A1 (spans rows 1-5, columns A-B).
+      * Address / phones / web+email in columns C-G (3 rows of contact info).
+      * Row 6: green / black colored divider strip.
+
+    Cells A8 onwards (HESAB-FAKTURA title and below) are untouched.
+    """
+    # 1) Insert logo
+    if os.path.exists(MARSOL_LOGO_PATH):
+        try:
+            img = XLImage(MARSOL_LOGO_PATH)
+            # Resize: logo is 1934x505 (~3.83:1). Make ~260px wide.
+            img.width = 260
+            img.height = 68
+            img.anchor = "A1"
+            ws.add_image(img)
+        except (FileNotFoundError, OSError):
+            pass
+
+    # 2) Make the first few rows tall enough to fit the logo + contact lines
+    ws.row_dimensions[1].height = 22
+    ws.row_dimensions[2].height = 22
+    ws.row_dimensions[3].height = 22
+
+    # 3) Contact info — Address / Phones / Web columns (Address in C/D,
+    #    phone in E/F, web/email in G). Bold 10pt.
+    contact_font = Font(name="Arial", size=10, color="1F2937")
+    bold_font = Font(name="Arial", size=10, color="1F2937", bold=True)
+    align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    address_rows = [
+        ("Bakı şəh., Nərimanov r., Əhməd Rəcəbli", "+994 50 228 64 34", "www.marsol.az"),
+        ("27A (Cömərd İş Mərkəzi)",                 "+994 12 310 15 58", "info@marsol.az"),
+        ("",                                         "*0555",             ""),
+    ]
+    for i, (addr, phone, web) in enumerate(address_rows, start=1):
+        # Merge C+D for the address column to give long addresses room
+        try:
+            ws.merge_cells(start_row=i, start_column=3, end_row=i, end_column=4)
+        except ValueError:
+            pass
+        # Merge E+F for the phone column
+        try:
+            ws.merge_cells(start_row=i, start_column=5, end_row=i, end_column=6)
+        except ValueError:
+            pass
+        ws.cell(row=i, column=3, value=addr).font = contact_font
+        ws.cell(row=i, column=3).alignment = align_left
+        ws.cell(row=i, column=5, value=phone).font = contact_font if i != 1 else bold_font
+        ws.cell(row=i, column=5).alignment = align_left
+        ws.cell(row=i, column=7, value=web).font = contact_font
+        ws.cell(row=i, column=7).alignment = align_left
+
+    # 4) Colored divider strip (row 6): half green (#9ACD32), half dark (#1F2937)
+    green_fill = PatternFill(start_color="9ACD32", end_color="9ACD32",
+                             fill_type="solid")
+    dark_fill = PatternFill(start_color="1F2937", end_color="1F2937",
+                            fill_type="solid")
+    ws.row_dimensions[6].height = 8
+    for col_idx in range(1, 5):  # A..D = green
+        ws.cell(row=6, column=col_idx).fill = green_fill
+    for col_idx in range(5, 8):  # E..G = dark
+        ws.cell(row=6, column=col_idx).fill = dark_fill
 
 
 def generate_invoice_xlsx(data: Dict) -> bytes:
@@ -580,6 +653,9 @@ def generate_invoice_xlsx(data: Dict) -> bytes:
     """
     wb = load_workbook(INVOICE_TEMPLATE_PATH)
     ws = wb["sərgi"] if "sərgi" in wb.sheetnames else wb.active
+
+    # --- Header (Marsol logo + contact bar) ---
+    _apply_marsol_header(ws)
 
     parent_no = (data.get("parent_contract_number") or "").strip() or "____"
     sif_co = (data.get("sifarisci_company") or "").strip()

@@ -9,7 +9,8 @@ Marsol Group üçün B2B Networking şirkəti (500+ üzv) üçün hərtərəfli 
 - Integrations: Cloudinary, Resend, OpenAI (gpt-4o-mini), Firebase Cloud Messaging, python-docx
 
 ## Recently Completed (2026-02)
-- **Hesab Faktura (XLSX) generasiyası**: İstifadəçinin atdığı `HF TS058.xlsx` şablonu `/app/backend/templates/invoice_template.xlsx`-də saxlanılır. Yeni `/api/contracts/{id}/invoice` endpoint və frontend-də "HF" düyməsi ilə Excel faktura yüklənir. Yalnız müştəri-spesifik xanalar (Şirkət adı, VÖEN, müqavilə №, tarix, qiymət) doldurulur; "reqem" sheet-indəki Azərbaycan dilində məbləğ-sözlərə-çevirmə formulları və bank rekvizitləri toxunulmadan qalır.
+- **Hesab Faktura başlığı (Header)**: Marsol logo (`marsol_logo.png`) + ünvan (Bakı, Nərimanov r., Əhməd Rəcəbli 27A, Cömərd İş Mərkəzi) + telefonlar (`+994 50 228 64 34, +994 12 310 15 58, *0555`) + web/email avtomatik əlavə olunur. 6-cı sətirdə yaşıl/tünd rəngli zolaq vizual ayrıcı. Bütün şablon məlumatları (HESAB-FAKTURA başlığı, bank rekvizitləri, formulalar) toxunulmadan qalır.
+- Hesab Faktura (XLSX) generasiyası: yalnız müştəri-spesifik xanalar doldurulur
 - Müqavilə Redaktoru DOCX: qiymət cədvəli artıq boz başlıqlı, "Məbləğ yazı ilə:" sətri avtomatik əlavə olunur
 - Tarix regex genişləndirildi: `DD.MM.YYYY`, `DD/MM/YYYY`, "14 iyul 2025", "«14» iyul 2025-ci il" formatları dəstəklənir. Yalnız real (2015-2099) tarixlər çıxarılır.
 - Müqavilə Redaktoru forması sadələşdirildi: Sərgi adı / Başlama / Bitmə sahələri silindi. "Bu il müqavilə bağlanma tarixi" və "Stend №" əlavə olundu.
