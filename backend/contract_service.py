@@ -13,6 +13,7 @@ fill it in manually in the UI.
 from __future__ import annotations
 
 import io
+import os
 import re
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -22,6 +23,7 @@ from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH  # noqa: F401  (used indirectly)
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from openpyxl import load_workbook
 
 
 # ----------------------------------------------------------------------------
@@ -544,4 +546,81 @@ def generate_addendum_docx(data: Dict) -> bytes:
 
     out = io.BytesIO()
     doc.save(out)
+    return out.getvalue()
+
+
+# ----------------------------------------------------------------------------
+# INVOICE (HESAB-FAKTURA) — XLSX GENERATION
+# ----------------------------------------------------------------------------
+
+INVOICE_TEMPLATE_PATH = os.path.join(
+    os.path.dirname(__file__), "templates", "invoice_template.xlsx"
+)
+
+
+def generate_invoice_xlsx(data: Dict) -> bytes:
+    """Build a Hesab-Faktura XLSX based on the same data used for the addendum.
+
+    The template at `INVOICE_TEMPLATE_PATH` is the user-provided HF TS058.xlsx
+    file with two sheets ('sərgi' = main invoice, 'reqem' = number-to-words
+    helper sheet with cascading formulas). We ONLY overwrite the customer-
+    specific cells; all formulas, styles, layout and bank details stay
+    untouched.
+
+    Cell map (sheet 'sərgi'):
+      A8  — `HESAB-FAKTURA No <müqavilə №>`
+      A15 — ` Hesabı alan:<Sifarişçi adı>`
+      A16 — `VÖEN: <Sifarişçi VÖEN>`
+      G13 — invoice date (Tarix)         → today / addendum_date
+      G14 — Müqavilə №                    → parent_contract_number
+      G15 — Müqavilənin tarixi            → parent_contract_date
+      E20 — Miqdar                        → 1
+      F20 — Qiymət (ƏDV-siz)              → pricing.price_net
+      (Cəmi / ƏDV / Cəmi (ƏDV-ilə) / sözlərlə cəmi — formulas auto-compute.)
+    """
+    wb = load_workbook(INVOICE_TEMPLATE_PATH)
+    ws = wb["sərgi"] if "sərgi" in wb.sheetnames else wb.active
+
+    parent_no = (data.get("parent_contract_number") or "").strip() or "____"
+    sif_co = (data.get("sifarisci_company") or "").strip()
+    sif_voen = (data.get("sifarisci_voen") or "").strip()
+
+    pricing = data.get("pricing", {}) or {}
+    price_net = float(pricing.get("price_net") or 0)
+
+    # Parse ISO dates into Python datetime so Excel keeps native cell type.
+    def _to_dt(iso: Optional[str]) -> Optional[datetime]:
+        if not iso:
+            return None
+        try:
+            return datetime.strptime(iso[:10], "%Y-%m-%d")
+        except (ValueError, TypeError):
+            return None
+
+    invoice_date = _to_dt(data.get("addendum_date")) or datetime.now()
+    parent_date = _to_dt(data.get("parent_contract_date"))
+
+    # 1) Invoice header — keep original spacing/format
+    ws["A8"] = f"HESAB-FAKTURA No {parent_no} "
+
+    # 2) Sifarişçi (customer) block
+    #    Original sample had a leading space in A15 — keep it for layout parity.
+    if sif_co:
+        ws["A15"] = f" Hesabı alan: {sif_co}"
+    if sif_voen:
+        ws["A16"] = f"VÖEN: {sif_voen}"
+
+    # 3) Right-side meta block
+    ws["G13"] = invoice_date
+    ws["G14"] = parent_no
+    if parent_date:
+        ws["G15"] = parent_date
+
+    # 4) Services row (only the variable bits — the rest is hardcoded)
+    ws["E20"] = 1                  # Miqdar
+    if price_net:
+        ws["F20"] = price_net      # Qiymət (ƏDV-siz)
+
+    out = io.BytesIO()
+    wb.save(out)
     return out.getvalue()

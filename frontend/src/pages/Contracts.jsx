@@ -155,6 +155,20 @@ export default function Contracts() {
     }
   };
 
+  const handleDownloadInvoice = async (c) => {
+    try {
+      const r = await axios.get(`${API}/contracts/${c.id}/invoice`, { headers, responseType: 'blob' });
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `HF_${(c.parent_contract_number || 'muqavile').replace('/', '-')}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error('Hesab Faktura yüklənmədi');
+    }
+  };
+
   const handleEdit = (c) => {
     setEditing(c);
     setForm({
@@ -240,8 +254,11 @@ export default function Contracts() {
                     <td className="px-3 py-2 text-sm text-slate-500">{(c.addendum_date || '').slice(0, 10)}</td>
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => handleDownload(c)} className="h-7 text-xs text-emerald-700 hover:bg-emerald-50" data-testid={`download-${c.id}`} title="Word yüklə">
+                        <Button size="sm" variant="ghost" onClick={() => handleDownload(c)} className="h-7 text-xs text-emerald-700 hover:bg-emerald-50" data-testid={`download-${c.id}`} title="Əlavə Müqavilə (Word) yüklə">
                           <Download className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleDownloadInvoice(c)} className="h-7 text-xs text-indigo-700 hover:bg-indigo-50 font-semibold" data-testid={`invoice-${c.id}`} title="Hesab Faktura (Excel) yüklə">
+                          <span className="text-[10px]">HF</span>
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => handleEdit(c)} className="h-7 text-xs text-blue-700 hover:bg-blue-50" data-testid={`edit-${c.id}`} title="Redaktə">
                           <Pencil className="w-3.5 h-3.5" />

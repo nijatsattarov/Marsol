@@ -1841,6 +1841,23 @@ async def download_contract(contract_id: str,
     )
 
 
+@api_router.get("/contracts/{contract_id}/invoice")
+async def download_invoice(contract_id: str,
+                           current_user: dict = Depends(check_permission("contracts", "read"))):
+    """Generate and stream the Hesab-Faktura (XLSX) for this contract."""
+    c = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Müqavilə tapılmadı")
+    blob = contract_service.generate_invoice_xlsx(c)
+    safe_name = (c.get("parent_contract_number") or "muqavile").replace("/", "-")
+    filename = f"HF_{safe_name}.xlsx"
+    return StreamingResponse(
+        io.BytesIO(blob),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ==================== ATTENDANCE (DAVAMİYYƏT) ====================
 ATTENDANCE_STATUSES = ["İşdə", "Gəlməyib", "Məzuniyyət", "Xəstəlik", "İcazəli", "Uzaq"]
 

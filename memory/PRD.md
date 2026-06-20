@@ -9,8 +9,8 @@ Marsol Group üçün B2B Networking şirkəti (500+ üzv) üçün hərtərəfli 
 - Integrations: Cloudinary, Resend, OpenAI (gpt-4o-mini), Firebase Cloud Messaging, python-docx
 
 ## Recently Completed (2026-02)
-- Müqavilə Redaktoru DOCX: qiymət cədvəli artıq **boz başlıqlı** (D9D9D9 shading) tək cədvəl kimi yaranır (dublikat yoxdur), `Stend №, Xidmətin adı, Ölçü vahidi, Qiymət, ƏDV, Yekun məbləğ`.
-- Cədvəldən dərhal sonra **"Məbləğ yazı ilə: ..."** sətri avtomatik əlavə olunur — yekun məbləğ Azərbaycan dilində yazıya çevrilir (məs: `doqquz min dörd yüz qırx manat 00 qəpik`).
+- **Hesab Faktura (XLSX) generasiyası**: İstifadəçinin atdığı `HF TS058.xlsx` şablonu `/app/backend/templates/invoice_template.xlsx`-də saxlanılır. Yeni `/api/contracts/{id}/invoice` endpoint və frontend-də "HF" düyməsi ilə Excel faktura yüklənir. Yalnız müştəri-spesifik xanalar (Şirkət adı, VÖEN, müqavilə №, tarix, qiymət) doldurulur; "reqem" sheet-indəki Azərbaycan dilində məbləğ-sözlərə-çevirmə formulları və bank rekvizitləri toxunulmadan qalır.
+- Müqavilə Redaktoru DOCX: qiymət cədvəli artıq boz başlıqlı, "Məbləğ yazı ilə:" sətri avtomatik əlavə olunur
 - Tarix regex genişləndirildi: `DD.MM.YYYY`, `DD/MM/YYYY`, "14 iyul 2025", "«14» iyul 2025-ci il" formatları dəstəklənir. Yalnız real (2015-2099) tarixlər çıxarılır.
 - Müqavilə Redaktoru forması sadələşdirildi: Sərgi adı / Başlama / Bitmə sahələri silindi. "Bu il müqavilə bağlanma tarixi" və "Stend №" əlavə olundu.
 - HR KPI tab (executor/responsible üzrə tapşırıq statistikası)
