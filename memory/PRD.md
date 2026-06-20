@@ -9,7 +9,7 @@ Marsol Group üçün B2B Networking şirkəti (500+ üzv) üçün hərtərəfli 
 - Integrations: Cloudinary, Resend, OpenAI (gpt-4o-mini), Firebase Cloud Messaging, python-docx
 
 ## Recently Completed (2026-02)
-- **Hesab Faktura başlığı (Header)**: Marsol logo (`marsol_logo.png`) + ünvan (Bakı, Nərimanov r., Əhməd Rəcəbli 27A, Cömərd İş Mərkəzi) + telefonlar (`+994 50 228 64 34, +994 12 310 15 58, *0555`) + web/email avtomatik əlavə olunur. 6-cı sətirdə yaşıl/tünd rəngli zolaq vizual ayrıcı. Bütün şablon məlumatları (HESAB-FAKTURA başlığı, bank rekvizitləri, formulalar) toxunulmadan qalır.
+- **Hesab Faktura başlığı şəkil kimi**: İstifadəçinin göndərdiyi başlıq skrini (`marsol_header.png`, 672×396) artıq bir bütöv şəkil kimi A1-ə anchor olunaraq embed olunur (700×412px). Logo və ünvan/telefon yazılarının üst-üstə düşməsi (overlap) problemi həll olundu. Heç bir hüceyrəyə əlavə mətn yazılmır, sətirlər 1-6 hündürlüyü 70 vahid təyin olundu.
 - Hesab Faktura (XLSX) generasiyası: yalnız müştəri-spesifik xanalar doldurulur
 - Müqavilə Redaktoru DOCX: qiymət cədvəli artıq boz başlıqlı, "Məbləğ yazı ilə:" sətri avtomatik əlavə olunur
 - Tarix regex genişləndirildi: `DD.MM.YYYY`, `DD/MM/YYYY`, "14 iyul 2025", "«14» iyul 2025-ci il" formatları dəstəklənir. Yalnız real (2015-2099) tarixlər çıxarılır.
