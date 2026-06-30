@@ -1023,8 +1023,8 @@ export default function Companies() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div><Label className="text-xs">Qoşulma tarixi</Label><Input type="date" value={ct.join_date} onChange={e => { const nc=[...formData.contracts]; nc[ci]={...nc[ci], join_date: e.target.value}; setFormData({...formData, contracts: nc}); }} className="text-sm" /></div>
-                    <div><Label className="text-xs">Başlama tarixi</Label><Input type="date" value={ct.start_date} onChange={e => { const nc=[...formData.contracts]; nc[ci]={...nc[ci], start_date: e.target.value}; setFormData({...formData, contracts: nc}); }} className="text-sm" /></div>
-                    <div><Label className="text-xs">Bitmə tarixi</Label><Input type="date" value={ct.end_date} onChange={e => { const nc=[...formData.contracts]; nc[ci]={...nc[ci], end_date: e.target.value}; setFormData({...formData, contracts: nc}); }} className="text-sm" /></div>
+                    <div><Label className="text-xs">Müqavilə başlama tarixi</Label><Input type="date" value={ct.start_date} onChange={e => { const nc=[...formData.contracts]; nc[ci]={...nc[ci], start_date: e.target.value}; setFormData({...formData, contracts: nc}); }} className="text-sm" /></div>
+                    <div><Label className="text-xs">Müqavilə bitmə tarixi</Label><Input type="date" value={ct.end_date} onChange={e => { const nc=[...formData.contracts]; nc[ci]={...nc[ci], end_date: e.target.value}; setFormData({...formData, contracts: nc}); }} className="text-sm" /></div>
                   </div>
                   <div>
                     <Label className="text-xs">Müqavilə skanı</Label>

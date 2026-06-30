@@ -133,6 +133,7 @@ export default function Obligations() {
         'Şirkət': obl.company_name || '',
         'Ad': first,
         'Soyad': last,
+        'Qoşulma tarixi': formatDate(obl.join_date),
         'Paket': obl.package || '',
         'Ümumi kvota': obl.total_quota,
         'İstifadə olunan': obl.used_quota,
@@ -150,7 +151,7 @@ export default function Obligations() {
     });
     const ws = XLSX.utils.json_to_sheet(excelData);
     ws['!cols'] = [
-      { wch: 8 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
+      { wch: 8 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 14 }, { wch: 12 },
       { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
       { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
       { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
