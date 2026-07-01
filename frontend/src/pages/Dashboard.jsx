@@ -11,7 +11,8 @@ import {
   TrendingDown,
   Loader2,
   ClipboardList,
-  Briefcase
+  Briefcase,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   PieChart, 
@@ -234,6 +235,15 @@ export default function Dashboard() {
             }
             icon={CreditCard}
             color="#3D4F6F"
+          />
+        )}
+        {canView(permissions, 'obligations') && (
+          <StatCard
+            title="Öhdəliklər"
+            value={stats.obligations?.total || 0}
+            subtitle={`${stats.obligations?.urgent || 0} təcili, ${stats.obligations?.not_invited || 0} dəvətsiz`}
+            icon={AlertTriangle}
+            color="#EF4444"
           />
         )}
       </div>

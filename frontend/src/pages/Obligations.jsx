@@ -3,8 +3,9 @@ import axios from 'axios';
 import {
   Loader2, Search, AlertTriangle, CheckCircle2, Clock,
   Building2, Filter, X, ChevronDown, Eye, ArrowUpDown,
-  TrendingUp, Users2, Phone, PhoneOff, Download, Upload
+  TrendingUp, Users2, Phone, PhoneOff, Download, Upload, RotateCcw
 } from 'lucide-react';
+import { usePermissions } from '../context/PermissionContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -29,9 +30,27 @@ export default function Obligations() {
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [companyDetail, setCompanyDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
+  const { role } = usePermissions();
+  const isAdmin = (role || '').toLowerCase() === 'admin';
+
+  const handleReset = async () => {
+    setResetting(true);
+    try {
+      const res = await axios.post(`${API}/obligations/reset`, {}, { headers });
+      toast.success(`Sıfırlandı: ${res.data.invitations_deleted} dəvət silindi, ${res.data.companies_reset} şirkət override sıfırlandı`);
+      setResetOpen(false);
+      await fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Sıfırlama alınmadı');
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -224,8 +243,41 @@ export default function Obligations() {
           <Button variant="outline" size="sm" onClick={exportToExcel} data-testid="export-obligations-btn">
             <Download className="w-4 h-4 mr-1" />Excel Export
           </Button>
+          {isAdmin && (
+            <Button variant="outline" size="sm" onClick={() => setResetOpen(true)} className="text-rose-700 border-rose-200 hover:bg-rose-50" data-testid="reset-obligations-btn">
+              <RotateCcw className="w-4 h-4 mr-1" />Sıfırla
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Reset confirmation */}
+      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+        <DialogContent className="max-w-md" data-testid="reset-confirm-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-700">
+              <AlertTriangle className="w-5 h-5" /> Öhdəlik statistikasını sıfırla
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-slate-600">
+            <p>Bu əməliyyat aşağıdakıları geri qaytarılmaz şəkildə edəcək:</p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li><strong>Bütün dəvətlər</strong> silinəcək (dəvət qeydləri kolleksiyası tam təmizlənəcək).</li>
+              <li>Şirkətlərin **manual obligation_overrides** qeydləri silinəcək.</li>
+              <li>Şirkətlər, üzvlər, paketlər, müqavilələr toxunulmadan qalacaq.</li>
+            </ul>
+            <p className="text-rose-600 font-medium">Bu əməliyyat GERİ ALINA BİLMƏZ. Davam edilsin?</p>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" size="sm" onClick={() => setResetOpen(false)} disabled={resetting} data-testid="reset-cancel-btn">
+              Ləğv et
+            </Button>
+            <Button size="sm" onClick={handleReset} disabled={resetting} className="bg-rose-600 hover:bg-rose-700 text-white" data-testid="reset-confirm-btn">
+              {resetting ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Sıfırlanır...</> : 'Bəli, sıfırla'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">

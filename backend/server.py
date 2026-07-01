@@ -938,6 +938,33 @@ async def get_dashboard_stats(current_user: dict = Depends(check_permission("das
         {"name": s["_id"] or "Digər", "count": s["count"], "color": colors[i % len(colors)]}
         for i, s in enumerate(sectors_data)
     ]
+
+    # Obligations mini-stats — reused from the same helpers powering the
+    # dedicated Öhdəliklər page so the two dashboards never disagree.
+    try:
+        obl_companies = await db.companies.find(
+            {"status": "Aktiv"},
+            {"_id": 0, "id": 1, "package": 1, "membership_history": 1,
+             "contract_start_date": 1, "contract_end_date": 1,
+             "obligation_overrides": 1},
+        ).to_list(2000)
+        obl_quotas = await get_package_quotas()
+        obl_stats_map = await _bulk_invitation_stats([c.get("id", "") for c in obl_companies])
+        obl_list = [
+            _build_company_obligation(c, obl_quotas, obl_stats_map.get(c.get("id", ""), {}))
+            for c in obl_companies
+        ]
+        obligations_summary = {
+            "total": len(obl_list),
+            "not_invited": sum(1 for o in obl_list if o["total_invited"] == 0),
+            "under_invited": sum(1 for o in obl_list if 0 < o["total_invited"] < o["total_quota"] and o["remaining_quota"] > 0),
+            "fully_served": sum(1 for o in obl_list if o["remaining_quota"] == 0),
+            "urgent": sum(1 for o in obl_list if o["priority_score"] > 50),
+        }
+    except Exception as e:
+        logging.warning("Dashboard obligations summary failed: %s", e)
+        obligations_summary = {"total": 0, "not_invited": 0, "under_invited": 0,
+                               "fully_served": 0, "urgent": 0}
     
     return {
         "companies": {
@@ -976,6 +1003,7 @@ async def get_dashboard_stats(current_user: dict = Depends(check_permission("das
             "total": len(sectors_data),
             "breakdown": sector_breakdown
         },
+        "obligations": obligations_summary,
         "financials": {
             "income": total_income,
             "paid": total_paid,
@@ -6977,6 +7005,24 @@ def _build_company_obligation(company: dict, quotas: Dict[str, int], stats: Dict
         "total_declined": total_declined,
         "total_no_answer": total_no_answer,
         "status": company.get("status", "Aktiv"),
+    }
+
+
+@api_router.post("/obligations/reset")
+async def reset_obligations(current_user: dict = Depends(get_current_user)):
+    """Admin-only. Wipes every invitation record + clears obligation_overrides
+    on all companies. Companies themselves stay intact — only the counters
+    that feed the Öhdəliklər dashboard are zeroed out.
+    """
+    if (current_user.get("role") or "").lower() != "admin":
+        raise HTTPException(status_code=403, detail="Yalnız admin sıfırlaya bilər")
+
+    inv_res = await db.invitations.delete_many({})
+    ov_res = await db.companies.update_many({}, {"$unset": {"obligation_overrides": ""}})
+    return {
+        "success": True,
+        "invitations_deleted": inv_res.deleted_count,
+        "companies_reset": ov_res.modified_count,
     }
 
 
