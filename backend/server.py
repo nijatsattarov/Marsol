@@ -7,6 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 import re
+import time
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Union
@@ -355,14 +356,26 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user_id = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
+        # 60 s TTL cache: avoids a MongoDB hit on every single API request
+        # (typical dashboard load = 8-12 endpoints in parallel — cache
+        # saves 7-11 DB roundtrips per pageview).
+        cached = _USER_CACHE.get(user_id)
+        now = time.time()
+        if cached and now - cached[1] < 60:
+            return cached[0]
         user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
+        _USER_CACHE[user_id] = (user, now)
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+
+# Simple TTL user cache — module-level dict, per-worker.
+_USER_CACHE: Dict[str, tuple] = {}
 
 # ==================== RBAC HELPER ====================
 
@@ -9699,6 +9712,11 @@ async def list_note_tags(current_user: dict = Depends(check_permission("notes", 
 # Include router
 app.include_router(api_router)
 
+# GZip compression — dramatically shrinks JSON payloads on prod. Only kicks
+# in for responses larger than 500 bytes, so tiny endpoints stay fast.
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -9846,13 +9864,29 @@ async def startup_backfills():
     try:
         await db.companies.create_index("status")
         await db.companies.create_index("id")
+        await db.companies.create_index("display_id")
         await db.companies.create_index("marsol_company")
         await db.invitations.create_index([("company_id", 1), ("event_date", 1)])
         await db.invitations.create_index("company_id")
+        await db.invitations.create_index("event_date")
         await db.contracts.create_index("id")
+        await db.contracts.create_index([("marsol_company", 1), ("created_at", -1)])
         await db.tasks.create_index([("status", 1), ("marsol_company", 1)])
         await db.tasks.create_index("assignee")
+        await db.tasks.create_index("creator_id")
+        await db.tasks.create_index([("archived", 1), ("marsol_company", 1)])
+        await db.meetings.create_index([("marsol_company", 1), ("meeting_date", -1)])
+        await db.meetings.create_index("attendees")
+        await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
+        await db.notifications.create_index("target_user_id")
+        await db.notification_reads.create_index([("user_id", 1), ("notification_id", 1)])
+        await db.notes.create_index([("marsol_company", 1), ("created_at", -1)])
+        await db.notes.create_index("related_company_id")
+        await db.hr_employees.create_index("marsol_company")
+        await db.sales_leads.create_index([("marsol_company", 1), ("status", 1)])
+        await db.contacts.create_index("marsol_company")
         await db.users.create_index("email", unique=True)
+        await db.users.create_index("id")
     except Exception as e:
         logging.warning("Index creation failed: %s", e)
 
