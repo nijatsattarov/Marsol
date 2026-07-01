@@ -941,17 +941,25 @@ async def get_dashboard_stats(current_user: dict = Depends(check_permission("das
 
     # Obligations mini-stats — reused from the same helpers powering the
     # dedicated Öhdəliklər page so the two dashboards never disagree.
+    # IMPORTANT: default the year filter to the CURRENT year so numbers
+    # match the Öhdəliklər page (which defaults to `filterYear = currentYear`
+    # on the frontend). Without this the dashboard shows lifetime totals
+    # while the Öhdəliklər page shows this-year-only stats.
     try:
+        current_year = datetime.now(timezone.utc).year
         obl_companies = await db.companies.find(
             {"status": "Aktiv"},
             {"_id": 0, "id": 1, "package": 1, "membership_history": 1,
              "contract_start_date": 1, "contract_end_date": 1,
              "obligation_overrides": 1},
         ).to_list(2000)
+        obl_companies = [c for c in obl_companies if _company_covers_year(c, current_year)]
         obl_quotas = await get_package_quotas()
-        obl_stats_map = await _bulk_invitation_stats([c.get("id", "") for c in obl_companies])
+        obl_stats_map = await _bulk_invitation_stats(
+            [c.get("id", "") for c in obl_companies], year=current_year
+        )
         obl_list = [
-            _build_company_obligation(c, obl_quotas, obl_stats_map.get(c.get("id", ""), {}))
+            _build_company_obligation(c, obl_quotas, obl_stats_map.get(c.get("id", ""), {}), year=current_year)
             for c in obl_companies
         ]
         obligations_summary = {
