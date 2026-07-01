@@ -107,7 +107,18 @@ export default function Obligations() {
   else if (sortBy === 'days') filtered.sort((a, b) => a.days_remaining - b.days_remaining);
   else if (sortBy === 'name') filtered.sort((a, b) => a.company_name.localeCompare(b.company_name));
 
-  if (loading) return <div className="flex items-center justify-center h-[60vh]"><Loader2 className="w-8 h-8 animate-spin" style={{ color: '#3D4F6F' }} /></div>;
+  if (loading) return (
+    <div className="p-6 space-y-4" data-testid="obligations-skeleton">
+      <div className="h-8 w-64 bg-slate-200 rounded animate-pulse" />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {[0,1,2,3,4].map(i => <div key={i} className="h-24 bg-slate-100 rounded-xl animate-pulse" />)}
+      </div>
+      <div className="h-12 bg-slate-100 rounded animate-pulse" />
+      <div className="space-y-2">
+        {[0,1,2,3,4,5,6].map(i => <div key={i} className="h-14 bg-slate-100 rounded animate-pulse" />)}
+      </div>
+    </div>
+  );
 
   const stats = data.stats;
 
