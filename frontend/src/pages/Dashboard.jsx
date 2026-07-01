@@ -11,8 +11,7 @@ import {
   TrendingDown,
   Loader2,
   ClipboardList,
-  Briefcase,
-  AlertTriangle
+  Briefcase
 } from 'lucide-react';
 import { 
   PieChart, 
@@ -237,16 +236,36 @@ export default function Dashboard() {
             color="#3D4F6F"
           />
         )}
-        {canView(permissions, 'obligations') && (
-          <StatCard
-            title="Öhdəliklər"
-            value={stats.obligations?.total || 0}
-            subtitle={`${stats.obligations?.urgent || 0} təcili, ${stats.obligations?.not_invited || 0} dəvətsiz`}
-            icon={AlertTriangle}
-            color="#EF4444"
-          />
-        )}
       </div>
+
+      {/* Obligation statistics (matches Öhdəliklər page layout) */}
+      {canView(permissions, 'obligations') && (
+        <div>
+          <h2 className="text-base font-semibold text-[#3D4F6F] mb-3">Öhdəlik statistikası</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100" data-testid="dash-obl-total">
+              <p className="text-xs text-slate-500">Cəmi üzvlər</p>
+              <p className="text-2xl font-bold text-[#3D4F6F]">{stats.obligations?.total || 0}</p>
+            </div>
+            <div className="bg-red-50 rounded-xl p-4 shadow-sm border border-red-100" data-testid="dash-obl-not-invited">
+              <p className="text-xs text-red-500">Heç dəvət olunmayıb</p>
+              <p className="text-2xl font-bold text-red-600">{stats.obligations?.not_invited || 0}</p>
+            </div>
+            <div className="bg-amber-50 rounded-xl p-4 shadow-sm border border-amber-100" data-testid="dash-obl-under-invited">
+              <p className="text-xs text-amber-600">Az dəvət olunub</p>
+              <p className="text-2xl font-bold text-amber-700">{stats.obligations?.under_invited || 0}</p>
+            </div>
+            <div className="bg-emerald-50 rounded-xl p-4 shadow-sm border border-emerald-100" data-testid="dash-obl-fully-served">
+              <p className="text-xs text-emerald-600">Tamamlanıb</p>
+              <p className="text-2xl font-bold text-emerald-700">{stats.obligations?.fully_served || 0}</p>
+            </div>
+            <div className="bg-orange-50 rounded-xl p-4 shadow-sm border border-orange-100" data-testid="dash-obl-urgent">
+              <p className="text-xs text-orange-600">Təcili</p>
+              <p className="text-2xl font-bold text-orange-700">{stats.obligations?.urgent || 0}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
