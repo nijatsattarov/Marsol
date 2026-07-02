@@ -114,7 +114,7 @@ export default function Organization() {
     e.preventDefault();
     if (!validateRequired([
       [form.name, 'Fəaliyyət adı'],
-      [form.type, 'Növ'],
+      [form.event_type, 'Növ'],
       [form.date, 'Tarix'],
       [form.participant_limit, 'İştirakçı limiti'],
     ])) return;
