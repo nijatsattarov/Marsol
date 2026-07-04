@@ -76,6 +76,13 @@ export default function Organization() {
   const [customPhone, setCustomPhone] = useState('');
   const [sectorWarning, setSectorWarning] = useState(null);
 
+  // Öhdəliklər siyahısı — replaces the removed "Manual əlavə et" flow.
+  // Loaded lazily when an event is selected.
+  const [obligations, setObligations] = useState([]);
+  const [oblLoading, setOblLoading] = useState(false);
+  const [oblSearch, setOblSearch] = useState('');
+  const [oblPackageFilter, setOblPackageFilter] = useState('all');
+
   const token = localStorage.getItem('token');
   const { permissions } = usePermissions();
   const _canEdit = canEdit(permissions, 'organization');
@@ -147,6 +154,40 @@ export default function Organization() {
     fetchInvitations(event.id);
     setSuggestions([]);
     setShowSuggestions(false);
+    fetchObligations();
+  };
+
+  const fetchObligations = async () => {
+    setOblLoading(true);
+    try {
+      const year = new Date().getFullYear();
+      const res = await axios.get(`${API}/obligations/dashboard?year=${year}`, { headers });
+      // Sort by priority_score DESC (urgent first) — matches Öhdəliklər page.
+      const sorted = [...(res.data.obligations || [])].sort(
+        (a, b) => (b.priority_score || 0) - (a.priority_score || 0)
+      );
+      setObligations(sorted);
+    } catch {
+      toast.error('Öhdəliklər siyahısı yüklənmədi');
+    } finally {
+      setOblLoading(false);
+    }
+  };
+
+  const handleQuickInvite = async (companyId, status) => {
+    if (!selectedEvent) return;
+    try {
+      await axios.post(`${API}/events/${selectedEvent.id}/quick-invite`,
+        { company_id: companyId, status }, { headers });
+      toast.success(`${status} olaraq qeyd olundu`);
+      fetchInvitations(selectedEvent.id);
+    } catch (err) {
+      if (err.response?.status === 409) {
+        toast.warning('Bu şirkət artıq bu fəaliyyətə dəvət olunub');
+      } else {
+        toast.error('Əməliyyat alınmadı');
+      }
+    }
   };
 
   const handleAutoSuggest = async () => {
@@ -465,9 +506,6 @@ export default function Organization() {
                     <Sparkles className="w-3.5 h-3.5 mr-1" />Avto təklif
                   </Button>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => { setShowInviteModal(true); setSearchCompany(''); }} className="h-8" data-testid="manual-add-btn">
-                  <UserPlus className="w-3.5 h-3.5 mr-1" />Manual əlavə et
-                </Button>
               </div>
 
               {/* Suggestions Panel */}
@@ -614,6 +652,110 @@ export default function Organization() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+
+              {/* --- ÖHDƏLİKLƏR SİYAHISI (replaces Manual əlavə et) --- */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4" data-testid="obligations-panel">
+                <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                  <h3 className="font-semibold text-sm text-[#3D4F6F]">
+                    Öhdəliklər siyahısı ({obligations.filter(o => {
+                      const s = oblSearch.toLowerCase();
+                      const matchS = !s || (o.company_name || '').toLowerCase().includes(s) || (o.owner_name || '').toLowerCase().includes(s);
+                      const matchP = oblPackageFilter === 'all' || o.package === oblPackageFilter;
+                      return matchS && matchP;
+                    }).length})
+                  </h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <Input value={oblSearch} onChange={(e) => setOblSearch(e.target.value)} placeholder="Şirkət axtar..." className="h-8 pl-7 text-xs w-48" data-testid="obl-search" />
+                    </div>
+                    <Select value={oblPackageFilter} onValueChange={setOblPackageFilter}>
+                      <SelectTrigger className="h-8 text-xs w-32" data-testid="obl-package-filter"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Bütün paketlər</SelectItem>
+                        {Array.from(new Set(obligations.map(o => o.package).filter(Boolean))).map(p =>
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {oblLoading ? (
+                  <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-[#3D4F6F]" /></div>
+                ) : (
+                  <div className="border border-slate-100 rounded-lg overflow-hidden max-h-[500px] overflow-y-auto" data-testid="obligations-table">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 sticky top-0 z-10">
+                        <tr className="text-left text-slate-600">
+                          <th className="p-2">Şirkət</th>
+                          <th className="p-2">Paket</th>
+                          <th className="p-2 text-center">Qalıb</th>
+                          <th className="p-2 text-center">Müddət</th>
+                          <th className="p-2 text-right">Əməliyyat</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {obligations.filter(o => {
+                          const s = oblSearch.toLowerCase();
+                          const matchS = !s || (o.company_name || '').toLowerCase().includes(s) || (o.owner_name || '').toLowerCase().includes(s);
+                          const matchP = oblPackageFilter === 'all' || o.package === oblPackageFilter;
+                          return matchS && matchP;
+                        }).map((o) => {
+                          const alreadyInvited = invitedCompanyIds.has(o.company_id);
+                          const daysColor = o.days_remaining < 30 ? 'text-red-600 font-semibold' : o.days_remaining < 90 ? 'text-amber-600' : 'text-slate-500';
+                          return (
+                            <tr key={o.company_id} className={`border-t border-slate-100 hover:bg-slate-50 ${alreadyInvited ? 'bg-slate-50/60 opacity-70' : ''}`} data-testid={`obl-row-${o.company_id}`}>
+                              <td className="p-2">
+                                <div className="font-medium text-[#3D4F6F]">{o.company_name}</div>
+                                {o.owner_name && <div className="text-[10px] text-slate-500">{o.owner_name}</div>}
+                              </td>
+                              <td className="p-2 text-slate-600">{o.package || '-'}</td>
+                              <td className="p-2 text-center font-mono">
+                                <span className={o.remaining_quota <= 0 ? 'text-emerald-600' : o.remaining_quota <= 2 ? 'text-red-600 font-bold' : 'text-slate-700'}>
+                                  {o.remaining_quota}/{o.total_quota}
+                                </span>
+                              </td>
+                              <td className={`p-2 text-center ${daysColor}`}>{o.days_remaining}g</td>
+                              <td className="p-2">
+                                <div className="flex items-center gap-1 justify-end">
+                                  <button
+                                    onClick={() => handleQuickInvite(o.company_id, 'Qatılır')}
+                                    className="w-7 h-7 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-600 flex items-center justify-center transition-colors"
+                                    title="Qatılır (dəvət olunmuş və gələcək)"
+                                    data-testid={`quick-invite-yes-${o.company_id}`}
+                                  >
+                                    <Phone className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleQuickInvite(o.company_id, 'Qatılmır')}
+                                    className="w-7 h-7 rounded-full bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center transition-colors"
+                                    title="Qatılmır (dəvət olunmuş amma rədd)"
+                                    data-testid={`quick-invite-no-${o.company_id}`}
+                                  >
+                                    <PhoneOff className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleQuickInvite(o.company_id, 'Cavab vermədi')}
+                                    className="w-7 h-7 rounded-full bg-amber-50 hover:bg-amber-100 text-amber-600 flex items-center justify-center transition-colors"
+                                    title="Cavab vermədi (kvota tükənmir)"
+                                    data-testid={`quick-invite-noans-${o.company_id}`}
+                                  >
+                                    <Clock className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {obligations.length === 0 && !oblLoading && (
+                          <tr><td colSpan={5} className="text-center p-4 text-slate-400">Öhdəlik siyahısı boşdur</td></tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>

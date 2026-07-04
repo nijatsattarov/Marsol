@@ -6577,6 +6577,66 @@ async def create_bulk_invitations(data: dict, current_user: dict = Depends(get_c
         created.append(inv_doc)
     return {"created": len(created), "invitations": created}
 
+@api_router.post("/events/{event_id}/quick-invite")
+async def quick_invite_company(
+    event_id: str,
+    data: dict,
+    current_user: dict = Depends(get_current_user),
+):
+    """One-click flow used by the Fəaliyyətlər page: pick a company from the
+    obligation list, choose a status ("Qatılır" / "Qatılmır" / "Cavab vermədi")
+    and this endpoint creates the invitation with that status set in a single
+    round-trip.
+
+    Body: {"company_id": "...", "status": "Qatılır" | "Qatılmır" | "Cavab vermədi"}
+    Returns 409 if the company is already invited to this event.
+    """
+    company_id = (data.get("company_id") or "").strip()
+    status = (data.get("status") or "").strip()
+    if not company_id or status not in ("Qatılır", "Qatılmır", "Cavab vermədi"):
+        raise HTTPException(status_code=400, detail="company_id və düzgün status tələb olunur")
+
+    event = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Fəaliyyət tapılmadı")
+
+    existing = await db.invitations.find_one({"event_id": event_id, "company_id": company_id})
+    if existing:
+        raise HTTPException(status_code=409, detail="Bu şirkət artıq bu fəaliyyətə dəvət olunub")
+
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0, "brand_name": 1})
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if status == "Cavab vermədi":
+        call_status = "Cavab vermədi"
+        participation_status = ""
+        deducted = False   # quota NOT consumed — user requirement
+    else:
+        call_status = "Cavab verdi"
+        participation_status = status  # "Qatılır" or "Qatılmır"
+        deducted = True    # quota IS consumed
+
+    inv_doc = {
+        "id": str(uuid.uuid4()),
+        "event_id": event_id,
+        "event_name": event.get("name", ""),
+        "event_type": event.get("event_type", ""),
+        "event_date": event.get("date", ""),
+        "company_id": company_id,
+        "company_name": company.get("brand_name", "") if company else "",
+        "call_status": call_status,
+        "participation_status": participation_status,
+        "obligation_deducted": deducted,
+        "called_by": current_user.get("name", ""),
+        "called_at": now_iso,
+        "notes": "",
+        "created_at": now_iso,
+    }
+    await db.invitations.insert_one(inv_doc)
+    inv_doc.pop("_id", None)
+    return inv_doc
+
+
 @api_router.put("/invitations/{inv_id}/call")
 async def update_invitation_call(inv_id: str, data: dict, current_user: dict = Depends(get_current_user)):
     call_status = data.get("call_status", "")
