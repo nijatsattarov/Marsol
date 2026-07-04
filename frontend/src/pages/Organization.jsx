@@ -188,6 +188,7 @@ export default function Organization() {
         { company_id: companyId, status }, { headers });
       toast.success(`${status} olaraq qeyd olundu`);
       if (selectedEvent?.id === eventId) fetchInvitations(eventId);
+      fetchObligations(); // refresh used/remaining quota counters
     } catch (err) {
       if (err.response?.status === 409) {
         toast.warning('Bu şirkət artıq bu fəaliyyətə dəvət olunub');
@@ -702,7 +703,7 @@ export default function Organization() {
                   <tr className="text-left text-slate-600 text-xs uppercase tracking-wider">
                     <th className="p-3">Şirkət</th>
                     <th className="p-3">Paket</th>
-                    <th className="p-3 text-center">Qalıb</th>
+                    <th className="p-3 text-center">Kvota</th>
                     <th className="p-3 text-center">Müddət</th>
                     <th className="p-3">Fəaliyyət</th>
                     <th className="p-3 text-center">Əməliyyat</th>
@@ -724,8 +725,8 @@ export default function Organization() {
                         </td>
                         <td className="p-3 text-slate-600">{o.package || '-'}</td>
                         <td className="p-3 text-center font-mono text-sm">
-                          <span className={o.remaining_quota <= 0 ? 'text-emerald-600 font-semibold' : o.remaining_quota <= 2 ? 'text-red-600 font-bold' : 'text-slate-700'}>
-                            {o.remaining_quota}/{o.total_quota}
+                          <span className={o.remaining_quota <= 0 ? 'text-emerald-600 font-semibold' : (o.total_quota - o.used_quota) <= 2 ? 'text-red-600 font-bold' : 'text-slate-700'}>
+                            {o.used_quota}/{o.total_quota}
                           </span>
                         </td>
                         <td className={`p-3 text-center text-sm ${daysColor}`}>{o.days_remaining}g</td>
