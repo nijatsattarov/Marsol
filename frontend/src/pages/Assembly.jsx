@@ -433,9 +433,13 @@ export default function Assembly() {
           startY: yStart + 3,
           head: [['Tapşırıq', 'Məsul', 'İcraçı', 'Son tarix', 'Status']],
           body: tasks,
-          styles: { font: 'Roboto', fontSize: 8, cellPadding: 2, overflow: 'linebreak', cellWidth: 'wrap' },
-          headStyles: { font: 'Roboto', fillColor: [154, 205, 50], textColor: [61, 79, 111] },
-          columnStyles: { 0: { cellWidth: 70 }, 1: { cellWidth: 40 }, 2: { cellWidth: 40 }, 3: { cellWidth: 22 }, 4: { cellWidth: 22 } },
+          styles: { font: 'Roboto', fontSize: 8, cellPadding: 1.8, overflow: 'linebreak', valign: 'top', textColor: [61, 79, 111], lineColor: [220, 220, 220], lineWidth: 0.1 },
+          headStyles: { font: 'Roboto', fillColor: [154, 205, 50], textColor: [61, 79, 111], fontStyle: 'normal', overflow: 'linebreak' },
+          columnStyles: { 0: { cellWidth: 58 }, 1: { cellWidth: 40 }, 2: { cellWidth: 40 }, 3: { cellWidth: 22 }, 4: { cellWidth: 22 } },
+          margin: { left: 14, right: 14 },
+          tableWidth: 'wrap',
+          showHead: 'everyPage',
+          rowPageBreak: 'auto',
         });
       } else {
         doc.setFontSize(9);

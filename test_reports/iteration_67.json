@@ -1,0 +1,30 @@
+{
+  "summary": "Re-verified Assembly (İclas) PDF export agenda-tasks autoTable fix. Seeded TEST_ İclas IC-002 with 1 agenda containing 2 stress-test tasks (long titles >40 chars, 3 responsible + 3 assignees each). Clicked pdf-assembly-<id>, downloaded iclas_IC-002.pdf (52703 bytes, valid %PDF-1.3 header), toast 'PDF yükləndi' shown, zero console errors. Extracted PDF geometry with pdfplumber confirms both tables are exactly 182mm wide within A4 printable area (14mm..196mm) and long text wraps inside cells via linebreak with no column overflow. Fix is PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verifications": [
+    {"flow": "Login (settings@marsol.az)", "result": "PASS — 200 response, redirected to /dashboard."},
+    {"flow": "PDF export click on pdf-assembly-32b8df20... (IC-002)", "result": "PASS — download event fired, filename iclas_IC-002.pdf, size 52703 bytes, header %PDF-1.3."},
+    {"flow": "Toast 'PDF yükləndi'", "result": "PASS — visible after export."},
+    {"flow": "Console errors during export", "result": "PASS — none."},
+    {"flow": "Header info table geometry (Sahə/Dəyər)", "result": "PASS — bbox x=14mm..196mm, columns 40mm + 142mm = 182mm."},
+    {"flow": "Agenda tasks table geometry", "result": "PASS — bbox x=14mm..196mm, columns 58+40+40+22+22 = 182mm (matches general_tasks style)."},
+    {"flow": "Long-text wrapping", "result": "PASS — task titles (>40 chars) wrap onto multiple lines within the 58mm 'Tapşırıq' cell; multi-name responsible/assignee lists wrap within 40mm cells; no word extends past x=193.22mm (< 196mm limit); overflow_words=0."},
+    {"flow": "PDF pagination", "result": "PASS — single page rendered cleanly with all sections."}
+  ],
+  "code_review_notes": [
+    "Assembly.jsx line 432-443 agenda-tasks autoTable now matches general_tasks: columnStyles 58+40+40+22+22=182mm, margin left/right 14mm, tableWidth 'wrap', overflow 'linebreak', valign 'top', lineColor+lineWidth, showHead 'everyPage', rowPageBreak 'auto', headStyles font 'Roboto' fontStyle 'normal' overflow 'linebreak'. Inconsistency flagged in iteration_66 is fully resolved.",
+    "Both PDF task tables (agenda + general) are now identically styled — good DRY candidate but functionally correct."
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "test_credentials": "settings@marsol.az / marsol123",
+  "seed_data_creation": "Created and then DELETED TEST_ İclas IC-002 (id 32b8df20-d264-4ffc-b3c9-da14e126ae08) with stress-test agenda tasks (2 tasks, long titles, 3+3 resp/assignees). Cleanup HTTP 200.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Assembly PDF layout fix fully verified via pixel-accurate pdfplumber geometry extraction. All autoTables span exactly 14mm..196mm on A4 portrait. No follow-up needed on this feature.",
+  "rca of the issue": "Previous iteration_66 flagged that only the general_tasks autoTable had been updated to 182mm; the agenda-tasks autoTable at line 432 still used the old 194mm columnStyles (70+40+40+22+22). Main agent has now synchronised both tables to identical 58+40+40+22+22=182mm columnStyles plus matching margin/tableWidth/lineColor/valign/rowPageBreak/showHead settings. pdfplumber measurement on the actual generated PDF confirms the fix — no code changes needed."
+}
