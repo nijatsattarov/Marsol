@@ -201,7 +201,7 @@ export default function Meetings() {
     autoTable(doc, {
       startY: 26,
       head: [[
-        'Tarix', 'Vaxt', 'Şirkət', 'Sahə işçisi', 'Görüş növü', 'Rejim', 'Yer', 'Status'
+        'Tarix', 'Vaxt', 'Şirkət', 'Sahə işçisi', 'Növ', 'Rejim', 'Yer', 'Nəticə', 'Qeyd'
       ]],
       body: filtered.map(m => [
         formatDate(m.date),
@@ -212,17 +212,26 @@ export default function Meetings() {
         m.meeting_mode || '-',
         m.location || '-',
         m.result || '-',
+        m.notes || '-',
       ]),
-      styles: { font: 'Roboto', fontSize: 8, cellPadding: 2, textColor: [61, 79, 111], overflow: 'linebreak', valign: 'top' },
-      headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255, fontStyle: 'normal', overflow: 'linebreak' },
+      styles: { font: 'Roboto', fontSize: 7, cellPadding: 1.8, textColor: [61, 79, 111], overflow: 'linebreak', valign: 'top', lineColor: [220, 220, 220], lineWidth: 0.1 },
+      headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255, fontStyle: 'normal', overflow: 'linebreak', fontSize: 8, cellPadding: 2 },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
-        0: { cellWidth: 22 }, 1: { cellWidth: 15 }, 2: { cellWidth: 45 },
-        3: { cellWidth: 35 }, 4: { cellWidth: 28 }, 5: { cellWidth: 22 },
-        6: { cellWidth: 45 }, 7: { cellWidth: 55 },
+        0: { cellWidth: 20 },
+        1: { cellWidth: 12 },
+        2: { cellWidth: 40 },
+        3: { cellWidth: 30 },
+        4: { cellWidth: 22 },
+        5: { cellWidth: 16 },
+        6: { cellWidth: 30 },
+        7: { cellWidth: 45 },
+        8: { cellWidth: 62 },
       },
       margin: { left: 10, right: 10 },
-      tableWidth: 'auto',
+      tableWidth: 'wrap',
+      showHead: 'everyPage',
+      rowPageBreak: 'avoid',
     });
     doc.save(`gorusler_${todayStr}.pdf`);
     toast.success('PDF yükləndi');
@@ -257,22 +266,15 @@ export default function Meetings() {
         ['Layihə', m.project || '-'],
         ['Növbəti görüş', formatDate(m.next_meeting) || '-'],
         ['Nəticə', m.result || '-'],
+        ['Qeydlər', m.notes || '-'],
       ],
-      styles: { font: 'Roboto', fontSize: 10, cellPadding: 3, textColor: [61, 79, 111], overflow: 'linebreak', valign: 'top' },
+      styles: { font: 'Roboto', fontSize: 10, cellPadding: 3, textColor: [61, 79, 111], overflow: 'linebreak', valign: 'top', lineColor: [220, 220, 220], lineWidth: 0.1 },
       headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255, fontStyle: 'normal', overflow: 'linebreak' },
-      columnStyles: { 0: { cellWidth: 55 }, 1: { cellWidth: 'auto' } },
+      columnStyles: { 0: { cellWidth: 45 }, 1: { cellWidth: 137 } },
       margin: { left: 14, right: 14 },
+      showHead: 'everyPage',
+      rowPageBreak: 'auto',
     });
-    if (m.notes) {
-      const y = doc.lastAutoTable.finalY + 8;
-      doc.setFontSize(11);
-      doc.setTextColor(61, 79, 111);
-      doc.text('Qeydlər', 14, y);
-      doc.setFontSize(10);
-      doc.setTextColor(80);
-      const split = doc.splitTextToSize(String(m.notes), 180);
-      doc.text(split, 14, y + 6);
-    }
     const fileSafeCompany = (m.company || 'gorus').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40);
     doc.save(`gorus_${fileSafeCompany}_${m.date || todayStr}.pdf`);
     toast.success('PDF yükləndi');

@@ -52,6 +52,7 @@ export default function CompanyDatabase() {
   const [marsolReps, setMarsolReps] = useState([]);
   const [existingCompanies, setExistingCompanies] = useState([]);
   const [companyPickerOpen, setCompanyPickerOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showMeetingModal, setShowMeetingModal] = useState(false);
@@ -670,11 +671,37 @@ export default function CompanyDatabase() {
       </Dialog>
 
       {/* Şirkət bazasından seç (existing Companies module picker) */}
-      <Dialog open={companyPickerOpen} onOpenChange={setCompanyPickerOpen}>
+      <Dialog open={companyPickerOpen} onOpenChange={(v) => { setCompanyPickerOpen(v); if (!v) setPickerSearch(''); }}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" data-testid="company-picker-dialog">
           <DialogHeader>
             <DialogTitle>Şirkət bazasından seç</DialogTitle>
           </DialogHeader>
+          <div className="pb-2 border-b">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
+              <Input
+                value={pickerSearch}
+                onChange={(e) => setPickerSearch(e.target.value)}
+                placeholder="Şirkət, sahibkar və ya telefon üzrə axtar..."
+                className="pl-8 h-9 text-sm"
+                data-testid="company-picker-search"
+                autoFocus
+              />
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1.5">{
+              (() => {
+                const q = pickerSearch.trim().toLowerCase();
+                const count = q ? existingCompanies.filter(c =>
+                  (c.brand_name || '').toLowerCase().includes(q) ||
+                  (c.legal_name || '').toLowerCase().includes(q) ||
+                  (c.owner_name || '').toLowerCase().includes(q) ||
+                  (c.owner_phone || '').toLowerCase().includes(q) ||
+                  (c.company_phone || '').toLowerCase().includes(q)
+                ).length : existingCompanies.length;
+                return `${count} şirkət göstərilir`;
+              })()
+            }</p>
+          </div>
           <div className="overflow-y-auto flex-1 -mx-2 px-2">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 sticky top-0">
@@ -686,7 +713,19 @@ export default function CompanyDatabase() {
                 </tr>
               </thead>
               <tbody>
-                {existingCompanies.map((c) => (
+                {existingCompanies
+                  .filter(c => {
+                    const q = pickerSearch.trim().toLowerCase();
+                    if (!q) return true;
+                    return (
+                      (c.brand_name || '').toLowerCase().includes(q) ||
+                      (c.legal_name || '').toLowerCase().includes(q) ||
+                      (c.owner_name || '').toLowerCase().includes(q) ||
+                      (c.owner_phone || '').toLowerCase().includes(q) ||
+                      (c.company_phone || '').toLowerCase().includes(q)
+                    );
+                  })
+                  .map((c) => (
                   <tr key={c.id} className="border-t border-slate-100 hover:bg-slate-50" data-testid={`picker-row-${c.id}`}>
                     <td className="p-2 font-medium text-[#3D4F6F]">{c.brand_name || c.legal_name}</td>
                     <td className="p-2 text-slate-600">{c.owner_name || '-'}</td>
@@ -704,6 +743,7 @@ export default function CompanyDatabase() {
                             email: c.owner_email || c.company_email || prev.email,
                           }));
                           setCompanyPickerOpen(false);
+                          setPickerSearch('');
                           toast.success('Şirkət seçildi');
                         }}
                         className="h-7 text-xs"
@@ -716,6 +756,19 @@ export default function CompanyDatabase() {
                 ))}
                 {existingCompanies.length === 0 && (
                   <tr><td colSpan={4} className="text-center p-6 text-slate-400">Şirkət bazası boşdur</td></tr>
+                )}
+                {existingCompanies.length > 0 && existingCompanies.filter(c => {
+                  const q = pickerSearch.trim().toLowerCase();
+                  if (!q) return true;
+                  return (
+                    (c.brand_name || '').toLowerCase().includes(q) ||
+                    (c.legal_name || '').toLowerCase().includes(q) ||
+                    (c.owner_name || '').toLowerCase().includes(q) ||
+                    (c.owner_phone || '').toLowerCase().includes(q) ||
+                    (c.company_phone || '').toLowerCase().includes(q)
+                  );
+                }).length === 0 && (
+                  <tr><td colSpan={4} className="text-center p-6 text-slate-400">Axtarışa uyğun şirkət tapılmadı</td></tr>
                 )}
               </tbody>
             </table>

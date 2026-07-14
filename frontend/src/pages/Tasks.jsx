@@ -759,20 +759,24 @@ export default function Tasks() {
             <>
               {/* Archive filters */}
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-3 pb-3 border-b border-amber-200">
-                <Input
-                  value={archiveFilterAssignee}
-                  onChange={(e) => setArchiveFilterAssignee(e.target.value)}
-                  placeholder="İcraçı üzrə axtar..."
-                  className="h-8 text-xs bg-white"
-                  data-testid="archive-filter-assignee"
-                />
-                <Input
-                  value={archiveFilterCreator}
-                  onChange={(e) => setArchiveFilterCreator(e.target.value)}
-                  placeholder="Yaradıcı üzrə axtar..."
-                  className="h-8 text-xs bg-white"
-                  data-testid="archive-filter-creator"
-                />
+                <Select value={archiveFilterAssignee || '__all__'} onValueChange={(v) => setArchiveFilterAssignee(v === '__all__' ? '' : v)}>
+                  <SelectTrigger className="h-8 text-xs bg-white" data-testid="archive-filter-assignee"><SelectValue placeholder="İcraçı üzrə" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">Bütün icraçılar</SelectItem>
+                    {Array.from(new Set(archivedTasks.map(t => (assigneeDisplay(t) || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'az')).map(n => (
+                      <SelectItem key={`asg-${n}`} value={n}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={archiveFilterCreator || '__all__'} onValueChange={(v) => setArchiveFilterCreator(v === '__all__' ? '' : v)}>
+                  <SelectTrigger className="h-8 text-xs bg-white" data-testid="archive-filter-creator"><SelectValue placeholder="Yaradıcı üzrə" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">Bütün yaradıcılar</SelectItem>
+                    {Array.from(new Set(archivedTasks.map(t => (t.created_by || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'az')).map(n => (
+                      <SelectItem key={`crt-${n}`} value={n}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Input
                   type="date"
                   value={archiveFilterDateFrom}
@@ -816,8 +820,8 @@ export default function Tasks() {
                 <tbody>
                   {archivedTasks
                     .filter(t => {
-                      if (archiveFilterAssignee && !(assigneeDisplay(t) || '').toLowerCase().includes(archiveFilterAssignee.toLowerCase())) return false;
-                      if (archiveFilterCreator && !(t.created_by || '').toLowerCase().includes(archiveFilterCreator.toLowerCase())) return false;
+                      if (archiveFilterAssignee && (assigneeDisplay(t) || '').trim() !== archiveFilterAssignee) return false;
+                      if (archiveFilterCreator && (t.created_by || '').trim() !== archiveFilterCreator) return false;
                       if (archiveFilterDateFrom && (t.archived_at || '').slice(0, 10) < archiveFilterDateFrom) return false;
                       if (archiveFilterDateTo && (t.archived_at || '').slice(0, 10) > archiveFilterDateTo) return false;
                       return true;
