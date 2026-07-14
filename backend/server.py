@@ -381,7 +381,7 @@ _USER_CACHE: Dict[str, tuple] = {}
 
 MODULES = [
     "dashboard", "companies", "hr", "sales", "members", "obligations",
-    "finance", "contracts", "organization", "meetings", "assembly", "tasks",
+    "finance", "contracts", "organization", "activities", "meetings", "assembly", "tasks",
     "marketing", "projects", "reports", "messages", "files", "notes",
     "settings", "notifications", "sms"
 ]

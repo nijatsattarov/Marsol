@@ -40,7 +40,7 @@ import {
 } from 'lucide-react';
 
 const salesSubItems = [
-  { path: '/sales/company-database', label: 'Şirkət bazası', icon: Database, module: 'sales' },
+  { path: '/sales/company-database', label: 'Təkliflər', icon: Database, module: 'sales' },
   { path: '/sales/members', label: 'Üzvlər', icon: Users2, module: 'members' },
   { path: '/sales/obligations', label: 'Öhdəliklər', icon: FileCheck, module: 'obligations' },
   { path: '/sales/obligation-history', label: 'Öhdəlik tarixçəsi', icon: History, module: 'obligations' },
@@ -79,7 +79,7 @@ const menuItems = [
   { path: '/sales', label: 'Satış', icon: TrendingUp, children: salesSubItems, module: 'sales' },
   { path: '/marketing', label: 'Marketinq', icon: Megaphone, module: 'marketing' },
   { path: '/projects', label: 'Layihələr', icon: FolderKanban, module: 'projects' },
-  { path: '/activities', label: 'Fəaliyyətlər', icon: Calendar, module: 'organization' },
+  { path: '/activities', label: 'Fəaliyyətlər', icon: Calendar, module: 'activities' },
   { path: '/organization', label: 'Təşkilatçılıq', icon: Users2, children: organizationSubItems, module: 'organization' },
   { path: '/finance', label: 'Maliyyə', icon: Wallet, children: financeSubItems, module: 'finance' },
   { path: '/reports', label: 'Hesabatlar', icon: BarChart3, module: 'reports' },

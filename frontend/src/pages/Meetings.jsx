@@ -166,10 +166,24 @@ export default function Meetings() {
   const meetingTypes = options.meeting_types || [];
   const departments = options.departments || [];
   const projects = options.projects || [];
-  const employeeNames = [...new Set([
-    ...users.filter(u => (u.status || 'Aktiv') === 'Aktiv' && u.name).map(u => u.name),
-    ...employees.map(e => `${e.first_name || ''} ${e.last_name || ''}`.trim()).filter(Boolean),
-  ])];
+  const employeeNames = (() => {
+    // Merge user names + employee full names, then dedupe with
+    // case-insensitive + whitespace-normalized keys to avoid the same person
+    // appearing twice (once from users, once from hr_employees).
+    const raw = [
+      ...users.filter(u => (u.status || 'Aktiv') === 'Aktiv' && u.name).map(u => u.name),
+      ...employees.map(e => `${e.first_name || ''} ${e.last_name || ''}`.trim()).filter(Boolean),
+    ];
+    const seen = new Set();
+    const out = [];
+    for (const n of raw) {
+      const key = n.replace(/\s+/g, ' ').trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(n.replace(/\s+/g, ' ').trim());
+    }
+    return out.sort((a, b) => a.localeCompare(b, 'az'));
+  })();
 
   // ========== Calendar helpers ==========
   const AZ_MONTHS = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'İyun', 'İyul', 'Avqust', 'Sentyabr', 'Oktyabr', 'Noyabr', 'Dekabr'];

@@ -243,7 +243,7 @@ export default function CompanyDatabase() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Şirkət Bazası</h1>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold" style={{ color: '#3D4F6F' }}>Təkliflər</h1>
           <p className="text-slate-500 text-sm mt-1">{filtered.length} lead</p>
         </div>
         <div className="flex gap-2">

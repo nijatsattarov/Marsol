@@ -84,6 +84,10 @@ export default function Tasks() {
   const [tasks, setTasks] = useState([]);
   const [archivedTasks, setArchivedTasks] = useState([]);
   const [archiveSelectedIds, setArchiveSelectedIds] = useState(new Set());
+  const [archiveFilterAssignee, setArchiveFilterAssignee] = useState('');
+  const [archiveFilterCreator, setArchiveFilterCreator] = useState('');
+  const [archiveFilterDateFrom, setArchiveFilterDateFrom] = useState('');
+  const [archiveFilterDateTo, setArchiveFilterDateTo] = useState('');
   const [deletingArchive, setDeletingArchive] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [employees, setEmployees] = useState([]);
@@ -752,7 +756,41 @@ export default function Tasks() {
           {archivedTasks.length === 0 ? (
             <p className="text-xs text-amber-700">Arxivdə tapşırıq yoxdur.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              {/* Archive filters */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-3 pb-3 border-b border-amber-200">
+                <Input
+                  value={archiveFilterAssignee}
+                  onChange={(e) => setArchiveFilterAssignee(e.target.value)}
+                  placeholder="İcraçı üzrə axtar..."
+                  className="h-8 text-xs bg-white"
+                  data-testid="archive-filter-assignee"
+                />
+                <Input
+                  value={archiveFilterCreator}
+                  onChange={(e) => setArchiveFilterCreator(e.target.value)}
+                  placeholder="Yaradıcı üzrə axtar..."
+                  className="h-8 text-xs bg-white"
+                  data-testid="archive-filter-creator"
+                />
+                <Input
+                  type="date"
+                  value={archiveFilterDateFrom}
+                  onChange={(e) => setArchiveFilterDateFrom(e.target.value)}
+                  className="h-8 text-xs bg-white"
+                  data-testid="archive-filter-date-from"
+                  title="Arxiv tarixi (başlanğıc)"
+                />
+                <Input
+                  type="date"
+                  value={archiveFilterDateTo}
+                  onChange={(e) => setArchiveFilterDateTo(e.target.value)}
+                  className="h-8 text-xs bg-white"
+                  data-testid="archive-filter-date-to"
+                  title="Arxiv tarixi (son)"
+                />
+              </div>
+              <div className="overflow-x-auto overflow-y-auto max-h-[500px]" data-testid="archive-scroll-container">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-amber-200">
@@ -776,7 +814,15 @@ export default function Tasks() {
                   </tr>
                 </thead>
                 <tbody>
-                  {archivedTasks.map(t => (
+                  {archivedTasks
+                    .filter(t => {
+                      if (archiveFilterAssignee && !(assigneeDisplay(t) || '').toLowerCase().includes(archiveFilterAssignee.toLowerCase())) return false;
+                      if (archiveFilterCreator && !(t.created_by || '').toLowerCase().includes(archiveFilterCreator.toLowerCase())) return false;
+                      if (archiveFilterDateFrom && (t.archived_at || '').slice(0, 10) < archiveFilterDateFrom) return false;
+                      if (archiveFilterDateTo && (t.archived_at || '').slice(0, 10) > archiveFilterDateTo) return false;
+                      return true;
+                    })
+                    .map(t => (
                     <tr key={t.archive_id} className={`border-b border-amber-100 hover:bg-amber-100/50 ${archiveSelectedIds.has(t.archive_id) ? 'bg-amber-100' : ''}`} data-testid={`archive-row-${t.archive_id}`}>
                       {currentUserRole === 'admin' && (
                         <td className="px-2 py-1.5">
@@ -823,6 +869,7 @@ export default function Tasks() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </div>
       )}
