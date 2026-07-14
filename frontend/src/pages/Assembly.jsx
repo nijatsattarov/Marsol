@@ -402,9 +402,12 @@ export default function Assembly() {
         ['Növbəti iclas', formatDate(a.next_assembly_date) || '-'],
         ['İştirakçılar', persons.length ? persons.join(', ') : '-'],
       ],
-      styles: { font: 'Roboto', fontSize: 9, cellPadding: 2.5, textColor: [61, 79, 111] },
-      headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255, fontStyle: 'normal' },
-      columnStyles: { 0: { cellWidth: 45 }, 1: { cellWidth: 'auto' } },
+      styles: { font: 'Roboto', fontSize: 9, cellPadding: 2.5, textColor: [61, 79, 111], overflow: 'linebreak', valign: 'top', lineColor: [220, 220, 220], lineWidth: 0.1 },
+      headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255, fontStyle: 'normal', overflow: 'linebreak' },
+      columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 142 } },
+      margin: { left: 14, right: 14 },
+      tableWidth: 'wrap',
+      showHead: 'everyPage',
     });
 
     // Agendas (gündəlik) — each in its own table
@@ -456,9 +459,13 @@ export default function Assembly() {
           t.deadline ? formatDate(t.deadline) : '-',
           t.status || '-',
         ]),
-        styles: { font: 'Roboto', fontSize: 8, cellPadding: 2, overflow: 'linebreak', cellWidth: 'wrap' },
-        headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255 },
-        columnStyles: { 0: { cellWidth: 70 }, 1: { cellWidth: 40 }, 2: { cellWidth: 40 }, 3: { cellWidth: 22 }, 4: { cellWidth: 22 } },
+        styles: { font: 'Roboto', fontSize: 8, cellPadding: 1.8, overflow: 'linebreak', valign: 'top', textColor: [61, 79, 111], lineColor: [220, 220, 220], lineWidth: 0.1 },
+        headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255, fontStyle: 'normal', overflow: 'linebreak' },
+        columnStyles: { 0: { cellWidth: 58 }, 1: { cellWidth: 40 }, 2: { cellWidth: 40 }, 3: { cellWidth: 22 }, 4: { cellWidth: 22 } },
+        margin: { left: 14, right: 14 },
+        tableWidth: 'wrap',
+        showHead: 'everyPage',
+        rowPageBreak: 'auto',
       });
     }
 
@@ -545,23 +552,23 @@ export default function Assembly() {
   });
 
   const departments = options.departments || [];
-  // Combine HR employees + system users (deduped by name) so every active user
-  // — even those not yet in the HR roster — can be tagged in iclas tapşırıqları.
+  // İclas iştirakçıları / məsul / icraçı üçün YALNIZ sistem istifadəçilərini
+  // (Aktiv statuslu) istifadə edirik. HR əməkdaşları buraya qarışdırılmır ki,
+  // eyni ad ikiqat görünməsin.
   const employeeNames = useMemo(() => {
     const seen = new Set();
     const out = [];
-    const push = (nm) => {
-      const v = (nm || '').toString().trim();
+    users.forEach(u => {
+      if ((u.status || 'Aktiv') !== 'Aktiv') return;
+      const v = (u.name || '').toString().trim();
       if (!v) return;
       const key = v.toLocaleLowerCase('az');
       if (seen.has(key)) return;
       seen.add(key);
       out.push(v);
-    };
-    employees.forEach(e => push(`${e.first_name || ''} ${e.last_name || ''}`.trim()));
-    users.forEach(u => { if ((u.status || 'Aktiv') === 'Aktiv') push(u.name); });
+    });
     return out.sort((a, b) => a.localeCompare(b, 'az'));
-  }, [employees, users]);
+  }, [users]);
 
   const getResponsibles = (a) => [...new Set([
     ...(a.agendas || []).flatMap(ag => (ag.tasks || []).flatMap(t => [...(t.responsible_persons || []), ...(t.assignees || [])])),

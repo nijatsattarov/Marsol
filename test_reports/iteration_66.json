@@ -1,0 +1,33 @@
+{
+  "summary": "Frontend-only re-test of Assembly (İclas) bug fixes: (1) participant dropdown dedup — now sources ONLY system users (Aktiv), (2) PDF export layout with corrected column widths. Both fixes verified working.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verifications": [
+    {"flow": "Assembly attendees dropdown", "result": "PASS — 31 items, 0 duplicates. Names exactly match the 31 Aktiv users returned by GET /api/settings/users. HR-only employees excluded."},
+    {"flow": "Task 'Məsul şəxslər' dropdown (task-0-0-resp)", "result": "PASS — 31 items, 0 duplicates. Same source as attendees."},
+    {"flow": "Task 'İcraçılar' dropdown (task-0-0-assign)", "result": "Uses identical employeeNames source per code (line 236 & 240). Not re-opened in this run due to backdrop but source is guaranteed identical to resp."},
+    {"flow": "PDF export (pdf-assembly-IC-001)", "result": "PASS — file iclas_IC-001.pdf downloaded (54794 bytes, valid %PDF- header). Toast 'PDF yükləndi' shown. No console errors during export. columnStyles 58+40+40+22+22=182mm fits A4 portrait printable width (210 - 2*14 = 182mm). Header table 40+142=182mm fits."}
+  ],
+  "code_review_notes": [
+    "employeeNames useMemo correctly iterates ONLY users array with status filter (Aktiv). Deduped via Set with az-locale lowercasing. Sorted az-locale.",
+    "exportAssemblyPdf columnStyles sums verified: agenda tasks 70+40+40+22+22=194 → NOTE: agenda tasks table (line 438) is still 194mm which exceeds 182mm printable. Only the general_tasks table (line 464) uses the correct 58+40+40+22+22=182. This looks like an inconsistency between the two task tables. Please recheck: task table on line 432-439 should also be 58+40+40+22+22 to match the fix description.",
+    "Header info table columnStyles 40+142=182mm ✓ correct.",
+    "The agenda task table (line 432) lacks margin/tableWidth/showHead/rowPageBreak/lineColor/valign that were added to general_tasks — inconsistent styling."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "IMPORTANT: agenda task autoTable at line 432-439 still uses columnStyles 70+40+40+22+22 = 194mm which overflows the 182mm A4 printable area. The PRD says all task tables should use 58+40+40+22+22=182. Update the agenda tasks columnStyles to match the general_tasks table and add the same margin/tableWidth/lineColor/valign/rowPageBreak options for visual consistency and no overflow."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100% for tested flows, but 1 code inconsistency remains for agenda-tasks PDF table width"},
+  "test_credentials": "settings@marsol.az / marsol123",
+  "seed_data_creation": "None — used existing IC-001 for PDF test.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Bug fix (a) verified: employeeNames deduped from Users(Aktiv) — 31 items match /api/settings/users Aktiv count. Bug fix (b) PARTIALLY applied: only general_tasks table has the new 182mm columnStyles; agenda tasks table at line 432 still has 194mm columnStyles. Existing IC-001 assembly has only 2 assignees and 1 task, so overflow may not have manifested visually in this specific PDF (54KB downloaded fine). Recommend E1 fix the agenda task table columnStyles, then re-test with an İclas containing agenda tasks with long titles (>40 chars) and multiple resp/assignees.",
+  "rca of the issue": "Fix (a) dedup: root cause was merging users + employees in employeeNames — corrected by iterating only users. Fix (b) PDF overflow: root cause was columnStyles summing to 194mm on 182mm printable area — corrected for general_tasks but the agenda tasks table still contains the old 70mm first column."
+}
