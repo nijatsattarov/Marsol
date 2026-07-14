@@ -107,6 +107,13 @@ export default function Attendance() {
   }, [sessionsDate, sessionsStart, sessionsEnd, sessionsMode]);
 
   useEffect(() => { if (tab === 'system') fetchSessions(); }, [tab, fetchSessions]);
+  // Auto-refresh Sistem fəaliyyəti every 30 s so open sessions'
+  // `is_open`/`is_stale` state updates without a manual reload.
+  useEffect(() => {
+    if (tab !== 'system') return;
+    const id = setInterval(fetchSessions, 30_000);
+    return () => clearInterval(id);
+  }, [tab, fetchSessions]);
 
   useEffect(() => {
     (async () => { await Promise.all([fetchEmployees(), fetchRecords(date), fetchStats(month), fetchLeaves()]); setLoading(false); })();

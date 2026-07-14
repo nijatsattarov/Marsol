@@ -213,14 +213,16 @@ export default function Meetings() {
         m.location || '-',
         m.result || '-',
       ]),
-      styles: { font: 'Roboto', fontSize: 8, cellPadding: 2, textColor: [61, 79, 111] },
-      headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255, fontStyle: 'normal' },
+      styles: { font: 'Roboto', fontSize: 8, cellPadding: 2, textColor: [61, 79, 111], overflow: 'linebreak', valign: 'top' },
+      headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255, fontStyle: 'normal', overflow: 'linebreak' },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
-        0: { cellWidth: 22 }, 1: { cellWidth: 18 }, 2: { cellWidth: 45 },
-        3: { cellWidth: 40 }, 4: { cellWidth: 30 }, 5: { cellWidth: 22 },
-        6: { cellWidth: 45 }, 7: { cellWidth: 28 },
+        0: { cellWidth: 22 }, 1: { cellWidth: 15 }, 2: { cellWidth: 45 },
+        3: { cellWidth: 35 }, 4: { cellWidth: 28 }, 5: { cellWidth: 22 },
+        6: { cellWidth: 45 }, 7: { cellWidth: 55 },
       },
+      margin: { left: 10, right: 10 },
+      tableWidth: 'auto',
     });
     doc.save(`gorusler_${todayStr}.pdf`);
     toast.success('PDF yükləndi');
@@ -256,9 +258,10 @@ export default function Meetings() {
         ['Növbəti görüş', formatDate(m.next_meeting) || '-'],
         ['Nəticə', m.result || '-'],
       ],
-      styles: { font: 'Roboto', fontSize: 10, cellPadding: 3, textColor: [61, 79, 111] },
-      headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255, fontStyle: 'normal' },
+      styles: { font: 'Roboto', fontSize: 10, cellPadding: 3, textColor: [61, 79, 111], overflow: 'linebreak', valign: 'top' },
+      headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255, fontStyle: 'normal', overflow: 'linebreak' },
       columnStyles: { 0: { cellWidth: 55 }, 1: { cellWidth: 'auto' } },
+      margin: { left: 14, right: 14 },
     });
     if (m.notes) {
       const y = doc.lastAutoTable.finalY + 8;

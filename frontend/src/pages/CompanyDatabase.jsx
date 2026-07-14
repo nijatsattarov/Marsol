@@ -50,6 +50,8 @@ export default function CompanyDatabase() {
   const [packages, setPackages] = useState([]);
   const [marsolCompanies, setMarsolCompanies] = useState([]);
   const [marsolReps, setMarsolReps] = useState([]);
+  const [existingCompanies, setExistingCompanies] = useState([]);
+  const [companyPickerOpen, setCompanyPickerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showMeetingModal, setShowMeetingModal] = useState(false);
@@ -70,7 +72,7 @@ export default function CompanyDatabase() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [lRes, sRes, oRes, ptRes, pRes, pkgRes, mcRes] = await Promise.all([
+      const [lRes, sRes, oRes, ptRes, pRes, pkgRes, mcRes, cRes] = await Promise.all([
         axios.get(`${API}/sales-leads`, { headers }),
         axios.get(`${API}/sales-leads/stats`, { headers }),
         axios.get(`${API}/options/all`, { headers }),
@@ -78,6 +80,7 @@ export default function CompanyDatabase() {
         axios.get(`${API}/project-events`, { headers }),
         axios.get(`${API}/settings/packages`, { headers }).catch(() => ({ data: [] })),
         axios.get(`${API}/settings/marsol-companies`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/companies?limit=2000`, { headers }).catch(() => ({ data: [] })),
       ]);
       setLeads(lRes.data);
       setStats(sRes.data);
@@ -87,6 +90,7 @@ export default function CompanyDatabase() {
       setProjects(pRes.data || []);
       setPackages(pkgRes.data || []);
       setMarsolCompanies(mcRes.data || []);
+      setExistingCompanies(cRes.data || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, []);
@@ -424,7 +428,17 @@ export default function CompanyDatabase() {
           <form onSubmit={handleSubmit} className="space-y-3" data-testid="lead-form">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs">Şirkət adı *</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Şirkət adı *</Label>
+                  <button
+                    type="button"
+                    onClick={() => setCompanyPickerOpen(true)}
+                    className="text-[10px] text-[#3D4F6F] underline hover:text-[#2c3a55]"
+                    data-testid="pick-existing-company"
+                  >
+                    Bazadan seç
+                  </button>
+                </div>
                 <Input value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} required className="text-sm" data-testid="lead-company" />
               </div>
               <div>
@@ -652,6 +666,61 @@ export default function CompanyDatabase() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Şirkət bazasından seç (existing Companies module picker) */}
+      <Dialog open={companyPickerOpen} onOpenChange={setCompanyPickerOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" data-testid="company-picker-dialog">
+          <DialogHeader>
+            <DialogTitle>Şirkət bazasından seç</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto flex-1 -mx-2 px-2">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 sticky top-0">
+                <tr className="text-left text-xs text-slate-600">
+                  <th className="p-2">Şirkət</th>
+                  <th className="p-2">Sahibkar</th>
+                  <th className="p-2">Telefon</th>
+                  <th className="p-2 text-right">Seç</th>
+                </tr>
+              </thead>
+              <tbody>
+                {existingCompanies.map((c) => (
+                  <tr key={c.id} className="border-t border-slate-100 hover:bg-slate-50" data-testid={`picker-row-${c.id}`}>
+                    <td className="p-2 font-medium text-[#3D4F6F]">{c.brand_name || c.legal_name}</td>
+                    <td className="p-2 text-slate-600">{c.owner_name || '-'}</td>
+                    <td className="p-2 text-slate-600 font-mono text-xs">{c.owner_phone || c.company_phone || '-'}</td>
+                    <td className="p-2 text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setForm(prev => ({
+                            ...prev,
+                            company_name: c.brand_name || c.legal_name || '',
+                            contact_name: c.owner_name || prev.contact_name,
+                            phone: c.owner_phone || c.company_phone || prev.phone,
+                            email: c.owner_email || c.company_email || prev.email,
+                          }));
+                          setCompanyPickerOpen(false);
+                          toast.success('Şirkət seçildi');
+                        }}
+                        className="h-7 text-xs"
+                        data-testid={`picker-select-${c.id}`}
+                      >
+                        Seç
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {existingCompanies.length === 0 && (
+                  <tr><td colSpan={4} className="text-center p-6 text-slate-400">Şirkət bazası boşdur</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-slate-500 pt-2 border-t">İpucu: Bazada olmayan şirkət üçün pəncərəni bağla və Şirkət adı xanasına manual daxil et.</p>
         </DialogContent>
       </Dialog>
     </div>
