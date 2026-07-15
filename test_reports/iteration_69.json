@@ -1,0 +1,31 @@
+{
+  "summary": "RE-TEST orphan-title fix in Assembly PDF export — PASS. Reused stress seed (30 attendees, 4 agendas x 2 tasks with 150-char titles + 8 responsible/8 assignees, 3 general_tasks, 6 discussion_topics, 5 decisions). Logged in as settings@marsol.az, injected token, navigated /assembly, clicked data-testid='pdf-assembly-<id>'. PDF (101,579 bytes, 3 pages) downloaded, toast 'PDF yükləndi' visible, zero console errors. Validation: (1) ORPHAN-TITLE gone — all 7 section titles (Gündəlik #1..#4, Ümumi tapşırıqlar, Müzakirə mövzuları, Qərarlar) each have at least one body row on the SAME page (has_body=True for every title). (2) No text outside 39.6..555.7pt printable bounds (182mm width). (3) rowPageBreak:'avoid' — no row split across pages, no continuation lines. (4) showHead:'firstPage' working — each title appears EXACTLY ONCE across all pages, no duplicated title on continuation pages. (5) Numbered list rows (Müzakirə mövzuları/Qərarlar) rendered: 11 lines (6+5) as expected. (6) Cleanup DELETE /api/assemblies/<id> HTTP 200. Iteration 68 failure is fully resolved by ensureSpace(50) pre-check + showHead:'firstPage' in Assembly.jsx drawTasksBlock/drawListBlock.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verifications": [
+    {"flow": "Login + seed TEST_ICLAS_PDF (IC-011, id 4eee9647...)", "result": "PASS"},
+    {"flow": "PDF download via pdf-assembly-<id>", "result": "PASS — 101579 bytes, 3 pages"},
+    {"flow": "Toast 'PDF yükləndi'", "result": "PASS"},
+    {"flow": "Console errors", "result": "PASS — none"},
+    {"flow": "Orphan-title check (all 7 section titles have body row on same page)", "result": "PASS — Gündəlik #1/#2 p1, Gündəlik #3/#4 + Ümumi p2, Müzakirə/Qərarlar p3, all has_body=True"},
+    {"flow": "Column-widths sum 182mm & printable bounds 39.6..555.7pt", "result": "PASS — no outside chars"},
+    {"flow": "Row atomicity (rowPageBreak:'avoid')", "result": "PASS — no split rows/continuation"},
+    {"flow": "Title de-duplication (showHead:'firstPage')", "result": "PASS — each title appears exactly once across all 3 pages"},
+    {"flow": "Numbered lists Müzakirə/Qərarlar (6+5)", "result": "PASS — 11 lines"},
+    {"flow": "Cleanup DELETE /api/assemblies/<id>", "result": "PASS — 200 'İclas silindi'"},
+    {"flow": "Attendees dropdown Aktiv-only regression", "result": "SKIPPED at API level (endpoint filter differs) but visually verified in iteration 68 — no code change since then affects attendees list"}
+  ],
+  "test_report_links": ["/app/test_reports/pdf_seed_and_test.py", "/app/test_reports/pdf_validate.py"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "drawTasksBlock and drawListBlock still share ~80% structural options — could be DRY'd out but not blocking.",
+    "ensureSpace uses a fixed 50mm reserve for task blocks — works for the stress payload but if a single first body row exceeds 30mm (e.g., 20+ responsible/assignee names wrapping into 10+ lines) the pre-check may still under-estimate. For now it's safe; consider computing needed based on actual first-row string length if edge-case tasks appear."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100% — orphan-title fix verified, all checks PASS"},
+  "test_credentials": "settings@marsol.az / marsol123",
+  "seed_data_creation": "TEST_ICLAS_PDF assembly IC-011 (id 4eee9647-69e3-41cd-9c42-61e17d353d1d) created and cleaned up.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Assembly PDF export orphan-title bug FIXED as of iteration 69. Reusable scripts: /app/test_reports/pdf_seed_and_test.py (seed) + /app/test_reports/pdf_validate.py (validate with title-has-body heuristic, char bounds, numbered lists, continuations). Fix lives in Assembly.jsx ~line 425 (ensureSpace) + ~line 461/494 (showHead:'firstPage')."
+}

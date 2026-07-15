@@ -418,7 +418,21 @@ export default function Assembly() {
     // Helper — render a task table with an integrated title row (colSpan=5)
     // so the title never orphans on a previous page from its rows.
     // Task columnStyles sum to 58+40+40+22+22 = 182mm (matches printable width).
+    // Also pre-checks remaining page space before drawing so the head
+    // (title + column labels) cannot land at the bottom of a page while the
+    // first body row spills onto the next page (that scenario is what users
+    // perceive as "yazılar bir-birinin üzərinə düşür").
     // ============================================================
+    const PAGE_BOTTOM_LIMIT = doc.internal.pageSize.getHeight() - 14; // A4-portrait bottom margin
+    const PAGE_TOP_START = 20;
+    const ensureSpace = (needed) => {
+      const y = (doc.lastAutoTable?.finalY || 32) + 6;
+      if (y + needed > PAGE_BOTTOM_LIMIT) {
+        doc.addPage();
+        // Reset lastAutoTable so subsequent startY calc yields PAGE_TOP_START
+        doc.lastAutoTable = { finalY: PAGE_TOP_START - 6 };
+      }
+    };
     const drawTasksBlock = (title, tasks, headerColor) => {
       const rows = (tasks || []).map(t => [
         t.title || '-',
@@ -427,6 +441,11 @@ export default function Assembly() {
         t.deadline ? formatDate(t.deadline) : '-',
         t.status || '-',
       ]);
+      // Estimate space needed: title row (~10mm) + column header (~8mm) +
+      // first body row (~ up to 30mm for tall multi-line cells) + 4mm buffer.
+      // We use a generous 50mm to guarantee at least one body row lands with
+      // the title on the same page.
+      ensureSpace(50);
       autoTable(doc, {
         startY: (doc.lastAutoTable?.finalY || 32) + 6,
         head: [
@@ -437,9 +456,9 @@ export default function Assembly() {
         styles: { font: 'Roboto', fontSize: 8, cellPadding: 1.8, overflow: 'linebreak', valign: 'top', textColor: [61, 79, 111], lineColor: [220, 220, 220], lineWidth: 0.1 },
         headStyles: { font: 'Roboto', fillColor: headerColor, textColor: headerColor === '#ffffff' ? [61, 79, 111] : (headerColor[0] > 200 ? [61, 79, 111] : [255, 255, 255]), fontStyle: 'normal', overflow: 'linebreak' },
         columnStyles: { 0: { cellWidth: 58 }, 1: { cellWidth: 40 }, 2: { cellWidth: 40 }, 3: { cellWidth: 22 }, 4: { cellWidth: 22 } },
-        margin: { left: 14, right: 14 },
+        margin: { left: 14, right: 14, top: PAGE_TOP_START },
         tableWidth: 'wrap',
-        showHead: 'everyPage',
+        showHead: 'firstPage',
         rowPageBreak: 'avoid',
       });
     };
@@ -462,15 +481,17 @@ export default function Assembly() {
     const drawListBlock = (title, items) => {
       const arr = (items || []).filter(Boolean);
       if (!arr.length) return;
+      // Estimate: title row (~10mm) + first list row (~8mm) + buffer 4mm.
+      ensureSpace(25);
       autoTable(doc, {
         startY: (doc.lastAutoTable?.finalY || 32) + 6,
         head: [[{ content: title, styles: { fillColor: [255, 255, 255], textColor: [61, 79, 111], halign: 'left', fontSize: 11, cellPadding: { top: 3, bottom: 2, left: 0, right: 0 }, lineWidth: 0 } }]],
         body: arr.map((t, i) => [`${i + 1}. ${t}`]),
         styles: { font: 'Roboto', fontSize: 9.5, cellPadding: 2, overflow: 'linebreak', valign: 'top', textColor: [80, 80, 80], lineColor: [235, 235, 235], lineWidth: 0.1 },
         columnStyles: { 0: { cellWidth: 182 } },
-        margin: { left: 14, right: 14 },
+        margin: { left: 14, right: 14, top: PAGE_TOP_START },
         tableWidth: 'wrap',
-        showHead: 'everyPage',
+        showHead: 'firstPage',
         rowPageBreak: 'avoid',
       });
     };
