@@ -1055,7 +1055,13 @@ export default function HR() {
                         <SelectContent>{departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
-                    <div><Label className="text-xs">Vəzifə *</Label><Input value={formData.position} onChange={(e) => setFormData({...formData, position: e.target.value})} required className="text-sm" /></div>
+                    <div>
+                      <Label className="text-xs">Vəzifə *</Label>
+                      <Select value={formData.position} onValueChange={(v) => setFormData({...formData, position: v})}>
+                        <SelectTrigger className="text-sm" data-testid="employee-position-select"><SelectValue placeholder="Vəzifə seçin" /></SelectTrigger>
+                        <SelectContent>{(options?.positions || []).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div>
                     <Label className="text-xs">Marsol müəssisəsi</Label>
