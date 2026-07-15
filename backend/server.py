@@ -4995,7 +4995,7 @@ MANAGEABLE_LISTS = [
     {"key": "marital_statuses", "label": "Ailə vəziyyəti", "defaults": ["Subay", "Evli", "Boşanmış", "Dul"], "group": "HR"},
     {"key": "task_statuses", "label": "Tapşırıq statusları", "defaults": ["Gözləyir", "İcrada", "Tamamlandı", "Ləğv edildi"], "group": "Tapşırıqlar"},
     {"key": "priorities", "label": "Prioritetlər", "defaults": ["Yüksək", "Orta", "Aşağı"], "group": "Tapşırıqlar"},
-    {"key": "lead_sources", "label": "Lead mənbələri", "defaults": ["Marketing", "Referans", "Sosial media", "Veb sayt", "Sərgi", "Soyuq zəng", "Digər"], "group": "Satış"},
+    {"key": "lead_sources", "label": "Lead mənbələri", "defaults": ["Baza", "Marketing", "Referans", "Sosial media", "Veb sayt", "Sərgi", "Soyuq zəng", "Digər"], "group": "Satış"},
     {"key": "lead_statuses", "label": "Lead statusları", "defaults": ["Yeni", "Əlaqə quruldu", "Görüş təyin edildi", "Təklif göndərildi", "Danışıqda", "Üzv oldu", "Satıldı", "İmtina"], "group": "Satış"},
     {"key": "sale_types", "label": "Satış növləri", "defaults": ["Üzvlük", "Sərgi stendi", "Tur (Daxili)", "Tur (Xarici)", "Təlim", "Digər"], "group": "Satış"},
     {"key": "meeting_types", "label": "Görüş növləri", "defaults": ["Satış görüşü", "Daxili iclas", "Müştəri görüşü", "Partnyor görüşü", "Təqdimat"], "group": "Satış"},
@@ -5224,7 +5224,7 @@ async def get_all_options(current_user: dict = Depends(get_current_user)):
         "education_levels": await _get_setting_list("education_levels", ["Orta təhsil", "Sub bakalavr", "Bakalavr", "Magistratura", "Doktorantura"]),
         "event_types": await _get_setting_list("event_types", EVENT_TYPES),
         "package_quotas": await get_package_quotas(),
-        "lead_sources": await _get_setting_list("lead_sources", ["Marketing", "Referans", "Sosial media", "Veb sayt", "Sərgi", "Soyuq zəng", "Digər"]),
+        "lead_sources": await _get_setting_list("lead_sources", ["Baza", "Marketing", "Referans", "Sosial media", "Veb sayt", "Sərgi", "Soyuq zəng", "Digər"]),
         "lead_statuses": await _get_setting_list("lead_statuses", ["Yeni", "Əlaqə quruldu", "Görüş təyin edildi", "Təklif göndərildi", "Danışıqda", "Üzv oldu", "Satıldı", "İmtina"]),
         "sale_types": await _get_setting_list("sale_types", ["Üzvlük", "Sərgi stendi", "Tur (Daxili)", "Tur (Xarici)", "Təlim", "Digər"]),
     }

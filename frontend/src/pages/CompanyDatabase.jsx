@@ -516,7 +516,7 @@ export default function CompanyDatabase() {
                 <Select value={form.source} onValueChange={(v) => setForm({ ...form, source: v })}>
                   <SelectTrigger className="text-sm" data-testid="lead-source-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
                   <SelectContent>
-                    {(sources.includes('Baza') ? sources : ['Baza', ...sources]).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    {sources.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 {form.source_contact_list_name && (

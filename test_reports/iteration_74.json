@@ -1,0 +1,20 @@
+{
+  "summary": "Verified 'Baza' fix for Lead Mənbələri. Backend pytest: 3/3 passed. Frontend UI: Settings shows 8 sources with 'Baza' first; Yeni Lead → Mənbə dropdown returns identical 8 sources with 'Baza' first. Parity between /api/settings/lists/lead_sources and /api/options/all confirmed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_lead_sources_baza.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "FE fallback array injection in CompanyDatabase.jsx was correctly removed — dropdown is now purely backend-driven, so deleting 'Baza' in Settings will remove it from Yeni Lead as expected.",
+    "The Yeni Lead dialog is missing aria-describedby (Radix warning in console). Non-blocking a11y improvement."
+  ],
+  "updated_files": ["/app/backend/tests/test_lead_sources_baza.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "settings@marsol.az / marsol123 (from problem statement)",
+  "seed_data_creation": "None — no leads created, no TEST_ sources added (kept env clean). Dynamic add/delete parity NOT executed to avoid dirtying settings; parity is structurally guaranteed since FE hardcoded fallback was removed and backend endpoints tested to match.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend endpoint /api/settings/lists/lead_sources returns a bare JSON array. /api/options/all returns {..., lead_sources: [...]}. Both were verified equal. Bazadan Lead picker flow (source='Baza' server-side) was not re-tested this iteration but is unchanged from iteration_73."
+}
