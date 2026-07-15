@@ -392,6 +392,10 @@ export default function Assembly() {
       ].filter(Boolean));
       return Array.from(set);
     })();
+
+    // ============================================================
+    // Header info table (Sahə / Dəyər). Total 182mm (fits A4-14mm margin each side).
+    // ============================================================
     autoTable(doc, {
       startY: 32,
       head: [['Sahə', 'Dəyər']],
@@ -410,90 +414,68 @@ export default function Assembly() {
       showHead: 'everyPage',
     });
 
-    // Agendas (gündəlik) — each in its own table
-    (a.agendas || []).forEach((ag, idx) => {
-      let yStart = doc.lastAutoTable.finalY + 8;
-      doc.setFontSize(12);
-      doc.setTextColor(61, 79, 111);
-      // Wrap long agenda titles across multiple lines to prevent overflow
-      const pageW = doc.internal.pageSize.getWidth();
-      const titleText = `Gündəlik #${idx + 1}: ${ag.title || '-'}`;
-      const wrapped = doc.splitTextToSize(titleText, pageW - 28);
-      doc.text(wrapped, 14, yStart);
-      yStart += (wrapped.length - 1) * 5;
-      const tasks = (ag.tasks || []).map(t => [
+    // ============================================================
+    // Helper — render a task table with an integrated title row (colSpan=5)
+    // so the title never orphans on a previous page from its rows.
+    // Task columnStyles sum to 58+40+40+22+22 = 182mm (matches printable width).
+    // ============================================================
+    const drawTasksBlock = (title, tasks, headerColor) => {
+      const rows = (tasks || []).map(t => [
         t.title || '-',
         (t.responsible_persons || []).join(', ') || '-',
         (t.assignees || []).join(', ') || '-',
         t.deadline ? formatDate(t.deadline) : '-',
         t.status || '-',
       ]);
-      if (tasks.length) {
-        autoTable(doc, {
-          startY: yStart + 3,
-          head: [['Tapşırıq', 'Məsul', 'İcraçı', 'Son tarix', 'Status']],
-          body: tasks,
-          styles: { font: 'Roboto', fontSize: 8, cellPadding: 1.8, overflow: 'linebreak', valign: 'top', textColor: [61, 79, 111], lineColor: [220, 220, 220], lineWidth: 0.1 },
-          headStyles: { font: 'Roboto', fillColor: [154, 205, 50], textColor: [61, 79, 111], fontStyle: 'normal', overflow: 'linebreak' },
-          columnStyles: { 0: { cellWidth: 58 }, 1: { cellWidth: 40 }, 2: { cellWidth: 40 }, 3: { cellWidth: 22 }, 4: { cellWidth: 22 } },
-          margin: { left: 14, right: 14 },
-          tableWidth: 'wrap',
-          showHead: 'everyPage',
-          rowPageBreak: 'auto',
-        });
-      } else {
-        doc.setFontSize(9);
-        doc.setTextColor(150);
-        doc.text('(tapşırıq yoxdur)', 18, yStart + 6);
-      }
-    });
-
-    if ((a.general_tasks || []).length) {
-      const yStart = doc.lastAutoTable.finalY + 8;
-      doc.setFontSize(12);
-      doc.setTextColor(61, 79, 111);
-      doc.text('Ümumi tapşırıqlar', 14, yStart);
       autoTable(doc, {
-        startY: yStart + 3,
-        head: [['Tapşırıq', 'Məsul', 'İcraçı', 'Son tarix', 'Status']],
-        body: (a.general_tasks || []).map(t => [
-          t.title || '-',
-          (t.responsible_persons || []).join(', ') || '-',
-          (t.assignees || []).join(', ') || '-',
-          t.deadline ? formatDate(t.deadline) : '-',
-          t.status || '-',
-        ]),
+        startY: (doc.lastAutoTable?.finalY || 32) + 6,
+        head: [
+          [{ content: title, colSpan: 5, styles: { fillColor: [255, 255, 255], textColor: [61, 79, 111], halign: 'left', fontSize: 11, cellPadding: { top: 3, bottom: 2, left: 0, right: 0 }, lineWidth: 0 } }],
+          ['Tapşırıq', 'Məsul', 'İcraçı', 'Son tarix', 'Status'],
+        ],
+        body: rows.length ? rows : [[{ content: '(tapşırıq yoxdur)', colSpan: 5, styles: { textColor: [150, 150, 150], halign: 'left', fontStyle: 'italic' } }]],
         styles: { font: 'Roboto', fontSize: 8, cellPadding: 1.8, overflow: 'linebreak', valign: 'top', textColor: [61, 79, 111], lineColor: [220, 220, 220], lineWidth: 0.1 },
-        headStyles: { font: 'Roboto', fillColor: [61, 79, 111], textColor: 255, fontStyle: 'normal', overflow: 'linebreak' },
+        headStyles: { font: 'Roboto', fillColor: headerColor, textColor: headerColor === '#ffffff' ? [61, 79, 111] : (headerColor[0] > 200 ? [61, 79, 111] : [255, 255, 255]), fontStyle: 'normal', overflow: 'linebreak' },
         columnStyles: { 0: { cellWidth: 58 }, 1: { cellWidth: 40 }, 2: { cellWidth: 40 }, 3: { cellWidth: 22 }, 4: { cellWidth: 22 } },
         margin: { left: 14, right: 14 },
         tableWidth: 'wrap',
         showHead: 'everyPage',
-        rowPageBreak: 'auto',
+        rowPageBreak: 'avoid',
       });
+    };
+
+    // Agendas (gündəlik) — each in its own table with integrated title row
+    (a.agendas || []).forEach((ag, idx) => {
+      drawTasksBlock(`Gündəlik #${idx + 1}: ${ag.title || '-'}`, ag.tasks, [154, 205, 50]);
+    });
+
+    // General tasks
+    if ((a.general_tasks || []).length) {
+      drawTasksBlock('Ümumi tapşırıqlar', a.general_tasks, [61, 79, 111]);
     }
 
-    const writeList = (label, items) => {
+    // ============================================================
+    // List sections (Müzakirə mövzuları, Qərarlar) — rendered as a
+    // single-column autoTable so pagination is handled by jspdf-autotable
+    // and the section title cannot orphan onto a previous page.
+    // ============================================================
+    const drawListBlock = (title, items) => {
       const arr = (items || []).filter(Boolean);
       if (!arr.length) return;
-      let y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : 60;
-      // Page-break if we're too close to the bottom
-      if (y > 260) { doc.addPage(); y = 20; }
-      doc.setFontSize(12); doc.setTextColor(61, 79, 111);
-      doc.text(label, 14, y);
-      doc.setFontSize(10); doc.setTextColor(80);
-      y += 6;
-      arr.forEach((t, i) => {
-        const lines = doc.splitTextToSize(`${i + 1}. ${t}`, 180);
-        if (y + lines.length * 5 > 285) { doc.addPage(); y = 20; }
-        doc.text(lines, 14, y);
-        y += lines.length * 5 + 2;
+      autoTable(doc, {
+        startY: (doc.lastAutoTable?.finalY || 32) + 6,
+        head: [[{ content: title, styles: { fillColor: [255, 255, 255], textColor: [61, 79, 111], halign: 'left', fontSize: 11, cellPadding: { top: 3, bottom: 2, left: 0, right: 0 }, lineWidth: 0 } }]],
+        body: arr.map((t, i) => [`${i + 1}. ${t}`]),
+        styles: { font: 'Roboto', fontSize: 9.5, cellPadding: 2, overflow: 'linebreak', valign: 'top', textColor: [80, 80, 80], lineColor: [235, 235, 235], lineWidth: 0.1 },
+        columnStyles: { 0: { cellWidth: 182 } },
+        margin: { left: 14, right: 14 },
+        tableWidth: 'wrap',
+        showHead: 'everyPage',
+        rowPageBreak: 'avoid',
       });
-      // Remember the new bottom so the next writeList doesn't overlap
-      doc.lastAutoTable = { finalY: y };
     };
-    writeList('Müzakirə mövzuları', a.discussion_topics);
-    writeList('Qərarlar', a.decisions);
+    drawListBlock('Müzakirə mövzuları', a.discussion_topics);
+    drawListBlock('Qərarlar', a.decisions);
 
     const safe = (a.assembly_code || a.id || 'iclas').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40);
     doc.save(`iclas_${safe}.pdf`);

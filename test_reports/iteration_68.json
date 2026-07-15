@@ -1,0 +1,50 @@
+{
+  "summary": "STRESS-TEST reveals the reported orphan-title bug in Assembly PDF export STILL exists after the drawTasksBlock() rewrite. Seeded TEST_ICLAS_PDF assembly (IC-011) with 30 attendees, 4 agendas x 2 tasks (150-char titles, 8 responsible + 8 assignees each), 3 general_tasks, 6 discussion_topics, 5 decisions. Downloaded PDF (103,345 bytes, 3 pages) via UI click on data-testid='pdf-assembly-<id>', toast 'PDF yükləndi' confirmed, zero console errors. Rendered all 3 pages via pdftoppm at 100dpi and inspected via pdfplumber. Page 1 ends with the section title 'Gündəlik #3: TEST Gündəlik #3 - uzun başlıq mətni 3' followed by the column-header row (Tapşırıq/Məsul/İcraçı/Son tarix/Status) with NO body rows — the entire body has been pushed to page 2 where the head repeats. This is precisely the ORPHAN-TITLE bug the fix intended to solve. rowPageBreak:'avoid' did prevent individual body rows from being split (no split-row instances detected). List sections (Müzakirə mövzuları, Qərarlar) on page 3 render cleanly with numbered items and no overlap. Header info table + all task tables measured exactly 14mm..196mm (182mm printable width). No text falls outside printable area. Attendees dropdown regression PASS: 31 distinct entries, zero duplicate names.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Assembly.jsx exportAssemblyPdf() / drawTasksBlock()",
+        "issue": "ORPHAN-TITLE bug NOT fixed. When the current page has room for the title-row + column-header-row but not for the first body row, autoTable still renders both head rows at the bottom of the previous page (leaving a title with only column labels and no body). On the next page it re-renders the head again because showHead:'everyPage'. Reproduced on page 1 of stress-test PDF where 'Gündəlik #3' title + column headers sit orphaned at the bottom of p1 while the actual body rows are on p2. Wrapping the title as head row [colSpan=5] + rowPageBreak:'avoid' does NOT prevent orphaning of the head itself — autoTable draws the head at current Y then paginates the body separately.",
+        "selector": "data-testid='pdf-assembly-<id>'",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verifications": [
+    {"flow": "Login (settings@marsol.az) + seed TEST_ICLAS_PDF via POST /api/assemblies", "result": "PASS — 200 response, assembly id 89da5998..., code IC-011."},
+    {"flow": "PDF export click (pdf-assembly-<id>)", "result": "PASS — download fired, 103345 bytes, 3 pages, %PDF-1.3."},
+    {"flow": "Toast 'PDF yükləndi'", "result": "PASS — visible after export."},
+    {"flow": "Console errors during export", "result": "PASS — none."},
+    {"flow": "Task table column widths sum 58+40+40+22+22=182mm", "result": "PASS — every task autoTable measured x=14mm..196mm."},
+    {"flow": "Printable area (14mm..196mm ≈ 39.6pt..555.7pt)", "result": "PASS — no chars outside bounds."},
+    {"flow": "Row-split (rowPageBreak:'avoid')", "result": "PASS — no individual row split across pages; long resp/assignee lists stay intact in their cell."},
+    {"flow": "Numbered list rows in Müzakirə mövzuları/Qərarlar", "result": "PASS — 11 numbered lines detected (6 + 5), rendered cleanly on page 3."},
+    {"flow": "ORPHAN-TITLE (title stuck on prev page)", "result": "FAIL — 'Gündəlik #3' title + column-header row rendered at bottom of page 1 while body is on page 2. Visually reproduces user's complaint 'yazılar bir birinin üzərinə düşür' (feels messy with duplicated/floating title)."},
+    {"flow": "Attendees dropdown regression (assembly-attendees)", "result": "PASS — 31 distinct entries fetched by scrolling the dropdown, zero duplicate names. HR duplicates not reintroduced."},
+    {"flow": "Cleanup DELETE /api/assemblies/<id>", "result": "PASS — 200 'İclas silindi'."}
+  ],
+  "test_report_links": [
+    "/app/test_reports/pdf_seed_and_test.py",
+    "/app/test_reports/pdf_validate.py"
+  ],
+  "action_items": [
+    "Fix ORPHAN-TITLE in Assembly.jsx exportAssemblyPdf(). Approach that actually works with jspdf-autotable v3+: BEFORE calling autoTable for each drawTasksBlock/drawListBlock, MANUALLY check remaining page space and force a doc.addPage() if insufficient. Concretely: compute `needed = titleRowHeight + columnHeaderRowHeight + estimatedFirstBodyRowHeight` (roughly 3 + 6 + Math.max(6, rows[0]?.expectedLines * fontSizeInMm) with cellPadding), and if `doc.lastAutoTable.finalY + 6 + needed > pageHeight - marginBottom` then call `doc.addPage()` and set the next startY to marginTop before the autoTable call. Alternatively, use autoTable's `willDrawCell` / `didDrawCell` hooks to detect a page-break of the head row and reroute; but the manual pre-check is simpler.",
+    "Additionally consider setting the title as a `didDrawPage` header (using autoTable's didDrawPage hook to draw the title in the top margin of every page containing the table) so even if pagination happens the title always appears above its body — but the pre-check approach is preferred as it matches user expectation of one title per block.",
+    "After fix, retest with the same stress payload from /app/test_reports/pdf_seed_and_test.py — the fix is only verified when EVERY 'Gündəlik #N', 'Ümumi tapşırıqlar', 'Müzakirə mövzuları', 'Qərarlar' title has at least one body row on the same page (no page ends with a title+column-header without at least one body row)."
+  ],
+  "critical_code_review_comments": [
+    "showHead:'everyPage' combined with a colSpan=5 title row causes the title to visually appear as a repeated header on every page containing the block — this is not just an orphan-title issue but also creates duplicated titles when the block spans multiple pages. Consider setting showHead:'firstPage' for the title-row-only, keeping the column-header row on every page via a separate strategy (e.g., emit the title-only row as first body row of a nested table, or use didDrawPage).",
+    "drawTasksBlock() and drawListBlock() share ~80% code — extract common structural options (styles, headStyles fillColor, margin, tableWidth, rowPageBreak) into a shared const to keep them in lockstep."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "orphan-title FAIL, all other checks PASS"},
+  "test_credentials": "settings@marsol.az / marsol123",
+  "seed_data_creation": "Created TEST_ICLAS_PDF assembly (IC-011, id 89da5998-0b55-4b66-8cf4-9bb3ec7b11ce): 30 attendees, 4 agendas x 2 tasks, 3 general_tasks, 6 discussion_topics, 5 decisions. Cleaned up via DELETE /api/assemblies/<id> HTTP 200 at end of test.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Reusable stress-test seed script at /app/test_reports/pdf_seed_and_test.py — creates the TEST_ICLAS_PDF assembly and writes /tmp/seed_info.json with {id, token, user}. Then trigger PDF via UI (localStorage-inject the token, navigate /assembly, click data-testid=pdf-assembly-<id>). Validate with /app/test_reports/pdf_validate.py which checks orphan-title, char bounds, numbered lists, and row-split heuristics. Rendering PNGs at 100dpi via pdftoppm gives the clearest visual confirmation of orphan title on page 1 bottom. Cleanup via DELETE /api/assemblies/<id>.",
+  "rca of the issue": "USER STILL SEES OVERLAP because the drawTasksBlock() rewrite in Assembly.jsx (line ~422) attempts to bind the section title to its body by placing it as an extra head row with colSpan=5. However jspdf-autotable draws all head rows at the current Y before laying out body rows. When the current Y is close to the page bottom (as after multiple preceding blocks), the head rows fit but the first body row does not — autoTable then commits the head to the current page and moves the body to the next page. rowPageBreak:'avoid' only prevents an INDIVIDUAL body row from being split across pages; it does NOT prevent orphaning of the head itself. Reproduction (verified via pdftoppm rendering of the 3-page stress-test PDF): on page 1 the sequence Gündəlik #1 (2 body rows) + Gündəlik #2 (2 body rows) fits, then Gündəlik #3 head+column-header renders at bottom of page 1 with no body row visible, and page 2 opens with a repeated Gündəlik #3 head + all 2 body rows. Mitigation: before invoking autoTable for a block, measure remaining page space and call doc.addPage() manually if titleRowHeight+headerRowHeight+firstBodyRowEstimatedHeight exceeds it. Alternatively use pageBreak:'avoid' on the whole table (jspdf-autotable 3.x supports it for the entire table)."
+}
