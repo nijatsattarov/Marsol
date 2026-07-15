@@ -1059,7 +1059,12 @@ export default function HR() {
                       <Label className="text-xs">Vəzifə *</Label>
                       <Select value={formData.position} onValueChange={(v) => setFormData({...formData, position: v})}>
                         <SelectTrigger className="text-sm" data-testid="employee-position-select"><SelectValue placeholder="Vəzifə seçin" /></SelectTrigger>
-                        <SelectContent>{(options?.positions || []).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                        <SelectContent>{
+                          Array.from(new Set([
+                            ...(options?.positions || []),
+                            ...(formData.position ? [formData.position] : []),
+                          ])).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)
+                        }</SelectContent>
                       </Select>
                     </div>
                   </div>
