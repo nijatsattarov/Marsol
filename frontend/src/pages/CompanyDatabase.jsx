@@ -4,7 +4,7 @@ import axios from 'axios';
 import {
   Plus, Search, Loader2, Pencil, Trash2, X, Download, Phone, Mail,
   Calendar, Building2, User, BarChart3, ArrowRight, Filter, LayoutGrid, List,
-  TrendingUp, TrendingDown, Target, HandshakeIcon, Ban, Database, CheckCircle2
+  TrendingUp, TrendingDown, Target, HandshakeIcon, Ban, Database
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -53,6 +53,8 @@ export default function CompanyDatabase() {
   const [existingCompanies, setExistingCompanies] = useState([]);
   const [companyPickerOpen, setCompanyPickerOpen] = useState(false);
   const [pickerSearch, setPickerSearch] = useState('');
+  const [pickerProjectType, setPickerProjectType] = useState('');
+  const [pickerBusyId, setPickerBusyId] = useState('');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showMeetingModal, setShowMeetingModal] = useState(false);
@@ -122,26 +124,73 @@ export default function CompanyDatabase() {
       if (form.sale_type === 'Üzvlük') rules.push([form.package, 'Paket']);
     }
     if (!validateRequired(rules)) return;
-    // Strip internal-only picker flags before hitting the API so backend
-    // schemas stay clean.
-    const payload = { ...form };
-    delete payload._picked_from_db;
-    delete payload._picked_company_id;
     try {
       if (editing) {
-        await axios.put(`${API}/sales-leads/${editing.id}`, payload, { headers });
+        await axios.put(`${API}/sales-leads/${editing.id}`, form, { headers });
         toast.success('Lead yeniləndi');
       } else {
-        await axios.post(`${API}/sales-leads`, payload, { headers });
+        await axios.post(`${API}/sales-leads`, form, { headers });
         toast.success('Yeni lead əlavə edildi');
       }
       setShowModal(false);
-      setCompanyPickerOpen(false);
       setForm(emptyForm);
       fetchData();
     } catch (err) {
       console.error('Lead save failed', err?.response?.data || err);
       toast.error(err?.response?.data?.detail || 'Xəta baş verdi. Zəhmət olmasa məlumatları yoxlayın.');
+    }
+  };
+
+  // Quick-create a lead directly from the company-picker dialog. The picker
+  // now shows a "Layihə növü" select at the top; when the user hits `Seç`
+  // beside a company row we skip the full Yeni Lead modal entirely and go
+  // straight to POST /api/sales-leads. Duplicate protection + inline error
+  // reporting keep the flow friendly for the sales rep.
+  const handlePickerCreateLead = async (c) => {
+    if (!pickerProjectType) {
+      toast.error('Əvvəlcə Layihə növünü seçin');
+      return;
+    }
+    const companyName = (c.brand_name || c.legal_name || '').trim();
+    const contactName = (c.owner_name || c.brand_name || c.legal_name || '').trim();
+    if (!companyName) {
+      toast.error('Şirkət adı boşdur');
+      return;
+    }
+    // Duplicate check: warn the sales rep if an ACTIVE (non-final) lead
+    // already exists for this company + project type combination.
+    const dup = (leads || []).find(l =>
+      (l.company_name || '').trim().toLowerCase() === companyName.toLowerCase() &&
+      (l.sale_type || '') === pickerProjectType &&
+      !['Satılıb', 'Rədd', 'İtirilib'].includes(l.status || '')
+    );
+    if (dup && !window.confirm(`Bu şirkət üçün "${pickerProjectType}" layihəsində artıq aktiv lead var (${dup.lead_code}). Yenidən əlavə etmək istəyirsiniz?`)) {
+      return;
+    }
+    setPickerBusyId(c.id);
+    const payload = {
+      ...emptyForm,
+      company_name: companyName,
+      contact_name: contactName,
+      phone: c.owner_phone || c.company_phone || '',
+      email: c.owner_email || c.company_email || '',
+      sale_type: pickerProjectType,
+      source: 'Baza',
+      status: 'Yeni',
+      notes: '',
+    };
+    try {
+      await axios.post(`${API}/sales-leads`, payload, { headers });
+      toast.success(`${companyName} üçün "${pickerProjectType}" lead-i yaradıldı`);
+      setCompanyPickerOpen(false);
+      setPickerSearch('');
+      setPickerProjectType('');
+      fetchData();
+    } catch (err) {
+      console.error('Picker lead create failed', err?.response?.data || err);
+      toast.error(err?.response?.data?.detail || 'Xəta baş verdi. Zəhmət olmasa yenidən yoxlayın.');
+    } finally {
+      setPickerBusyId('');
     }
   };
 
@@ -267,6 +316,7 @@ export default function CompanyDatabase() {
             <button onClick={() => setViewMode('kanban')} className={`px-3 py-1.5 text-xs ${viewMode === 'kanban' ? 'bg-[#3D4F6F] text-white' : 'bg-white text-slate-500'}`} data-testid="view-kanban"><LayoutGrid className="w-4 h-4" /></button>
           </div>
           <Button onClick={exportToExcel} variant="outline" className="text-[#3D4F6F] border-[#3D4F6F]/20" data-testid="export-btn"><Download className="w-4 h-4 mr-1" />Excel</Button>
+          <Button onClick={() => { setPickerProjectType(''); setCompanyPickerOpen(true); }} style={{display: _canEdit ? '' : 'none'}} variant="outline" className="border-[#3D4F6F]/30 text-[#3D4F6F] hover:bg-[#3D4F6F]/5 font-semibold" data-testid="pick-from-db-btn"><Database className="w-4 h-4 mr-1" />Bazadan Lead</Button>
           <Button onClick={() => openModal()} style={{display: _canEdit ? '' : 'none'}} className="bg-[#9ACD32] text-[#3D4F6F] hover:bg-[#8BC125] font-semibold" data-testid="add-lead-btn"><Plus className="w-4 h-4 mr-1" />Yeni Lead</Button>
         </div>
       </div>
@@ -437,31 +487,10 @@ export default function CompanyDatabase() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle style={{ color: '#3D4F6F' }}>{editing ? 'Lead redaktə et' : 'Yeni Lead'}</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-3" data-testid="lead-form">
-            {!editing && (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setCompanyPickerOpen(true)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 border-dashed border-[#3D4F6F]/40 text-[#3D4F6F] hover:border-[#3D4F6F] hover:bg-[#3D4F6F]/5 transition-colors text-sm font-medium"
-                  data-testid="pick-existing-company"
-                >
-                  <Database className="w-4 h-4" />
-                  Mövcud şirkət bazasından seç
-                </button>
-                {form.company_name && form._picked_from_db && (
-                  <div className="mt-2 flex items-start gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-md text-xs text-emerald-800" data-testid="picked-company-hint">
-                    <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-                    <span>
-                      <b>{form.company_name}</b> seçildi. Layihə növünü seçib <b>Əlavə et</b> düyməsinə basın.
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Şirkət adı *</Label>
-                <Input value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value, _picked_from_db: false })} required className="text-sm" data-testid="lead-company" />
+                <Input value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} required className="text-sm" data-testid="lead-company" />
               </div>
               <div>
                 <Label className="text-xs">Əlaqədar şəxs *</Label>
@@ -693,25 +722,43 @@ export default function CompanyDatabase() {
         </DialogContent>
       </Dialog>
 
-      {/* Şirkət bazasından seç (existing Companies module picker) */}
-      <Dialog open={companyPickerOpen} onOpenChange={(v) => { setCompanyPickerOpen(v); if (!v) setPickerSearch(''); }}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" data-testid="company-picker-dialog">
+      {/* Şirkət bazasından Lead — user selects a company + project type; a lead
+          is created directly via POST /api/sales-leads without opening the
+          full Yeni Lead modal. */}
+      <Dialog open={companyPickerOpen} onOpenChange={(v) => { setCompanyPickerOpen(v); if (!v) { setPickerSearch(''); setPickerProjectType(''); setPickerBusyId(''); } }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col" data-testid="company-picker-dialog">
           <DialogHeader>
-            <DialogTitle>Şirkət bazasından seç</DialogTitle>
+            <DialogTitle style={{ color: '#3D4F6F' }}>Bazadan Lead əlavə et</DialogTitle>
+            <p className="text-xs text-slate-500 mt-1">Layihə növünü seçin və şirkət qarşısındakı <b>Seç</b> düyməsinə basın — lead avtomatik yaradılacaq.</p>
           </DialogHeader>
-          <div className="pb-2 border-b">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
-              <Input
-                value={pickerSearch}
-                onChange={(e) => setPickerSearch(e.target.value)}
-                placeholder="Şirkət, sahibkar və ya telefon üzrə axtar..."
-                className="pl-8 h-9 text-sm"
-                data-testid="company-picker-search"
-                autoFocus
-              />
+          <div className="pb-3 border-b space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[11px] text-slate-600">Layihə növü *</Label>
+                <Select value={pickerProjectType} onValueChange={setPickerProjectType}>
+                  <SelectTrigger className="text-sm h-9" data-testid="picker-project-type">
+                    <SelectValue placeholder="Layihə növünü seçin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projectTypes.map(t => <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-[11px] text-slate-600">Axtarış</Label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
+                  <Input
+                    value={pickerSearch}
+                    onChange={(e) => setPickerSearch(e.target.value)}
+                    placeholder="Şirkət, sahibkar və ya telefon..."
+                    className="pl-8 h-9 text-sm"
+                    data-testid="company-picker-search"
+                  />
+                </div>
+              </div>
             </div>
-            <p className="text-[11px] text-slate-500 mt-1.5">{
+            <p className="text-[11px] text-slate-500">{
               (() => {
                 const q = pickerSearch.trim().toLowerCase();
                 const count = q ? existingCompanies.filter(c =>
@@ -727,7 +774,7 @@ export default function CompanyDatabase() {
           </div>
           <div className="overflow-y-auto flex-1 -mx-2 px-2">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 sticky top-0">
+              <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr className="text-left text-xs text-slate-600">
                   <th className="p-2">Şirkət</th>
                   <th className="p-2">Sahibkar</th>
@@ -756,26 +803,12 @@ export default function CompanyDatabase() {
                     <td className="p-2 text-right">
                       <Button
                         size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setForm(prev => ({
-                            ...prev,
-                            company_name: c.brand_name || c.legal_name || '',
-                            contact_name: c.owner_name || prev.contact_name,
-                            phone: c.owner_phone || c.company_phone || prev.phone,
-                            email: c.owner_email || c.company_email || prev.email,
-                            source: prev.source || 'Baza',
-                            _picked_from_db: true,
-                            _picked_company_id: c.id,
-                          }));
-                          setCompanyPickerOpen(false);
-                          setPickerSearch('');
-                          toast.success(`${c.brand_name || c.legal_name} seçildi. Layihə növünü seçin.`);
-                        }}
-                        className="h-7 text-xs bg-[#3D4F6F] hover:bg-[#2A364C] text-white border-[#3D4F6F]"
+                        disabled={pickerBusyId === c.id}
+                        onClick={() => handlePickerCreateLead(c)}
+                        className="h-7 text-xs bg-[#3D4F6F] hover:bg-[#2A364C] text-white"
                         data-testid={`picker-select-${c.id}`}
                       >
-                        Seç
+                        {pickerBusyId === c.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Seç'}
                       </Button>
                     </td>
                   </tr>
@@ -799,7 +832,7 @@ export default function CompanyDatabase() {
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] text-slate-500 pt-2 border-t">İpucu: Bazada olmayan şirkət üçün pəncərəni bağla və Şirkət adı xanasına manual daxil et.</p>
+          <p className="text-[11px] text-slate-500 pt-2 border-t">İpucu: Bazada olmayan şirkət üçün pəncərəni bağla və <b>Yeni Lead</b> düyməsindən manual əlavə et.</p>
         </DialogContent>
       </Dialog>
     </div>
