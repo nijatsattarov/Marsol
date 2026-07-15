@@ -1,0 +1,31 @@
+{
+  "summary": "Verified bug fix: Settings ↔ Yeni Lead source dropdown sync (lead_sources) + registry additions. Backend pytest (7/7 passed) + Playwright E2E for all 3 states (A/B/C). Original list restored.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Yeni Lead dialog", "issues": ["Non-blocking a11y warning: DialogContent missing Description or aria-describedby (Radix warning). Same warning appears across multiple dialogs — cosmetic, not related to this bug."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_lead_sources_sync.py",
+    "/app/test_reports/pytest/lead_sources_sync.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py: /options/all exposes lead_sources, lead_statuses, sale_types but NOT meeting_types — Yeni Lead → Görüş modal 'Növ' select gets meeting_types from a separate fetch. Verified via UI test that meeting_types Settings sync works via /api/settings/lists/meeting_types. Consider adding it to /options/all for consistency.",
+    "server.py line 5227: _get_setting_list defaults list is hardcoded at call site AND in LIST_DEFAULTS registry — duplication. Suggest deriving from LIST_DEFAULTS[key] to avoid drift."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_lead_sources_sync.py (new)"
+  ],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (3/3 states)"},
+  "test_credentials": "settings@marsol.az / marsol123",
+  "seed_data_creation": "Temporary TEST_Google Ads added and removed from lead_sources; original 7 defaults restored at end. sale_types, lead_statuses, meeting_types briefly overridden with TEST_ values and restored.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Bug fix for Settings ↔ Yeni Lead lead_sources sync fully verified. Backend _get_setting_list now respects empty [] doc; GET /settings/lists/{key} seeds from LIST_DEFAULTS when doc absent. Registry MANAGEABLE_LISTS extended with lead_sources/sale_types/meeting_types. Playwright confirmed Yeni Lead dropdown reflects Settings changes for add/remove/clear scenarios (empty→only 'Baza' fallback from FE).",
+  "rca of the issue": "Root cause was truthy-check on doc.get('values') in _get_setting_list — `[]` evaluated falsy so backend silently fell back to hardcoded defaults, desyncing Settings UI (which read the raw list) from /options/all (which fed Yeni Lead). Fix: check `doc is not None` first; only fallback when doc absent. Additionally LIST_DEFAULTS registry keeps first-run seed values consistent."
+}

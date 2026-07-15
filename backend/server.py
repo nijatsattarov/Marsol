@@ -4953,17 +4953,28 @@ async def get_my_permissions(current_user: dict = Depends(get_current_user)):
 
 
 async def _get_setting_list(key: str, defaults: list) -> list:
+    """Return the settings list for `key`.
+
+    Rule: if a DB doc exists for this key, RESPECT whatever it stores —
+    even an explicitly empty list. Only fall back to defaults when the doc
+    was never created (initial seed state). This keeps
+    `/api/options/all` and `/api/settings/lists/{key}` perfectly in sync
+    so the Settings UI and consumer pages (Yeni Lead → Mənbə dropdown etc.)
+    always agree on the same source of truth.
+    """
     doc = await db.setting_lists.find_one({"key": key}, {"_id": 0})
-    if doc and doc.get("values"):
-        return doc["values"]
+    if doc is not None:
+        return doc.get("values", []) or []
     return defaults
 
 @api_router.get("/settings/lists/{key}")
 async def get_setting_list(key: str, current_user: dict = Depends(get_current_user)):
     doc = await db.setting_lists.find_one({"key": key}, {"_id": 0})
-    if doc:
-        return doc.get("values", [])
-    return []
+    if doc is not None:
+        return doc.get("values", []) or []
+    # No doc yet → seed initial defaults from the registry so Settings UI
+    # renders with sensible starting values instead of an empty state.
+    return LIST_DEFAULTS.get(key, [])
 
 @api_router.put("/settings/lists/{key}")
 async def update_setting_list(key: str, data: dict, current_user: dict = Depends(check_permission("settings", "write"))):
@@ -4984,7 +4995,10 @@ MANAGEABLE_LISTS = [
     {"key": "marital_statuses", "label": "Ailə vəziyyəti", "defaults": ["Subay", "Evli", "Boşanmış", "Dul"], "group": "HR"},
     {"key": "task_statuses", "label": "Tapşırıq statusları", "defaults": ["Gözləyir", "İcrada", "Tamamlandı", "Ləğv edildi"], "group": "Tapşırıqlar"},
     {"key": "priorities", "label": "Prioritetlər", "defaults": ["Yüksək", "Orta", "Aşağı"], "group": "Tapşırıqlar"},
+    {"key": "lead_sources", "label": "Lead mənbələri", "defaults": ["Marketing", "Referans", "Sosial media", "Veb sayt", "Sərgi", "Soyuq zəng", "Digər"], "group": "Satış"},
     {"key": "lead_statuses", "label": "Lead statusları", "defaults": ["Yeni", "Əlaqə quruldu", "Görüş təyin edildi", "Təklif göndərildi", "Danışıqda", "Üzv oldu", "Satıldı", "İmtina"], "group": "Satış"},
+    {"key": "sale_types", "label": "Satış növləri", "defaults": ["Üzvlük", "Sərgi stendi", "Tur (Daxili)", "Tur (Xarici)", "Təlim", "Digər"], "group": "Satış"},
+    {"key": "meeting_types", "label": "Görüş növləri", "defaults": ["Satış görüşü", "Daxili iclas", "Müştəri görüşü", "Partnyor görüşü", "Təqdimat"], "group": "Satış"},
     {"key": "reference_sources", "label": "Referans mənbələri", "defaults": ["Şirkət", "Şəxs", "Media", "Digər"], "group": "Satış"},
     {"key": "payment_methods", "label": "Ödəniş üsulları", "defaults": ["Nağd", "Köçürmə", "Kart", "Hissə-hissə"], "group": "Maliyyə"},
     {"key": "expense_types", "label": "Xərc növləri (ümumi)", "defaults": ["Əməliyyat", "Marketinq", "Layihə", "Texniki", "Satış", "Digər"], "group": "Maliyyə"},
@@ -4994,6 +5008,7 @@ MANAGEABLE_LISTS = [
     {"key": "layout_types", "label": "Düzülüş növləri", "defaults": ["Banket", "Teatr", "U-forma", "Klass", "Boardroom", "Kokteyl", "Yarımdairə", "Konfrans"], "group": "Təşkilatçılıq"},
 ]
 MANAGEABLE_LIST_KEYS = [item["key"] for item in MANAGEABLE_LISTS]
+LIST_DEFAULTS = {item["key"]: list(item["defaults"]) for item in MANAGEABLE_LISTS}
 
 
 @api_router.get("/settings/manageable-lists")
