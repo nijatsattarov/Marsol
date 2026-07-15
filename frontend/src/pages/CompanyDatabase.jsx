@@ -4,7 +4,7 @@ import axios from 'axios';
 import {
   Plus, Search, Loader2, Pencil, Trash2, X, Download, Phone, Mail,
   Calendar, Building2, User, BarChart3, ArrowRight, Filter, LayoutGrid, List,
-  TrendingUp, TrendingDown, Target, HandshakeIcon, Ban
+  TrendingUp, TrendingDown, Target, HandshakeIcon, Ban, Database, CheckCircle2
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -122,17 +122,27 @@ export default function CompanyDatabase() {
       if (form.sale_type === 'Üzvlük') rules.push([form.package, 'Paket']);
     }
     if (!validateRequired(rules)) return;
+    // Strip internal-only picker flags before hitting the API so backend
+    // schemas stay clean.
+    const payload = { ...form };
+    delete payload._picked_from_db;
+    delete payload._picked_company_id;
     try {
       if (editing) {
-        await axios.put(`${API}/sales-leads/${editing.id}`, form, { headers });
+        await axios.put(`${API}/sales-leads/${editing.id}`, payload, { headers });
         toast.success('Lead yeniləndi');
       } else {
-        await axios.post(`${API}/sales-leads`, form, { headers });
+        await axios.post(`${API}/sales-leads`, payload, { headers });
         toast.success('Yeni lead əlavə edildi');
       }
       setShowModal(false);
+      setCompanyPickerOpen(false);
+      setForm(emptyForm);
       fetchData();
-    } catch { toast.error('Xəta baş verdi'); }
+    } catch (err) {
+      console.error('Lead save failed', err?.response?.data || err);
+      toast.error(err?.response?.data?.detail || 'Xəta baş verdi. Zəhmət olmasa məlumatları yoxlayın.');
+    }
   };
 
   const handleMeetingSubmit = async (e) => {
@@ -427,20 +437,31 @@ export default function CompanyDatabase() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle style={{ color: '#3D4F6F' }}>{editing ? 'Lead redaktə et' : 'Yeni Lead'}</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-3" data-testid="lead-form">
+            {!editing && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setCompanyPickerOpen(true)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 border-dashed border-[#3D4F6F]/40 text-[#3D4F6F] hover:border-[#3D4F6F] hover:bg-[#3D4F6F]/5 transition-colors text-sm font-medium"
+                  data-testid="pick-existing-company"
+                >
+                  <Database className="w-4 h-4" />
+                  Mövcud şirkət bazasından seç
+                </button>
+                {form.company_name && form._picked_from_db && (
+                  <div className="mt-2 flex items-start gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-md text-xs text-emerald-800" data-testid="picked-company-hint">
+                    <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                    <span>
+                      <b>{form.company_name}</b> seçildi. Layihə növünü seçib <b>Əlavə et</b> düyməsinə basın.
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Şirkət adı *</Label>
-                  <button
-                    type="button"
-                    onClick={() => setCompanyPickerOpen(true)}
-                    className="text-[10px] text-[#3D4F6F] underline hover:text-[#2c3a55]"
-                    data-testid="pick-existing-company"
-                  >
-                    Bazadan seç
-                  </button>
-                </div>
-                <Input value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} required className="text-sm" data-testid="lead-company" />
+                <Label className="text-xs">Şirkət adı *</Label>
+                <Input value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value, _picked_from_db: false })} required className="text-sm" data-testid="lead-company" />
               </div>
               <div>
                 <Label className="text-xs">Əlaqədar şəxs *</Label>
@@ -741,12 +762,15 @@ export default function CompanyDatabase() {
                             contact_name: c.owner_name || prev.contact_name,
                             phone: c.owner_phone || c.company_phone || prev.phone,
                             email: c.owner_email || c.company_email || prev.email,
+                            source: prev.source || 'Baza',
+                            _picked_from_db: true,
+                            _picked_company_id: c.id,
                           }));
                           setCompanyPickerOpen(false);
                           setPickerSearch('');
-                          toast.success('Şirkət seçildi');
+                          toast.success(`${c.brand_name || c.legal_name} seçildi. Layihə növünü seçin.`);
                         }}
-                        className="h-7 text-xs"
+                        className="h-7 text-xs bg-[#3D4F6F] hover:bg-[#2A364C] text-white border-[#3D4F6F]"
                         data-testid={`picker-select-${c.id}`}
                       >
                         Seç

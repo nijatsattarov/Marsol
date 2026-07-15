@@ -1,0 +1,52 @@
+{
+  "summary": "Verified Sales → Təkliflər (CompanyDatabase.jsx) Yeni Lead redesign + picker flow. Design change (dashed 'Mövcud şirkət bazasından seç' button) works, hint banner works, submit closes modal cleanly, POST body is scrubbed of _picked_from_db/_picked_company_id flags, and Bug#3 validation now properly keeps modal open with a clear Azerbaijani error toast. Two issues remain: (1) source select UI doesn't reflect 'Baza' (placeholder shows because 'Baza' is not a SelectItem), and (2) more critically the created lead persists with source='' instead of 'Baza' — violating the acceptance criterion 7d.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "CompanyDatabase.jsx / Yeni Lead → Mənbə Select",
+        "issue": "After picking a company from DB, the 'Mənbə' select trigger still shows the 'Seçin' placeholder — because the picker sets form.source='Baza' but there is no <SelectItem value='Baza'> in the SelectContent (lead_sources API returns ['Marketing','Referans','Sosial media','Veb sayt','Sərgi','Soyuq zəng','Digər']). User has no visual confirmation that source was auto-defaulted.",
+        "selector": "[data-testid='lead-source-select']",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "CompanyDatabase.jsx handleSubmit / picker",
+        "issue": "The lead that ACTUALLY gets POSTed after using the DB picker has source='' — not 'Baza'. Verified by: (a) intercepted POST /api/sales-leads body shows { \"source\": \"\" ... }, (b) GET /api/sales-leads returns the newly created lead with source='', (c) leads table Mənbə column is empty for the picker-created row. This fails acceptance criteria 2g and 3d. Most-likely root cause: Radix <Select value={form.source}> receives 'Baza' but there is no matching <SelectItem>, so on the next controlled render Radix normalises the unknown value away (and/or a subsequent onValueChange fires with '') — the visual 'Seçin' state in bug #1 is the same symptom. Recommended fix: EITHER add a permanent <SelectItem value='Baza'>Baza</SelectItem> inside SelectContent (independent of the sources array), OR add 'Baza' to the lead_sources options in the backend /api/options/all response so it always appears as an item.",
+        "selector": "[data-testid='lead-source-select'] / POST /api/sales-leads body",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Ensure form.source='Baza' actually survives to the POST body after using the DB picker. Simplest fix: add <SelectItem value='Baza'>Baza</SelectItem> at the top of the Mənbə SelectContent in /app/frontend/src/pages/CompanyDatabase.jsx (~line 489) so Radix can render/hold the value AND the user sees 'Baza' in the trigger. Alternatively, extend backend lead_sources to include 'Baza'."
+  ],
+  "critical_code_review_comments": [
+    "CompanyDatabase.jsx is 806 lines — over the 700-line guideline; consider splitting the LeadForm modal + CompanyPicker dialog into their own components.",
+    "handleSubmit correctly strips _picked_from_db and _picked_company_id before POST (verified via network capture — clean payload).",
+    "handleMeetingSubmit (~line 159) swallows all errors as a generic 'Xəta baş verdi' — the same anti-pattern that caused BUG#3 in this iteration. Recommend applying the same 'log response body + surface detail' fix used in handleSubmit."
+  ],
+  "verified_passing": [
+    "DESIGN: full-width dashed 'Mövcud şirkət bazasından seç' button with Database icon at top of Yeni Lead form (data-testid=pick-existing-company) — verified visually and via text match. Old 'Bazadan seç' anchor next to label is GONE (count=0).",
+    "PICKER opens dialog (data-testid=company-picker-dialog), rows carry data-testid=picker-select-<id>. Selecting a row: closes picker, keeps Yeni Lead modal open, populates company_name (Up holding) and phone (+994 998885710). contact_name/email only populate if company has owner_name/owner_email — Up holding had none, so those stayed empty (this matches spec 'if present').",
+    "HINT banner (data-testid=picked-company-hint) shows in emerald with correct text 'Up holding seçildi. Layihə növünü seçib Əlavə et düyməsinə basın.'",
+    "TOAST after picker select: 'Up holding seçildi. Layihə növünü seçin.' — matches spec.",
+    "EDGE: typing into Şirkət adı after picker selection removes the picked-company-hint banner (count went 1 → 0) — _picked_from_db is correctly cleared.",
+    "FULL SUBMIT: With sale_type='Forum 2026' set and company='TEST_PICKER_Up holding', clicking Əlavə et → modal closes, toast 'Yeni lead əlavə edildi' appears, new row visible in Təkliflər table, GET /api/sales-leads returns the lead. POST body keys: ['company_name','contact_name','curator','email','hall_number','kv_m','marsol_company','notes','package','participant_count','phone','position','price_per_sqm','project_id','sale_type','source','stand_number','status','total_amount'] — NO _picked_from_db / _picked_company_id. Clean payload verified.",
+    "BUG#3 validation: fresh Yeni Lead with company+contact filled but Layihə növü empty → modal STAYS OPEN, toast: 'Məcburi sahə(lər) boşdur: Layihə növü'. Behaviour matches spec.",
+    "REGRESSION edit: clicking pencil on an existing lead opens 'Lead redaktə et' dialog, pick-existing-company button is NOT rendered (count=0)."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (skipped)", "frontend": "85% (2 pass + 1 partial: source not persisted as Baza)" },
+  "test_credentials": "settings@marsol.az / marsol123",
+  "seed_data_creation": "Created one lead via UI: 'TEST_PICKER_Up holding' — DELETE cleanup call was rejected with 403 for the testing agent (only the creating user seems to be allowed to delete). Please have main agent DELETE /api/sales-leads/<id> for the row shown as 'TEST_PICKER_Up holding' with sale_type='Forum 2026' during next cleanup, OR the seed script will regenerate expected state.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The critical remaining bug is that source='Baza' from the picker does NOT reach the POST body — it becomes ''. Add <SelectItem value='Baza'>Baza</SelectItem> at the top of the Mənbə SelectContent in CompanyDatabase.jsx (around line 489) OR include 'Baza' in the lead_sources array returned by /api/options/all. After the fix, retest: (a) pick company from DB, (b) assert Mənbə trigger shows 'Baza' text, (c) submit and GET the created lead — expect source=='Baza'. All other acceptance criteria are already passing.",
+  "rca of the issue": "Radix UI Select is controlled via value={form.source}. When picker sets form.source='Baza' but no <SelectItem value='Baza'> exists inside SelectContent, Radix has no matching Item to render as the selected state; the trigger falls back to <SelectValue placeholder='Seçin' />. On subsequent controlled re-renders (or on any interaction that touches the Select), the mismatched value is not preserved into the DOM and form.source effectively gets treated as empty by the time handleSubmit builds the payload. Confirmed by intercepting the POST body: source='' rather than 'Baza'. Fix is trivial — render a 'Baza' SelectItem so Radix has something to bind to."
+}
