@@ -4500,49 +4500,101 @@ async def create_meeting_from_lead(lead_id: str, data: dict, current_user: dict 
 # ==================== ASSEMBLIES (İCLAS) ====================
 
 async def _sync_assembly_tasks(assembly_doc):
-    """Sync assembly agenda tasks + general tasks to the tasks collection"""
+    """Sync assembly agenda tasks + general tasks to the tasks collection.
+
+    Each user listed in `assignees` or `responsible_persons` on an İclas task
+    must see the resulting task in THEIR personal Tapşırıqlar module. That is
+    driven by SCOPE_FIELDS["tasks"] which matches assignee / responsible_person /
+    created_by against `user_name`. Two rules must therefore hold:
+
+    (1) `assignee` and `responsible_person` MUST be stored as LISTS (arrays).
+        MongoDB equality on an array field matches when the value is an element
+        of the array — this is exactly the behaviour we need for multi-assignee
+        tasks. Older code joined them into a comma-string which never matched
+        `{assignee: "Nicat"}` and silently hid the tasks from their assignees.
+
+    (2) `created_by` and `marsol_company` MUST be propagated from the assembly
+        so that the assembly creator (if not listed as an assignee) still sees
+        the auto-generated tasks in their own module, and so tenant isolation
+        keeps working for these synthetic tasks.
+    """
     assembly_uuid = assembly_doc["id"]
     assembly_code = assembly_doc["assembly_code"]
     department = assembly_doc.get("department", "")
     deadline = assembly_doc.get("deadline", "")
+    assembly_creator = (assembly_doc.get("created_by") or "").strip()
+    assembly_tenant = (assembly_doc.get("marsol_company") or "").strip()
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    # Remove old tasks from this assembly
+    # Remove old tasks from this assembly (idempotent re-sync on update).
     await db.tasks.delete_many({"source": "assembly", "assembly_id": assembly_uuid})
 
     async def _create_task(task, related_label):
-        task_title = task.get("title", "")
-        responsibles = task.get("responsible_persons", [])
-        assignees = task.get("assignees", [])
-        # Backward compat for single values
+        task_title = (task.get("title") or "").strip()
+        responsibles = [n for n in (task.get("responsible_persons") or []) if (n or "").strip()]
+        assignees = [n for n in (task.get("assignees") or []) if (n or "").strip()]
+        # Backward compat for single-value legacy fields
         if not responsibles and task.get("responsible_person"):
             responsibles = [task["responsible_person"]]
         if not assignees and task.get("assignee"):
             assignees = [task["assignee"]]
         task_deadline = task.get("deadline", "") or deadline
-        if task_title and (responsibles or assignees):
-            count = await db.tasks.count_documents({})
-            task_code = f"T-{str(count + 1).zfill(3)}"
-            task_doc = {
-                "id": str(uuid.uuid4()),
-                "task_code": task_code,
-                "task_name": f"[{assembly_code}] {task_title}",
-                "department": department,
-                "assignee": ", ".join(assignees) if assignees else ", ".join(responsibles),
-                "responsible_person": ", ".join(responsibles),
-                "priority": "Orta",
-                "start_date": today,
-                "end_date": task_deadline,
-                "related_object_type": "İclas",
-                "related_object_id": assembly_code,
-                "related_object": related_label,
-                "phase": "",
-                "status": "Gözləyir",
-                "notes": f"İclas: {assembly_code}",
-                "source": "assembly",
-                "assembly_id": assembly_uuid,
-                "created_at": datetime.now(timezone.utc).isoformat()
-            }
-            await db.tasks.insert_one(task_doc)
+        if not task_title or not (responsibles or assignees):
+            return
+        count = await db.tasks.count_documents({})
+        task_code = f"T-{str(count + 1).zfill(3)}"
+        task_id = str(uuid.uuid4())
+        # If only one side is populated, mirror it so the task is still owned
+        # by SOMEONE for scope-matching purposes.
+        effective_assignees = assignees if assignees else responsibles
+        effective_responsibles = responsibles if responsibles else assignees
+        task_doc = {
+            "id": task_id,
+            "task_code": task_code,
+            "task_name": f"[{assembly_code}] {task_title}",
+            "department": department,
+            # Stored as LIST so MongoDB `{assignee: user_name}` matches element-wise
+            "assignee": effective_assignees,
+            "responsible_person": effective_responsibles,
+            "priority": "Orta",
+            "start_date": today,
+            "end_date": task_deadline,
+            "related_object_type": "İclas",
+            "related_object_id": assembly_code,
+            "related_object": related_label,
+            "phase": "",
+            "status": "Gözləyir",
+            "notes": f"İclas: {assembly_code}",
+            "source": "assembly",
+            "assembly_id": assembly_uuid,
+            "created_by": assembly_creator,
+            "creator_department": department,
+            "marsol_company": assembly_tenant,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.tasks.insert_one(task_doc)
+
+        # In-app + email notification to every unique recipient (assignees +
+        # responsibles), excluding the assembly creator so they don't self-notify.
+        recipients = {nm for nm in (effective_assignees + effective_responsibles) if nm and nm != assembly_creator}
+        if recipients:
+            notif_body = (
+                f"İclas ({assembly_code}) çərçivəsində sizə yeni tapşırıq təyin olundu: "
+                f"{task_doc['task_name']} (Bitmə: {task_deadline or '—'})"
+            )
+            for r_name in recipients:
+                await db.notifications.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "type": "task_assigned",
+                    "title": "Yeni tapşırıq (İclas)",
+                    "body": notif_body,
+                    "task_id": task_id,
+                    "task_code": task_code,
+                    "recipient_name": r_name,
+                    "is_read": False,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+            _safe_push(list(recipients), "Yeni tapşırıq (İclas)", notif_body,
+                       link=f"/tasks?id={task_id}", data={"type": "task_assigned", "task_id": task_id})
 
     # Agenda tasks
     for agenda in assembly_doc.get("agendas", []):

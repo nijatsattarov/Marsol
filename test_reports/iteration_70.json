@@ -1,0 +1,32 @@
+{
+  "summary": "Backend regression for assembly→tasks propagation fix (LIST-based assignee/responsible_person + created_by/marsol_company propagation + notifications + idempotent re-sync). 7/7 pytest scenarios PASSED against production preview backend. Covers scenarios A-F + regular-task regression.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration70_assembly_task_visibility.py",
+    "/app/test_reports/pytest/iteration70.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py exceeds 10,000 lines — recommend splitting by domain (assemblies, tasks, notifications, users, sales) into separate router modules. Currently affects maintainability and PR review overhead.",
+    "GET /api/tasks still uses `{assignee: {'$regex': ...}}` for the explicit ?assignee=X query parameter. On array fields this works via element-regex, but if legacy comma-string rows still exist elsewhere (outside assemblies) the migration should be validated collection-wide, not just for source=='assembly'.",
+    "/api/notifications transforms stored `body`→`message` and drops `recipient_name` from output; consider surfacing `recipient_name` for UI debug/audit."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration70_assembly_task_visibility.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "not tested (skipped per request)"},
+  "test_credentials": "admin: settings@marsol.az / marsol123. Test users created dynamically with TEST_ prefix and cleaned up.",
+  "seed_data_creation": "3 TEST_Exec_{Alpha,Beta,Gamma}_<suffix> users created with department='Test' and cleaned up in fixture teardown; all TEST_ assemblies (+ synced tasks) deleted via DELETE /api/assemblies/{id}.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Assembly→tasks pipeline is now verified end-to-end. Suite covers: (A) creator-self-assignee visibility, (B) non-creator assignee visibility, (C) 3-user multi-assignee list-match with assignee/responsible_person confirmed as ARRAY in response, (D) idempotent re-sync on PUT (removed user loses visibility, new user gains it), (E) 'Yeni tapşırıq (İclas)' notification delivery via GET /api/notifications, (F) marsol_company propagation from assembly to synthesized task, regression: regular (non-assembly) tasks still visible to array-assignees and creator-only delete lock still enforced. Rerun with: pytest /app/backend/tests/test_iteration70_assembly_task_visibility.py -v",
+  "rca_of_the_issue": "PRE-FIX ROOT CAUSE (confirmed via code review): _sync_assembly_tasks() serialized assignees/responsibles as comma-joined string (','.join(names)) — MongoDB {assignee: 'Nicat'} only matches string equality on scalar fields OR element equality on array fields, so a stored 'Nicat, Elnur' NEVER matched any single user's apply_scope predicate, hiding assembly-generated tasks from every assignee's personal Tapşırıqlar. Fix stores assignee/responsible_person as LIST (per-element MongoDB match works), mirrors one side into the other when a task specifies only one, propagates created_by + marsol_company from the parent assembly (previously blank → also invisible to the assembly creator), fans out in-app + push notifications to every unique recipient excluding the creator, and re-syncs idempotently on PUT (delete_many + re-insert). All 7 regression scenarios PASS."
+}
