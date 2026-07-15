@@ -486,7 +486,9 @@ export default function CompanyDatabase() {
                 <Label className="text-xs">Mənbə</Label>
                 <Select value={form.source} onValueChange={(v) => setForm({ ...form, source: v })}>
                   <SelectTrigger className="text-sm" data-testid="lead-source-select"><SelectValue placeholder="Seçin" /></SelectTrigger>
-                  <SelectContent>{sources.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {(sources.includes('Baza') ? sources : ['Baza', ...sources]).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
                 </Select>
                 {form.source_contact_list_name && (
                   <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5" data-testid="source-list-info">

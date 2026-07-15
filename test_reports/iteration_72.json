@@ -1,0 +1,28 @@
+{
+  "summary": "RE-TEST of source='Baza' persistence fix in CompanyDatabase.jsx. Fix at ~line 490 injects 'Baza' into SelectContent. All acceptance criteria verified via UI + network intercept + GET verification. Cleanup successful.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "CompanyDatabase.jsx is 807 lines — still over 700-line guideline; consider splitting LeadForm modal + CompanyPicker into own components (unchanged from iter_71).",
+    "handleMeetingSubmit still swallows all errors as generic 'Xəta baş verdi' — same anti-pattern flagged in iter_71."
+  ],
+  "verified_passing": [
+    "PICKER→SOURCE=Baza persisted: After picking company from DB, Mənbə select trigger visually shows 'Baza' (screenshot confirmed).",
+    "POST /api/sales-leads body captured — source='Baza' (verified via page.on('request') interception).",
+    "GET /api/sales-leads returns the new lead with source='Baza'.",
+    "Modal closes cleanly after submit; toast appears.",
+    "REGRESSION — Manual Mənbə select: 8 options shown in order ['Baza','Marketing','Referans','Sosial media','Veb sayt','Sərgi','Soyuq zəng','Digər']. 'Baza' is first, backend sources preserved.",
+    "REGRESSION — dashed 'Mövcud şirkət bazasından seç' button, picker dialog, hint banner, and toast still work (visually confirmed).",
+    "Source select trigger 'Baza' state survives interacting with other selects (sale_type) — no fallback to 'Seçin' placeholder."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100% (all acceptance criteria pass)"},
+  "test_credentials": "settings@marsol.az / marsol123",
+  "seed_data_creation": "Created 'TEST_BAZA_Up holding' lead via UI, then DELETE /api/sales-leads/<id> returned 200 — cleaned up successfully.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Bug from iter_71 is fully fixed. SelectContent now prepends 'Baza' when absent from backend lead_sources. Both auto (picker) and manual selection paths persist source correctly. No further retest of this flow needed unless backend lead_sources API changes.",
+  "rca of the issue": "Iter_71 root cause: Radix Select value='Baza' had no matching SelectItem, causing controlled state to be dropped. Fix injects 'Baza' at top of options when not already present, so Radix has an Item to bind to. Confirmed working via network capture and GET verification."
+}
