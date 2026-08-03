@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 78 backend-only tests for Yeni Sərgi Müqaviləsi pricing table + amount-in-words + no-yellow-highlight + two-phase token substitution + addendum regression. All 3 tests PASSED.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration78_new_contract_pricing.py",
+    "/app/test_reports/pytest/iter78.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Two-phase token substitution using PUA U+E000..U+E01F is elegant; verified no PUA characters leak into the final DOCX.",
+    "Highlight cleanup recurses through nested tables — good coverage.",
+    "Consider adding a unit test for _az_amount_in_words() edge cases (0, 1_000_000, 999_999_999) at the pure-function level to speed up regression."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration78_new_contract_pricing.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "N/A (skipped per request)"},
+  "test_credentials": "settings@marsol.az / marsol123",
+  "seed_data_creation": "Created 3 TEST_ contracts (2 new + 1 addendum); teardown deletes them via /api/contracts/{id}.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_iteration78_new_contract_pricing.py validates: Table 1 Row 1 cells for price=15000/stand='7' -> ['7','Sərgidə iştirak','x/h','15 000.00','2 700.00','17 700.00'] with words 'on yeddi min yeddi yüz manat 00 qəpik'; price=5500/stand='12' -> ['12',...,'5 500.00','990.00','6 490.00'] with words 'altı min dörd yüz doxsan manat 00 qəpik'. Highlight count = 0. PUA regex [\\uE000-\\uE01F] returns 0 matches. Addendum still generates a valid DOCX >5KB with no PUA leaks. Env var REACT_APP_BACKEND_URL must be exported when running pytest from shell (frontend/.env has it).",
+  "rca of the issue": "N/A — fix verified working end-to-end."
+}

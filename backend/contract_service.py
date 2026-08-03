@@ -281,6 +281,57 @@ def _az_year_suffix(year: int) -> str:
             5: "ci", 6: "cı", 7: "ci", 8: "ci", 9: "cu"}.get(year % 10, "cı")
 
 
+_AZ_ONES = ["", "bir", "iki", "üç", "dörd", "beş", "altı", "yeddi", "səkkiz", "doqquz"]
+_AZ_TENS = ["", "on", "iyirmi", "otuz", "qırx", "əlli", "altmış", "yetmiş", "səksən", "doxsan"]
+
+
+def _az_number_to_words(n: int) -> str:
+    """Return an Azerbaijani words representation of a non-negative integer
+    up to 999,999,999. Used to fill 'Məbləğ yazı ilə: ...' contract field."""
+    if n < 0:
+        return "sıfır"
+    if n == 0:
+        return "sıfır"
+
+    def _below_thousand(x: int) -> str:
+        parts = []
+        h = x // 100
+        rest = x % 100
+        if h:
+            parts.append(("" if h == 1 else _AZ_ONES[h] + " ") + "yüz")
+        t = rest // 10
+        u = rest % 10
+        if t:
+            parts.append(_AZ_TENS[t])
+        if u:
+            parts.append(_AZ_ONES[u])
+        return " ".join(parts).strip()
+
+    scales = [(10**9, "milyard"), (10**6, "milyon"), (10**3, "min")]
+    parts = []
+    for div, name in scales:
+        count = n // div
+        n %= div
+        if count:
+            if count == 1 and name == "min":
+                parts.append("min")
+            else:
+                parts.append(f"{_below_thousand(count)} {name}")
+    if n:
+        parts.append(_below_thousand(n))
+    return " ".join(parts).strip() or "sıfır"
+
+
+def _az_amount_in_words(amount: float) -> str:
+    """Format a money amount as 'X manat YY qəpik' in Azerbaijani words."""
+    manat = int(amount)
+    qepik = int(round((amount - manat) * 100))
+    if qepik >= 100:
+        manat += 1
+        qepik -= 100
+    return f"{_az_number_to_words(manat)} manat {qepik:02d} qəpik"
+
+
 def _exhibition_range_az(start_iso: str, end_iso: str) -> str:
     """Return 'DD month - DD month YYYY-cI il' style range."""
     if not start_iso or not end_iso:
@@ -754,26 +805,41 @@ def generate_stand_plan_docx(data: Dict) -> bytes:
 
 def _walk_and_replace(doc, replacements: Dict[str, str]) -> None:
     """Iterate every paragraph in the document (body + tables + nested tables)
-    and apply ordered `replacements` (longest keys first to avoid substring
-    collisions like '1300016391' being a prefix of another string)."""
+    and apply `replacements` in TWO PHASES so a later rule cannot corrupt an
+    already-substituted value.
+
+    Example of the bug this avoids: if we replace '90 000.00' → '5 500.00' and
+    also '50' → '77', a naive one-pass replace turns '5 500.00' into
+    '5 100.00' (the '50' rule finds the substring in the JUST-substituted
+    price). Phase 1 swaps every original with a unique BMP token; Phase 2
+    swaps tokens for user values. Because tokens live in the Private-Use Area
+    (U+E000..) they never collide with normal text."""
+    # Order longest-first so that a longer key like '90 000.00' is claimed
+    # before a shorter substring like '50' inside the ORIGINAL template.
     ordered = sorted(replacements.items(), key=lambda x: -len(x[0]))
-    ordered_map = dict(ordered)
+    phase1 = {}
+    phase2 = {}
+    for i, (old, new) in enumerate(ordered):
+        tok = f"\uE000{i:04d}\uE001"
+        phase1[old] = tok
+        phase2[tok] = new
 
-    def _do_paragraph(p):
-        _replace_in_paragraph(p, ordered_map)
+    def _do_paragraph(p, mapping):
+        _replace_in_paragraph(p, mapping)
 
-    def _do_table(tbl):
+    def _do_table(tbl, mapping):
         for row in tbl.rows:
             for cell in row.cells:
                 for p in cell.paragraphs:
-                    _do_paragraph(p)
+                    _do_paragraph(p, mapping)
                 for nested in cell.tables:
-                    _do_table(nested)
+                    _do_table(nested, mapping)
 
-    for p in doc.paragraphs:
-        _do_paragraph(p)
-    for tbl in doc.tables:
-        _do_table(tbl)
+    for mapping in (phase1, phase2):
+        for p in doc.paragraphs:
+            _do_paragraph(p, mapping)
+        for tbl in doc.tables:
+            _do_table(tbl, mapping)
 
 
 def generate_new_contract_docx(data: Dict) -> bytes:
@@ -857,21 +923,61 @@ def generate_new_contract_docx(data: Dict) -> bytes:
     if swift:
         replacements['TURAAZ22'] = swift
 
-    # Stand-related fields (best-effort — template may reference stand
-    # info in appendices Əlavə 1/2 which we also replace)
+    # ---------------------------------------------------------------------
+    # PRICING TABLE (Stend / Xidmət / Ölçü / Qiymət / ƏDV / Yekun məbləğ)
+    # + the "Məbləğ yazı ilə" paragraph. Template YELLOW-highlighted values
+    # (50, 90 000.00, 16 200.00, 106 200.00, and 'yüz altı min iki yüz manat
+    # 00 qəpik') are replaced with computed values from the form.
+    # ---------------------------------------------------------------------
+    _vat_rate = float(data.get("vat_rate") or 18) if bool(data.get("vat_enabled", True)) else 0.0
+    _vat_amount = round(price * (_vat_rate / 100.0), 2) if _vat_rate else 0.0
+    _total = round(price + _vat_amount, 2)
+
+    def _fmt_money(v: float) -> str:
+        return f"{v:,.2f}".replace(",", " ")
+
     if stand_no:
-        # Common placeholder patterns in exhibitor templates
-        replacements['Stend №: ___'] = f'Stend №: {stand_no}'
-        replacements['stend nömrəsi'] = f'stend nömrəsi {stand_no}'
+        # Table cell in the template is a bare '50' — swap directly. Longer
+        # keys stay ahead of '50' in the ordered dict so we don't clobber
+        # a random '50' that appears inside larger numbers.
+        replacements['50'] = stand_no
+    replacements['90 000.00'] = _fmt_money(price)
+    replacements['16 200.00'] = _fmt_money(_vat_amount)
+    replacements['106 200.00'] = _fmt_money(_total)
+    replacements['yüz altı min iki yüz manat 00 qəpik'] = _az_amount_in_words(_total)
+
+    # Legacy appendix area placeholders (best-effort)
     if stand_w and stand_l:
         m2 = round(stand_w * stand_l, 2)
-        replacements['6 (altı) m2'] = f'{m2:g} ({m2:g}) m2'
-        replacements['6 (altı) m 2'] = f'{m2:g} ({m2:g}) m 2'
+        replacements['6 (altı) m2'] = f'{m2:g} m2'
+        replacements['6 (altı) m 2'] = f'{m2:g} m 2'
 
     _walk_and_replace(doc, replacements)
 
-    # Header block (title): if the doc has the raw title with contract number
-    # and date on separate runs, we've already handled them above.
+    # ---------------------------------------------------------------------
+    # Strip YELLOW (and any other) highlight colour from EVERY run so the
+    # generated contract looks clean — the highlights in the template were
+    # just editor markers and MUST NOT appear in the final document.
+    # ---------------------------------------------------------------------
+    def _clear_highlight(paragraph):
+        for run in paragraph.runs:
+            try:
+                run.font.highlight_color = None
+            except (AttributeError, ValueError):
+                pass
+
+    def _clear_table(tbl):
+        for row in tbl.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    _clear_highlight(p)
+                for nested in cell.tables:
+                    _clear_table(nested)
+
+    for p in doc.paragraphs:
+        _clear_highlight(p)
+    for tbl in doc.tables:
+        _clear_table(tbl)
 
     out = io.BytesIO()
     doc.save(out)
