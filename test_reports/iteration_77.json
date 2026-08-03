@@ -1,0 +1,24 @@
+{
+  "summary": "Iter 77 — Yeni Müqavilə (new base contract) feature. Backend: 8/8 pytest passed (happy path, DOCX template swap verified with python-docx, HF xlsx, stand-plan docx, duplicate VÖEN allowed, empty-company 400, empty-contract-number 400, addendum regression). Frontend: H1 renamed to 'Sərgi Müqavilə Redaktoru', both buttons (new-contract-btn / new-addendum-btn) present, all 15 field data-testids present in modal, modal opens & closes on submit, DOCX auto-downloaded as 'Muqavile_TS_QA_UI-27.docx', addendum-modal regression OK. Note: route is /finance/contracts (not /contracts).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration77_new_contract.py",
+    "/app/test_reports/pytest/iter77.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py: /api/contracts/new stores generated_docx blob at insert time — fine, but /download regenerates on the fly if blob missing which is a good fallback. Consistent with addendum flow.",
+    "contract_service._walk_and_replace correctly walks paragraphs + tables + nested tables (verified: all 10 dynamic tokens appear, all 10 template placeholders swapped out).",
+    "Duplicate check intentionally omitted per user choice (b) — documented in code comment. Good."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration77_new_contract.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "settings@marsol.az / marsol123",
+  "seed_data_creation": "TEST_QA MMC (x2 via pytest) + TEST_QA UI MMC (x1 via Playwright) — all cleaned up",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Contracts UI lives at /finance/contracts (SPA route). Login user settings@marsol.az has full access. Template file /app/backend/templates/new_contract_template.docx contains reference tokens (ANLİFE İNŞAAT, 1009525231, Haqverdiyev Nazir, TS002/27, AZ32TURA…, TuranBank, 508212, 1300016391, AZ26NABZ…, TURAAZ22) that must all be replaced — currently verified swapped."
+}

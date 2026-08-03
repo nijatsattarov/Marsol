@@ -746,3 +746,133 @@ def generate_stand_plan_docx(data: Dict) -> bytes:
     out = io.BytesIO()
     doc.save(out)
     return out.getvalue()
+
+
+# ----------------------------------------------------------------------------
+# NEW CONTRACT (Sərgi Müqaviləsi) — first-time exhibitor
+# ----------------------------------------------------------------------------
+
+def _walk_and_replace(doc, replacements: Dict[str, str]) -> None:
+    """Iterate every paragraph in the document (body + tables + nested tables)
+    and apply ordered `replacements` (longest keys first to avoid substring
+    collisions like '1300016391' being a prefix of another string)."""
+    ordered = sorted(replacements.items(), key=lambda x: -len(x[0]))
+    ordered_map = dict(ordered)
+
+    def _do_paragraph(p):
+        _replace_in_paragraph(p, ordered_map)
+
+    def _do_table(tbl):
+        for row in tbl.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    _do_paragraph(p)
+                for nested in cell.tables:
+                    _do_table(nested)
+
+    for p in doc.paragraphs:
+        _do_paragraph(p)
+    for tbl in doc.tables:
+        _do_table(tbl)
+
+
+def generate_new_contract_docx(data: Dict) -> bytes:
+    """Generate a NEW base contract DOCX from the Marsol exhibition template.
+
+    The template `new_contract_template.docx` contains a real reference
+    contract (Sərgi müqaviləsi 23-26 iyun 2027). We do targeted text
+    replacements to swap the CLIENT's data (Sifarişçi) and stand-specific
+    values with the user-supplied inputs. MARSOL's own data (İcraçı) and the
+    exhibition dates remain hard-coded per user's confirmed choice.
+    """
+    template_path = os.path.join(os.path.dirname(__file__), "templates",
+                                 "new_contract_template.docx")
+    doc = Document(template_path)
+
+    # --- Sifarişçi (Client) inputs ---
+    company = (data.get("sifarisci_company") or "").strip()
+    voen = (data.get("sifarisci_voen") or "").strip()
+    authorized = (data.get("sifarisci_authorized") or "").strip()
+    contract_no = (data.get("contract_number") or "").strip()
+
+    # Contract date — format Azerbaijani "DD . MM . YYYY -CI il"
+    contract_date_iso = (data.get("contract_date") or "").strip()
+    try:
+        cd = datetime.strptime(contract_date_iso[:10], "%Y-%m-%d")
+        cd_date_str = f"{cd.day:02d}. {cd.month:02d}. {cd.year}"
+        cd_date_full = f"{cd_date_str} -{_az_year_suffix(cd.year)} il"
+    except (ValueError, TypeError):
+        cd_date_str = "__.__.____"
+        cd_date_full = "__.__.____-cı il"
+
+    iban = (data.get("iban") or "").strip()
+    bank_name = (data.get("bank_name") or "").strip()
+    branch_code = (data.get("branch_code") or "").strip()
+    bank_voen = (data.get("bank_voen") or "").strip()
+    correspondent = (data.get("correspondent_account") or "").strip()
+    swift = (data.get("swift") or "").strip()
+
+    stand_no = (data.get("stand_number") or "").strip()
+    stand_w = float(data.get("stand_width") or 0)
+    stand_l = float(data.get("stand_length") or 0)
+    price = float(data.get("price") or 0)
+
+    # These EXACT strings appear in the reference template (see
+    # analyze_file_tool output in the handoff). We swap them for the
+    # user-supplied values. Order matters — longer keys first.
+    replacements: Dict[str, str] = {}
+
+    # Sifarişçi company name (appears with quotes and legal form)
+    if company:
+        replacements['"ANLİFE İNŞAAT" MƏNZİL-TİKİNTİ KOOPERATİVİ'] = f'«{company}»'
+        replacements['“ANLİFE İNŞAAT” MƏNZİL-TİKİNTİ KOOPERATİVİ'] = f'«{company}»'
+        replacements['ANLİFE İNŞAAT'] = company
+        replacements['ANLİFE İNŞAAT MƏNZİL-TİKİNTİ KOOPERATİVİ'] = f'«{company}»'
+    if voen:
+        replacements['1009525231'] = voen
+    if authorized:
+        replacements['Haqverdiyev Nazir'] = authorized
+    if contract_no:
+        # Template has "TS002/27" as the reference contract number
+        replacements['TS002/27'] = contract_no
+    # Contract date variants
+    if contract_date_iso:
+        replacements['29 . 06 . 202 6'] = cd_date_str
+        replacements['29.06.2026'] = cd_date_str.replace(' ', '')
+        replacements['29 . 06 . 2026'] = cd_date_str
+
+    # Sifarişçi bank details (from the template — TuranBank block)
+    if iban:
+        replacements['AZ32TURA40030095266600102944'] = iban
+    if bank_name:
+        replacements['"TuranBank" ASC Sumqayıt filialı'] = bank_name
+        replacements['“TuranBank” ASC Sumqayıt filialı'] = bank_name
+        replacements['TuranBank'] = bank_name.split()[0] if bank_name else 'TuranBank'
+    if branch_code:
+        replacements['508212'] = branch_code
+    if bank_voen:
+        replacements['1300016391'] = bank_voen
+    if correspondent:
+        replacements['AZ26NABZ01350100000000027944'] = correspondent
+    if swift:
+        replacements['TURAAZ22'] = swift
+
+    # Stand-related fields (best-effort — template may reference stand
+    # info in appendices Əlavə 1/2 which we also replace)
+    if stand_no:
+        # Common placeholder patterns in exhibitor templates
+        replacements['Stend №: ___'] = f'Stend №: {stand_no}'
+        replacements['stend nömrəsi'] = f'stend nömrəsi {stand_no}'
+    if stand_w and stand_l:
+        m2 = round(stand_w * stand_l, 2)
+        replacements['6 (altı) m2'] = f'{m2:g} ({m2:g}) m2'
+        replacements['6 (altı) m 2'] = f'{m2:g} ({m2:g}) m 2'
+
+    _walk_and_replace(doc, replacements)
+
+    # Header block (title): if the doc has the raw title with contract number
+    # and date on separate runs, we've already handled them above.
+
+    out = io.BytesIO()
+    doc.save(out)
+    return out.getvalue()

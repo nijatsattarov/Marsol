@@ -1812,6 +1812,66 @@ async def get_contract(contract_id: str, current_user: dict = Depends(check_perm
     return c
 
 
+@api_router.post("/contracts/new")
+async def create_new_contract(data: dict,
+                              current_user: dict = Depends(check_permission("contracts", "write"))):
+    """Create a fresh base contract for a first-time exhibition participant.
+
+    Per user's spec: duplicates ARE allowed (no VÖEN uniqueness check).
+    Auto-generates the DOCX at insert time; HF (invoice) and stand plan are
+    generated on-demand via the existing /invoice and /stand-plan endpoints.
+    """
+    if not (data.get("sifarisci_company") or "").strip():
+        raise HTTPException(status_code=400, detail="Şirkət adı məcburidir")
+    if not (data.get("contract_number") or "").strip():
+        raise HTTPException(status_code=400, detail="Müqavilə nömrəsi məcburidir")
+    stand_w = float(data.get("stand_width") or 0)
+    stand_l = float(data.get("stand_length") or 0)
+    m2 = round(stand_w * stand_l, 2)
+    price = float(data.get("price") or 0)
+    vat_enabled = bool(data.get("vat_enabled", True))
+    vat_rate = float(data.get("vat_rate") or 18)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "type": "new_contract",
+        "contract_number": (data.get("contract_number") or "").strip(),
+        "contract_date": (data.get("contract_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")),
+        # We store the contract_number in parent_contract_number too so the
+        # existing /invoice + /stand-plan endpoints (which key off
+        # `parent_contract_number` for the filename) keep working uniformly.
+        "parent_contract_number": (data.get("contract_number") or "").strip(),
+        "parent_contract_date": (data.get("contract_date") or "").strip(),
+        "sifarisci_company": (data.get("sifarisci_company") or "").strip(),
+        "sifarisci_voen": (data.get("sifarisci_voen") or "").strip(),
+        "sifarisci_authorized": (data.get("sifarisci_authorized") or "").strip(),
+        "iban": (data.get("iban") or "").strip(),
+        "bank_name": (data.get("bank_name") or "").strip(),
+        "branch_code": (data.get("branch_code") or "").strip(),
+        "bank_voen": (data.get("bank_voen") or "").strip(),
+        "correspondent_account": (data.get("correspondent_account") or "").strip(),
+        "swift": (data.get("swift") or "").strip(),
+        "stand_number": (data.get("stand_number") or "").strip(),
+        "stand_width": stand_w,
+        "stand_length": stand_l,
+        "stand_m2": m2,
+        "price": price,
+        # Mirror into `pricing` so downstream helpers (invoice_xlsx) work.
+        "pricing": {"price_net": price, "vat_enabled": vat_enabled, "vat_rate": vat_rate},
+        "exhibition_name": "Yerli şirkətlərin tanıtım sərgisi",
+        "exhibition_start": "2027-06-23",
+        "exhibition_end": "2027-06-26",
+        "exhibition_location": "Bakı Ekspo Mərkəzi",
+        "status": "draft",
+        "created_by": current_user.get("name", ""),
+        "marsol_company": (current_user.get("marsol_company") or "").strip(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    docx_bytes = contract_service.generate_new_contract_docx(doc)
+    await db.contracts.insert_one({**doc, "generated_docx": docx_bytes})
+    # Strip binary blob from response
+    return {k: v for k, v in doc.items() if k != "generated_docx"}
+
+
 @api_router.post("/contracts/addendum")
 async def create_addendum(data: dict, current_user: dict = Depends(check_permission("contracts", "write"))):
     if not (data.get("sifarisci_company") or "").strip():
@@ -1882,9 +1942,15 @@ async def download_contract(contract_id: str,
         raise HTTPException(status_code=404, detail="Müqavilə tapılmadı")
     blob = c.get("generated_docx")
     if not blob:
-        blob = contract_service.generate_addendum_docx(c)
-    safe_name = (c.get("parent_contract_number") or "muqavile").replace("/", "-")
-    filename = f"Elave_{safe_name}_N{c.get('addendum_number', '1')}.docx"
+        if c.get("type") == "new_contract":
+            blob = contract_service.generate_new_contract_docx(c)
+        else:
+            blob = contract_service.generate_addendum_docx(c)
+    safe_name = (c.get("contract_number") or c.get("parent_contract_number") or "muqavile").replace("/", "-")
+    if c.get("type") == "new_contract":
+        filename = f"Muqavile_{safe_name}.docx"
+    else:
+        filename = f"Elave_{safe_name}_N{c.get('addendum_number', '1')}.docx"
     return StreamingResponse(
         io.BytesIO(blob),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
